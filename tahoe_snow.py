@@ -934,8 +934,11 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
             best_peak = pk["model_spread"]
             break
 
-    # Historical + Season SNOTEL for select stations
-    hist_stations = ["Mt Rose Ski Area", "CSS Lab", "Independence Lake"]
+    # Historical + Season SNOTEL — include display stations + all resort-linked stations
+    hist_stations = {"Mt Rose Ski Area", "CSS Lab", "Independence Lake"}
+    for rn, resort in RESORTS.items():
+        for sname in resort.get("nearest_snotel", []):
+            hist_stations.add(sname)
     snotel_history = {}
     season_stats = {}
     for sname in hist_stations:
@@ -1005,6 +1008,35 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
     result_hist_7d_station = max(hist_7d_snow, key=hist_7d_snow.get) if hist_7d_snow else ""
     result_hist_24h = max(hist_24h_snow.values()) if hist_24h_snow else 0
     result_hist_24h_station = max(hist_24h_snow, key=hist_24h_snow.get) if hist_24h_snow else ""
+
+    # Per-resort snowfall summary
+    for rn, resort in RESORTS.items():
+        rd = resorts_out.get(rn, {})
+        peak_z = rd.get("zones", {}).get("peak", {})
+        # Forecast from peak zone
+        fcast_24h = peak_z.get("snow_24h", 0)
+        fcast_7d = peak_z.get("snow_7d_forecast", 0)
+        # Historical from nearest SNOTEL (best station)
+        resort_snotel_names = resort.get("nearest_snotel", [])
+        best_hist_24h = 0
+        best_hist_24h_station = ""
+        best_hist_7d = 0
+        best_hist_7d_station = ""
+        for sn in resort_snotel_names:
+            if sn in hist_24h_snow and hist_24h_snow[sn] > best_hist_24h:
+                best_hist_24h = hist_24h_snow[sn]
+                best_hist_24h_station = sn
+            if sn in hist_7d_snow and hist_7d_snow[sn] > best_hist_7d:
+                best_hist_7d = hist_7d_snow[sn]
+                best_hist_7d_station = sn
+        rd["snowfall_summary"] = {
+            "hist_24h_in": best_hist_24h,
+            "hist_24h_station": best_hist_24h_station,
+            "hist_7d_in": best_hist_7d,
+            "hist_7d_station": best_hist_7d_station,
+            "forecast_24h_in": fcast_24h,
+            "forecast_7d_in": fcast_7d,
+        }
 
     # Hero stats — the 4 most important numbers for at-a-glance scanning
     hero_temp_f = current.get("observation", {}).get("temp_f") or current.get("lake_level_temp_f")

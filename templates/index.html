@@ -109,7 +109,7 @@ body {
 /* -- Hero stats -- */
 .hero-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -580,7 +580,6 @@ table.data-table tr:hover td { background: var(--card-hover); }
 <div class="container" id="app" style="display:none">
 
   <div class="hero-row" id="hero-row"></div>
-  <div class="snowfall-grid" id="snowfall-grid"></div>
   <div class="summary-banner" id="summary"></div>
   <div id="avy-section"></div>
 
@@ -691,7 +690,6 @@ function toggleSection(el) {
 function render() {
   if (!DATA) return;
   renderHero();
-  renderSnowfall();
   renderHeader();
   renderSummary();
   renderCurrent();
@@ -717,43 +715,17 @@ function renderHero() {
     <div class="hero-value">${h.snowpack_in > 0 ? h.snowpack_in + '"' : '\u2014'}</div>
     <div class="hero-sub">${h.snowpack_station || 'SNOTEL'}</div>
   </div>`;
+  html += `<div class="hero-card recent">
+    <div class="hero-label">24h Snowfall</div>
+    <div class="hero-value">${h.snow_24h_in > 0 ? h.snow_24h_in + '"' : '0"'}</div>
+    <div class="hero-sub">${h.snow_24h_resort ? h.snow_24h_resort + ' peak' : 'All resorts'}</div>
+  </div>`;
   html += `<div class="hero-card forecast">
     <div class="hero-label">72h Forecast</div>
     <div class="hero-value">${h.snow_72h_in > 0 ? h.snow_72h_in + '"' : '0"'}</div>
     <div class="hero-sub">${h.snow_72h_resort ? h.snow_72h_resort + ' peak (GFS)' : 'All resorts'}</div>
   </div>`;
   document.getElementById('hero-row').innerHTML = html;
-}
-
-function renderSnowfall() {
-  const h = DATA.hero_stats;
-  if (!h) return;
-  let html = '';
-  // Header row
-  html += '<div class="sf-header"></div>';
-  html += '<div class="sf-header" style="text-align:center">Historical</div>';
-  html += '<div class="sf-header" style="text-align:center">Forecast</div>';
-  // 24h row
-  html += '<div class="sf-label">24-Hour</div>';
-  html += `<div class="sf-cell hist">
-    <div class="sf-val">${h.snow_24h_hist_in > 0 ? h.snow_24h_hist_in + '"' : '0"'}</div>
-    <div class="sf-sub">${h.snow_24h_hist_station || 'SNOTEL'}</div>
-  </div>`;
-  html += `<div class="sf-cell fcast">
-    <div class="sf-val">${h.snow_24h_in > 0 ? h.snow_24h_in + '"' : '0"'}</div>
-    <div class="sf-sub">${h.snow_24h_resort ? h.snow_24h_resort + ' peak (GFS)' : 'All resorts'}</div>
-  </div>`;
-  // 7-day row
-  html += '<div class="sf-label">7-Day</div>';
-  html += `<div class="sf-cell hist">
-    <div class="sf-val">${h.snow_7d_hist_in > 0 ? h.snow_7d_hist_in + '"' : '0"'}</div>
-    <div class="sf-sub">${h.snow_7d_hist_station || 'SNOTEL'}</div>
-  </div>`;
-  html += `<div class="sf-cell fcast">
-    <div class="sf-val">${h.snow_7d_forecast_in > 0 ? h.snow_7d_forecast_in + '"' : '0"'}</div>
-    <div class="sf-sub">${h.snow_7d_forecast_resort ? h.snow_7d_forecast_resort + ' peak (GFS)' : 'All resorts'}</div>
-  </div>`;
-  document.getElementById('snowfall-grid').innerHTML = html;
 }
 
 function renderHeader() {
@@ -878,6 +850,34 @@ function buildResortPanel(rn) {
     </div>`;
   }
   html += '</div>';
+
+  // Snowfall summary grid
+  const sf = rd.snowfall_summary;
+  if (sf) {
+    html += `<div class="snowfall-grid">
+      <div class="sf-header"></div>
+      <div class="sf-header" style="text-align:center">Historical</div>
+      <div class="sf-header" style="text-align:center">Forecast</div>
+      <div class="sf-label">24-Hour</div>
+      <div class="sf-cell hist">
+        <div class="sf-val">${sf.hist_24h_in > 0 ? sf.hist_24h_in + '"' : '0"'}</div>
+        <div class="sf-sub">${sf.hist_24h_station || 'SNOTEL'}</div>
+      </div>
+      <div class="sf-cell fcast">
+        <div class="sf-val">${sf.forecast_24h_in > 0 ? sf.forecast_24h_in + '"' : '0"'}</div>
+        <div class="sf-sub">Peak (GFS)</div>
+      </div>
+      <div class="sf-label">7-Day</div>
+      <div class="sf-cell hist">
+        <div class="sf-val">${sf.hist_7d_in > 0 ? sf.hist_7d_in + '"' : '0"'}</div>
+        <div class="sf-sub">${sf.hist_7d_station || 'SNOTEL'}</div>
+      </div>
+      <div class="sf-cell fcast">
+        <div class="sf-val">${sf.forecast_7d_in > 0 ? sf.forecast_7d_in + '"' : '0"'}</div>
+        <div class="sf-sub">Peak (GFS)</div>
+      </div>
+    </div>`;
+  }
 
   // 48h chart (open)
   html += `
