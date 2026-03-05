@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tahoe Snow Report</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#10052;</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root {
+  --bg: #0f1923;
+  --card: #1a2634;
+  --card-hover: #1f2f42;
+  --border: #2a3a4a;
+  --text: #e0e8f0;
+  --text-dim: #8899aa;
+  --accent: #4a9eff;
+  --snow: #7ec8e3;
+  --cold: #5b8def;
+  --warm: #ff8c42;
+  --danger: #ff4757;
+  --safe: #2ed573;
+  --moderate: #ffa502;
+  --mix: #a55eea;
+  --rain: #45aaf2;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15);
+  --shadow-glow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* -- Header (frosted glass) -- */
+.header {
+  background: rgba(26, 38, 52, 0.82);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.header h1 { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.header h1 .icon { font-size: 24px; opacity: 0.9; }
+.header .meta { text-align: right; font-size: 13px; color: var(--text-dim); }
+.header .meta .time { color: var(--accent); font-weight: 600; }
+.refresh-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: white;
+  padding: 7px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.refresh-btn:hover { background: rgba(255,255,255,0.15); }
+.refresh-btn.loading { opacity: 0.6; pointer-events: none; }
+.refresh-btn.loading::before {
+  content: '';
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+/* -- Layout -- */
+.container { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+
+/* -- Hero stats -- */
+.hero-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) { .hero-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .hero-row { grid-template-columns: 1fr 1fr; gap: 10px; } }
+
+.hero-card {
+  background: linear-gradient(135deg, #1a2634, #1e3a5f);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 28px 24px 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 40px;
+  opacity: 0.08;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.hero-card.temp::before { background: linear-gradient(180deg, var(--warm), transparent); }
+.hero-card.snowpack::before { background: linear-gradient(180deg, var(--snow), transparent); }
+.hero-card.recent::before { background: linear-gradient(180deg, var(--safe), transparent); }
+.hero-card.forecast::before { background: linear-gradient(180deg, var(--accent), transparent); }
+.hero-card .hero-label {
+  font-size: 11px; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;
+}
+.hero-card .hero-value {
+  font-size: 48px; font-weight: 800; line-height: 1;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+.hero-card .hero-sub { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+.hero-card.temp .hero-value { color: var(--warm); }
+.hero-card.snowpack .hero-value { color: var(--snow); }
+.hero-card.recent .hero-value { color: var(--safe); }
+.hero-card.forecast .hero-value { color: var(--accent); }
+
+/* -- Summary -- */
+.summary-banner {
+  background: linear-gradient(135deg, #1a2634, #1e3a5f);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+
+/* -- Collapsible sections -- */
+.section {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+.section-header {
+  padding: 14px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.section-header:hover { background: var(--card-hover); }
+.section-header .toggle {
+  color: var(--text-dim);
+  font-size: 14px;
+  display: inline-block;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.section-body {
+  padding: 16px 18px;
+  max-height: 3000px;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s ease;
+  opacity: 1;
+}
+.section-body.collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+}
+
+/* -- Stat cards -- */
+.current-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  text-align: center;
+}
+.stat-card .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 24px; font-weight: 700; margin: 2px 0; font-variant-numeric: tabular-nums; }
+.stat-card .sub { font-size: 11px; color: var(--text-dim); }
+.stat-card.accent .value { color: var(--accent); }
+.stat-card.snow-card .value { color: var(--snow); }
+
+/* -- Resort tabs (pill style) -- */
+.resort-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.resort-tabs::-webkit-scrollbar { display: none; }
+.resort-tab {
+  padding: 8px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  border: 1px solid transparent;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-dim);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.resort-tab:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.resort-tab.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 8px rgba(74, 158, 255, 0.3);
+}
+.resort-tab.all-tab { border: 1px solid rgba(255,255,255,0.12); background: transparent; }
+.resort-tab.all-tab.active { border: none; }
+
+.resort-panel { display: none; }
+.resort-panel.active { display: block; }
+
+/* -- Zone cards -- */
+.zones-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+@media (max-width: 900px) { .zones-row { grid-template-columns: 1fr; } }
+
+.zone-card {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+.zone-card:hover { border-color: rgba(74, 158, 255, 0.3); box-shadow: var(--shadow), 0 0 0 1px rgba(74, 158, 255, 0.15); }
+.zone-card .zone-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.zone-card .zone-name { font-weight: 700; font-size: 15px; }
+.zone-card .zone-elev { color: var(--text-dim); font-size: 12px; }
+.zone-card .zone-tag {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 4px; letter-spacing: 0.5px;
+}
+.zone-tag.peak { background: #4a9eff33; color: var(--accent); }
+.zone-tag.mid { background: #ffa50233; color: var(--moderate); }
+.zone-tag.base { background: #2ed57333; color: var(--safe); }
+
+/* Zone hero: big temp + snow */
+.zone-hero {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.zone-hero .zh-item .zh-val { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.zone-hero .zh-item .zh-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.zone-hero .zh-item .zh-sub { font-size: 11px; color: var(--text-dim); }
+
+/* Zone detail rows */
+.zone-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.zone-details .zd-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+.zone-details .zd-val { color: var(--text); font-weight: 600; }
+
+/* Precip badges */
+.precip-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.precip-badge.snow { background: #7ec8e333; color: var(--snow); }
+.precip-badge.rain { background: #45aaf233; color: var(--rain); }
+.precip-badge.mix { background: #a55eea33; color: var(--mix); }
+.precip-badge.none { background: #8899aa22; color: var(--text-dim); }
+
+/* -- Chart -- */
+.chart-container { position: relative; height: 250px; margin: 8px 0; }
+@media (max-width: 800px) { .chart-container { height: 200px; } }
+
+/* -- Tables -- */
+table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data-table th {
+  text-align: left; padding: 8px 10px; color: var(--text-dim);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--card);
+}
+table.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s ease;
+}
+table.data-table tr:hover td { background: var(--card-hover); }
+.snow-val { color: var(--snow); font-weight: 700; }
+.temp-cold { color: var(--cold); }
+.temp-warm { color: var(--warm); }
+
+/* -- Comparison -- */
+.compare-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 900px) { .compare-grid { grid-template-columns: 1fr; } }
+.compare-col {
+  background: rgba(15, 25, 35, 0.6);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.compare-col .resort-name {
+  font-weight: 700; font-size: 15px; margin-bottom: 10px;
+  padding-bottom: 6px; border-bottom: 2px solid var(--accent);
+}
+.compare-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+.compare-row .cr-label { color: var(--text-dim); }
+.compare-row .cr-value { font-weight: 600; }
+.compare-detail { display: none; }
+.compare-toggle {
+  color: var(--accent); font-size: 12px; font-weight: 500;
+  cursor: pointer; padding-top: 8px; text-align: center;
+  transition: opacity 0.15s;
+}
+.compare-toggle:hover { opacity: 0.7; }
+.rank-row { display: inline-flex; gap: 6px; font-size: 13px; }
+.rank-label { color: var(--text-dim); }
+.rank-value { font-weight: 700; }
+
+/* -- SNOTEL bars -- */
+.snotel-station { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 13px; }
+.snotel-station .name { width: 160px; color: var(--text-dim); flex-shrink: 0; }
+.snotel-station .bar-wrap { flex: 1; height: 18px; background: rgba(15, 25, 35, 0.6); border-radius: 4px; overflow: hidden; }
+.snotel-station .bar {
+  height: 100%; background: linear-gradient(90deg, var(--cold), var(--snow));
+  border-radius: 4px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 2px;
+}
+.snotel-station .depth { width: 60px; text-align: right; font-weight: 600; color: var(--snow); font-variant-numeric: tabular-nums; }
+.snotel-station .swe { width: 70px; text-align: right; color: var(--text-dim); font-size: 12px; }
+
+/* -- History -- */
+.history-row { margin-bottom: 14px; }
+.history-label { font-size: 13px; color: var(--text-dim); margin-bottom: 4px; }
+.history-label span { color: var(--text); font-weight: 600; }
+.spark-bar-row { display: flex; gap: 6px; align-items: end; height: 40px; margin: 4px 0; }
+.spark-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.spark-val { font-size: 10px; color: var(--snow); font-variant-numeric: tabular-nums; }
+.spark-bar { width: 100%; background: var(--cold); border-radius: 2px; }
+.spark-date { font-size: 9px; color: var(--text-dim); }
+.season-stats { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+/* -- AFD -- */
+.afd-text {
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12.5px; line-height: 1.7;
+  color: var(--text-dim); white-space: pre-wrap;
+  max-height: 400px; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* -- Confidence badges -- */
+.conf-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.conf-badge.high { background: #2ed57333; color: var(--safe); }
+.conf-badge.medium { background: #ffa50233; color: var(--moderate); }
+.conf-badge.low { background: #ff475733; color: var(--danger); }
+
+/* -- Avy banner -- */
+.avy-banner {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 18px; border-radius: var(--radius); margin-bottom: 16px;
+}
+.avy-banner.low { background: #2ed57315; border: 1px solid #2ed57344; }
+.avy-banner.moderate { background: #ffa50215; border: 1px solid #ffa50244; }
+.avy-banner.considerable, .avy-banner.high, .avy-banner.extreme { background: #ff475715; border: 1px solid #ff475744; }
+.avy-level {
+  font-size: 36px; font-weight: 900;
+  width: 56px; height: 56px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.avy-info .avy-label { font-weight: 700; font-size: 15px; }
+.avy-info .avy-advice { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+.avy-info a { color: var(--accent); text-decoration: none; font-size: 12px; }
+.avy-info a:hover { text-decoration: underline; }
+
+/* -- Loading -- */
+.loading-overlay {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 200; gap: 20px;
+  transition: opacity 0.4s ease;
+}
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(255,255,255,0.08);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s cubic-bezier(0.4, 0.1, 0.6, 0.9) infinite;
+}
+.loading-text { color: var(--text-dim); font-size: 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.footer {
+  text-align: center; padding: 32px 20px; color: var(--text-dim);
+  font-size: 11px; letter-spacing: 0.3px;
+  border-top: 1px solid rgba(255,255,255,0.04); margin-top: 40px;
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading Tahoe snow data...</div>
+</div>
+
+<div class="header">
+  <h1><span class="icon">&#10052;</span> Tahoe Snow Report</h1>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="meta">
+      <div class="time" id="header-time"></div>
+    </div>
+    <button class="refresh-btn" onclick="refreshData()" id="refresh-btn">Refresh</button>
+  </div>
+</div>
+
+<div class="container" id="app" style="display:none">
+
+  <div class="hero-row" id="hero-row"></div>
+  <div class="summary-banner" id="summary"></div>
+  <div id="avy-section"></div>
+
+  <div class="resort-tabs" id="resort-tabs"></div>
+  <div id="resort-panels"></div>
+  <div id="comparison-panel" class="resort-panel"></div>
+
+  <div class="section">
+    <div class="section-header" onclick="toggleSection(this)">
+      Current Observation Detail <span class="toggle">&#9662;</span>
+    </div>
+    <div class="section-body collapsed">
+      <div class="current-row" id="current-row"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header" onclick="toggleSection(this)">
+      Snowpack &mdash; All SNOTEL Stations <span class="toggle">&#9662;</span>
+    </div>
+    <div class="section-body collapsed" id="snotel-body"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header" onclick="toggleSection(this)">
+      Snowpack History &amp; Season Stats <span class="toggle">&#9662;</span>
+    </div>
+    <div class="section-body collapsed" id="history-body"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header" onclick="toggleSection(this)">
+      NWS Forecaster Discussion (Reno WFO) <span class="toggle">&#9662;</span>
+    </div>
+    <div class="section-body collapsed" id="afd-body"></div>
+  </div>
+
+  <div class="footer">
+    Models: GFS + ECMWF + ICON via Open-Meteo &middot;
+    Observations: SNOTEL (NRCS) + NWS &middot;
+    Physics: SLR (Roebber 2003), NWS Wind Chill, Moist Adiabatic Lapse Rate
+  </div>
+</div>
+
+<script>
+let DATA = null;
+let charts = {};
+const RESORT_NAMES = ['Heavenly', 'Northstar', 'Kirkwood'];
+const RESORT_COLORS = { Heavenly: '#ff4757', Northstar: '#2ed573', Kirkwood: '#4a9eff' };
+
+// Shared chart config
+const CHART_TOOLTIP = { backgroundColor: '#1a2634ee', titleColor: '#e0e8f0', bodyColor: '#e0e8f0', borderColor: '#2a3a4a', borderWidth: 1 };
+const CHART_LEGEND = { labels: { color: '#8899aa', font: { size: 11 } } };
+const SCALE_X = { ticks: { color: '#8899aa', font: { size: 10 } }, grid: { color: '#1a263488' } };
+const SCALE_SNOW = { min: 0, ticks: { color: '#7ec8e3', callback: v => v + '"' }, grid: { display: false } };
+const SCALE_TEMP = { ticks: { color: '#ff8c42', callback: v => v + '\u00B0' }, grid: { color: '#1a263488' } };
+
+function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+function formatDateLabel(dateStr) {
+  try { return new Date(dateStr + 'T12:00').toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
+  catch(e) { return dateStr; }
+}
+
+async function loadData() {
+  try {
+    const r = await fetch('/api/data');
+    DATA = await r.json();
+    render();
+    const overlay = document.getElementById('loading');
+    overlay.classList.add('hidden');
+    setTimeout(() => overlay.style.display = 'none', 400);
+    document.getElementById('app').style.display = 'block';
+  } catch (e) {
+    document.getElementById('loading').innerHTML =
+      '<div style="color:#ff4757;font-size:14px">Error loading data: ' + e.message + '</div>';
+  }
+}
+
+async function refreshData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('loading');
+  btn.textContent = '';
+  try {
+    await fetch('/api/refresh');
+    const r = await fetch('/api/data');
+    DATA = await r.json();
+    render();
+  } catch(e) { console.error(e); }
+  btn.classList.remove('loading');
+  btn.textContent = 'Refresh';
+}
+
+function f(v, suf='', fallback='\u2014') { return v != null ? v + suf : fallback; }
+function tempClass(t) { return t != null && t < 32 ? 'temp-cold' : 'temp-warm'; }
+function precipBadge(pt) {
+  if (!pt || pt === 'None') return '<span class="precip-badge none">None</span>';
+  const cls = pt.toLowerCase().includes('snow') ? 'snow' : pt.toLowerCase().includes('rain') ? 'rain' : pt.toLowerCase().includes('mix') ? 'mix' : 'none';
+  return `<span class="precip-badge ${cls}">${pt}</span>`;
+}
+
+function toggleSection(el) {
+  const body = el.nextElementSibling;
+  const tog = el.querySelector('.toggle');
+  body.classList.toggle('collapsed');
+  tog.style.transform = body.classList.contains('collapsed') ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+function render() {
+  if (!DATA) return;
+  renderHero();
+  renderHeader();
+  renderSummary();
+  renderCurrent();
+  renderAvalanche();
+  renderResortTabs();
+  renderComparison();
+  renderSnotel();
+  renderHistory();
+  renderAFD();
+}
+
+function renderHero() {
+  const h = DATA.hero_stats;
+  if (!h) return;
+  let html = '';
+  html += `<div class="hero-card temp">
+    <div class="hero-label">Temperature</div>
+    <div class="hero-value">${h.temp_f != null ? Math.round(h.temp_f) + '\u00B0' : '\u2014'}</div>
+    <div class="hero-sub">Current observation</div>
+  </div>`;
+  html += `<div class="hero-card snowpack">
+    <div class="hero-label">Snowpack</div>
+    <div class="hero-value">${h.snowpack_in > 0 ? h.snowpack_in + '"' : '\u2014'}</div>
+    <div class="hero-sub">${h.snowpack_station || 'SNOTEL'}</div>
+  </div>`;
+  html += `<div class="hero-card recent">
+    <div class="hero-label">24h Snowfall</div>
+    <div class="hero-value">${h.snow_24h_in > 0 ? h.snow_24h_in + '"' : '0"'}</div>
+    <div class="hero-sub">${h.snow_24h_resort ? h.snow_24h_resort + ' peak' : 'All resorts'}</div>
+  </div>`;
+  html += `<div class="hero-card forecast">
+    <div class="hero-label">72h Forecast</div>
+    <div class="hero-value">${h.snow_72h_in > 0 ? h.snow_72h_in + '"' : '0"'}</div>
+    <div class="hero-sub">${h.snow_72h_resort ? h.snow_72h_resort + ' peak (GFS)' : 'All resorts'}</div>
+  </div>`;
+  document.getElementById('hero-row').innerHTML = html;
+}
+
+function renderHeader() {
+  try {
+    const d = new Date(DATA.generated);
+    document.getElementById('header-time').textContent = d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch(e) {}
+}
+
+function renderSummary() {
+  document.getElementById('summary').textContent = DATA.summary || '';
+}
+
+function renderCurrent() {
+  const c = DATA.current_conditions;
+  const obs = c.observation || {};
+  const temp = obs.temp_f || c.lake_level_temp_f;
+  const feels = obs.feels_like_f;
+  const wind = obs.wind_mph || c.wind_mph || 0;
+  const gust = obs.wind_gust_mph || 0;
+  const wdir = obs.wind_dir || c.wind_dir || '';
+  const hum = obs.humidity_pct;
+  const cond = obs.conditions || '';
+  let html = '';
+  html += statCard('Temperature', f(temp, '\u00B0F'), feels != null ? `Feels ${feels}\u00B0F` : '', 'accent');
+  html += statCard('Conditions', cond || 'N/A', '', '');
+  html += statCard('Wind', `${wdir} ${wind}`, gust > 0 ? `Gusts ${gust} mph` : 'mph', '');
+  html += statCard('Humidity', f(hum, '%'), '', '');
+  html += statCard('Snow Level', f(c.snow_level_ft, ' ft'), '', 'snow-card');
+  html += statCard('Freeze Level', f(c.freezing_level_ft, ' ft'), '', 'accent');
+  document.getElementById('current-row').innerHTML = html;
+}
+
+function statCard(label, value, sub, cls) {
+  return `<div class="stat-card ${cls}"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+}
+
+function renderAvalanche() {
+  const a = DATA.avalanche;
+  if (!a || !a.danger_label) { document.getElementById('avy-section').innerHTML = ''; return; }
+  const cls = a.danger_label.toLowerCase();
+  const colors = { low: 'var(--safe)', moderate: 'var(--moderate)', considerable: 'var(--danger)', high: 'var(--danger)', extreme: 'var(--danger)' };
+  document.getElementById('avy-section').innerHTML = `
+    <div class="avy-banner ${cls}">
+      <div class="avy-level" style="color:${colors[cls] || 'var(--text)'}">${a.danger_level}</div>
+      <div class="avy-info">
+        <div class="avy-label">Avalanche Danger: ${a.danger_label}</div>
+        <div class="avy-advice">${a.travel_advice || ''}</div>
+        ${a.link ? `<a href="${a.link}" target="_blank">Full forecast &rarr;</a>` : ''}
+      </div>
+    </div>`;
+}
+
+// -- Resort tabs --
+function renderResortTabs() {
+  let tabs = '<div class="resort-tab all-tab active" onclick="showResort(\'all\')">Compare All</div>';
+  for (const rn of RESORT_NAMES) {
+    tabs += `<div class="resort-tab" onclick="showResort('${rn}')" data-resort="${rn}">${rn}</div>`;
+  }
+  document.getElementById('resort-tabs').innerHTML = tabs;
+  let panels = '';
+  for (const rn of RESORT_NAMES) {
+    panels += `<div class="resort-panel" id="panel-${rn}">${buildResortPanel(rn)}</div>`;
+  }
+  document.getElementById('resort-panels').innerHTML = panels;
+  showResort('all');
+}
+
+function showResort(name) {
+  document.querySelectorAll('.resort-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.resort-panel').forEach(p => p.classList.remove('active'));
+  if (name === 'all') {
+    document.querySelector('.all-tab').classList.add('active');
+    document.getElementById('comparison-panel').classList.add('active');
+  } else {
+    document.querySelector(`[data-resort="${name}"]`).classList.add('active');
+    document.getElementById(`panel-${name}`).classList.add('active');
+  }
+  requestAnimationFrame(() => {
+    if (name === 'all') {
+      for (const rn of RESORT_NAMES) buildCharts(rn);
+    } else {
+      buildCharts(name);
+    }
+  });
+}
+
+function buildResortPanel(rn) {
+  const rd = DATA.resorts[rn];
+  if (!rd) return '<div>No data</div>';
+  let html = '';
+
+  html += '<div class="zones-row">';
+  for (const zk of ['peak', 'mid', 'base']) {
+    const zd = rd.zones[zk];
+    if (!zd) continue;
+    const snap = zd.current || {};
+    html += `
+    <div class="zone-card">
+      <div class="zone-header">
+        <div><span class="zone-tag ${zk}">${zk}</span> <span class="zone-name">${zd.label || zk}</span></div>
+        <span class="zone-elev">${f(zd.elev_ft, ' ft')}</span>
+      </div>
+      <div class="zone-hero">
+        <div class="zh-item">
+          <div class="zh-label">Temp</div>
+          <div class="zh-val ${tempClass(snap.temp_f)}">${f(snap.temp_f, '\u00B0')}</div>
+          <div class="zh-sub">Feels ${f(snap.feels_like_f, '\u00B0')}</div>
+        </div>
+        <div class="zh-item">
+          <div class="zh-label">24h Snow</div>
+          <div class="zh-val snow-val">${f(zd.snow_24h, '"')}</div>
+          <div class="zh-sub">${precipBadge(snap.precip_type)}</div>
+        </div>
+      </div>
+      <div class="zone-details">
+        <div class="zd-row"><span>SLR</span><span class="zd-val">${f(snap.slr, ':1')}</span></div>
+        <div class="zd-row"><span>Quality</span><span class="zd-val">${snap.snow_quality || '\u2014'}</span></div>
+        <div class="zd-row"><span>Wind</span><span class="zd-val">${snap.wind_dir || ''} ${f(snap.wind_mph, '')} mph</span></div>
+        <div class="zd-row"><span>Gusts</span><span class="zd-val">${f(snap.wind_gust_mph, ' mph')}</span></div>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+
+  // 48h chart (open)
+  html += `
+  <div class="section">
+    <div class="section-header" onclick="toggleSection(this)">
+      48-Hour Forecast &mdash; ${rn} Peak <span class="toggle" style="transform:rotate(180deg)">&#9662;</span>
+    </div>
+    <div class="section-body">
+      <div class="chart-container"><canvas id="chart-hourly-${rn}"></canvas></div>
+    </div>
+  </div>`;
+
+  // Day/Night accumulation (collapsed)
+  const peak = rd.zones.peak;
+  const buckets = peak ? peak.day_night_buckets || [] : [];
+  if (buckets.length > 0) {
+    html += `
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        Day/Night Accumulation &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
+      </div>
+      <div class="section-body collapsed">
+        <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr>
+            <th>Date</th><th>Period</th><th>Snow</th><th>Liquid</th>
+            <th>Hi</th><th>Lo</th><th>Feels Like</th><th>Wind/Gust</th><th>Type</th>
+          </tr></thead><tbody>`;
+    for (const b of buckets.slice(0, 20)) {
+      const sc = b.snow_in > 0 ? 'snow-val' : '';
+      html += `<tr>
+        <td>${b.date}</td><td>${b.period}</td>
+        <td class="${sc}">${b.snow_in}"</td><td>${b.liquid_in}"</td>
+        <td class="${tempClass(b.temp_high_f)}">${f(b.temp_high_f, '\u00B0')}</td>
+        <td class="${tempClass(b.temp_low_f)}">${f(b.temp_low_f, '\u00B0')}</td>
+        <td class="${tempClass(b.feels_like_low_f)}">${f(b.feels_like_low_f, '\u00B0')}</td>
+        <td>${f(b.wind_avg_mph, '')}/${f(b.wind_max_gust_mph, '')} mph</td>
+        <td>${precipBadge(b.precip_type)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div></div></div>';
+  }
+
+  // Multi-model comparison (collapsed)
+  const spread = peak ? peak.model_spread || [] : [];
+  if (spread.length > 0) {
+    html += `
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        Multi-Model Comparison &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
+      </div>
+      <div class="section-body collapsed">
+        <div class="chart-container"><canvas id="chart-models-${rn}"></canvas></div>
+        <div style="overflow-x:auto;margin-top:12px">
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>GFS</th><th>ECMWF</th><th>ICON</th><th>High</th><th>Spread</th><th>Confidence</th></tr></thead>
+          <tbody>`;
+    for (const d of spread.slice(0, 7)) {
+      const m = d.models || {};
+      const gfsTemp = (m.GFS||{}).temp_high_f;
+      html += `<tr>
+        <td>${d.date}</td>
+        <td class="snow-val">${(m.GFS||{}).snow_in||0}"</td>
+        <td class="snow-val">${(m.ECMWF||{}).snow_in||0}"</td>
+        <td class="snow-val">${(m.ICON||{}).snow_in||0}"</td>
+        <td class="${tempClass(gfsTemp)}">${gfsTemp != null ? Math.round(gfsTemp) + '\u00B0' : '\u2014'}</td>
+        <td>${d.snow_spread}"</td>
+        <td><span class="conf-badge ${(d.confidence||'').toLowerCase()}">${d.confidence}</span></td>
+      </tr>`;
+    }
+    html += '</tbody></table></div></div></div>';
+  }
+
+  // Nearby SNOTEL (collapsed)
+  const ns = rd.nearest_snotel || [];
+  if (ns.length > 0) {
+    html += `<div class="section"><div class="section-header" onclick="toggleSection(this)">Nearby SNOTEL <span class="toggle">&#9662;</span></div><div class="section-body collapsed">`;
+    for (const s of ns) {
+      html += `<div class="snotel-station">
+        <span class="name">${s.name} (${s.elev_ft}ft)</span>
+        <span class="depth">${f(s.snow_depth_in, '"')}</span>
+        <span class="swe">SWE ${f(s.swe_in, '"')}</span>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  return html;
+}
+
+// -- Charts --
+function buildCharts(rn) {
+  buildHourlyChart(rn);
+  const modelCanvas = document.getElementById(`chart-models-${rn}`);
+  if (modelCanvas && modelCanvas.closest('.section-body') && !modelCanvas.closest('.section-body').classList.contains('collapsed')) {
+    buildModelChart(rn);
+  }
+}
+
+function buildHourlyChart(rn) {
+  const peak = DATA.resorts[rn]?.zones?.peak;
+  if (!peak || !peak.timeline_48h) return;
+  const timeline = peak.timeline_48h;
+  const canvas = document.getElementById(`chart-hourly-${rn}`);
+  if (!canvas || !canvas.offsetParent) return;
+  destroyChart(`hourly-${rn}`);
+
+  const labels = timeline.map(h => {
+    try { const d = new Date(h.time); return d.toLocaleString('en-US', { weekday: 'short', hour: 'numeric' }); }
+    catch(e) { return ''; }
+  });
+
+  charts[`hourly-${rn}`] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Snow (in)',
+          data: timeline.map(h => h.snowfall_in || 0),
+          backgroundColor: '#7ec8e388', borderColor: '#7ec8e3', borderWidth: 1,
+          yAxisID: 'snow', order: 1,
+        },
+        {
+          label: 'Temp (\u00B0F)',
+          data: timeline.map(h => h.temp_f),
+          borderColor: '#ff8c42', backgroundColor: 'transparent',
+          type: 'line', tension: 0.3, pointRadius: 0, borderWidth: 2,
+          yAxisID: 'temp', order: 0,
+        },
+        {
+          label: 'Wind (mph)',
+          data: timeline.map(h => h.wind_mph || 0),
+          borderColor: '#8899aa44', backgroundColor: 'transparent',
+          type: 'line', tension: 0.3, pointRadius: 0, borderWidth: 1, borderDash: [4, 4],
+          yAxisID: 'temp', order: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: CHART_LEGEND,
+        tooltip: {
+          ...CHART_TOOLTIP,
+          callbacks: {
+            afterBody: function(ctx) {
+              const i = ctx[0].dataIndex;
+              const h = timeline[i];
+              return `Feels: ${f(h.feels_like_f, '\u00B0F')}\nGust: ${f(h.wind_gust_mph, ' mph')}\nSLR: ${h.slr}:1 ${h.snow_quality}`;
+            }
+          }
+        },
+      },
+      scales: {
+        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 45 } },
+        temp: { position: 'left', ...SCALE_TEMP },
+        snow: { position: 'right', ...SCALE_SNOW },
+      },
+    },
+  });
+}
+
+function buildModelChart(rn) {
+  const peak = DATA.resorts[rn]?.zones?.peak;
+  if (!peak || !peak.model_spread) return;
+  const spread = peak.model_spread;
+  const canvas = document.getElementById(`chart-models-${rn}`);
+  if (!canvas) return;
+  destroyChart(`models-${rn}`);
+
+  const labels = spread.map(d => formatDateLabel(d.date));
+
+  charts[`models-${rn}`] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'GFS', data: spread.map(d => (d.models?.GFS||{}).snow_in||0), backgroundColor: '#4a9eff88', borderColor: '#4a9eff', borderWidth: 1 },
+        { label: 'ECMWF', data: spread.map(d => (d.models?.ECMWF||{}).snow_in||0), backgroundColor: '#2ed57388', borderColor: '#2ed573', borderWidth: 1 },
+        { label: 'ICON', data: spread.map(d => (d.models?.ICON||{}).snow_in||0), backgroundColor: '#ffa50288', borderColor: '#ffa502', borderWidth: 1 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: CHART_LEGEND,
+        tooltip: {
+          ...CHART_TOOLTIP,
+          callbacks: {
+            afterBody: function(ctx) {
+              const i = ctx[0].dataIndex;
+              const d = spread[i];
+              return `Spread: ${d.snow_spread}" | Confidence: ${d.confidence}`;
+            }
+          }
+        },
+      },
+      scales: {
+        x: SCALE_X,
+        y: { ...SCALE_SNOW, grid: { color: '#1a263488' } },
+      },
+    },
+  });
+}
+
+// -- Comparison --
+function renderComparison() {
+  const comp = DATA.comparison?.resorts || {};
+  const rankings = DATA.comparison?.rankings || {};
+
+  let html = '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">';
+  html += rankBadge('Most New Snow', rankings.most_new_snow);
+  html += rankBadge('Best Powder', rankings.best_powder_quality);
+  html += rankBadge('Deepest Pack', rankings.deepest_snowpack);
+  html += '</div>';
+
+  html += '<div class="compare-grid">';
+  for (const rn of RESORT_NAMES) {
+    const c = comp[rn] || {};
+    html += `<div class="compare-col">
+      <div class="resort-name" style="border-color:${RESORT_COLORS[rn]}">${rn}</div>
+      ${compareRow('Peak Temp', `<span class="${tempClass(c.peak_temp_f)}">${f(c.peak_temp_f, '\u00B0F')}</span>`)}
+      ${compareRow('Peak 24h Snow', `<span class="snow-val">${f(c.peak_24h_snow_in, '"')}</span>`)}
+      ${compareRow('Snowpack', `<span class="snow-val">${f(c.snowpack_depth_in, '"')}</span>`)}
+      ${compareRow('Quality', c.peak_quality || '\u2014')}
+      <div class="compare-detail">
+        ${compareRow('Elevation', `${f(c.base_elev_ft)}\u2014${f(c.peak_elev_ft)} ft`)}
+        ${compareRow('Vert Drop', f(c.vert_ft, ' ft'))}
+        ${compareRow('Base Temp', f(c.base_temp_f, '\u00B0F'))}
+        ${compareRow('Base/Peak Feels', `${f(c.base_feels_like_f, '\u00B0')} / ${f(c.peak_feels_like_f, '\u00B0')}`)}
+        ${compareRow('Peak SLR', f(c.peak_slr, ':1'))}
+        ${compareRow('Base Precip', c.base_precip_type || '\u2014')}
+        ${compareRow('Peak Precip', c.peak_precip_type || '\u2014')}
+        ${compareRow('Base/Mid 24h', `${f(c.base_24h_snow_in, '"')} / ${f(c.mid_24h_snow_in, '"')}`)}
+        ${compareRow('SWE', f(c.snowpack_swe_in, '"'))}
+        ${compareRow('Aspect', c.aspect || '\u2014')}
+      </div>
+      <div class="compare-toggle" onclick="toggleCompareDetail(this)">More &#9662;</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  html += `<div class="section" style="margin-top:16px">
+    <div class="section-header">7-Day Forecast &mdash; All Resorts (Peak)</div>
+    <div class="section-body"><div class="chart-container" style="height:280px"><canvas id="chart-compare-all"></canvas></div></div>
+  </div>`;
+
+  document.getElementById('comparison-panel').innerHTML = html;
+  document.getElementById('comparison-panel').classList.add('active');
+  requestAnimationFrame(buildCompareChart);
+}
+
+function toggleCompareDetail(el) {
+  const detail = el.previousElementSibling;
+  const showing = detail.style.display === 'block';
+  detail.style.display = showing ? 'none' : 'block';
+  el.innerHTML = showing ? 'More &#9662;' : 'Less &#9652;';
+}
+
+function compareRow(label, value) {
+  return `<div class="compare-row"><span class="cr-label">${label}</span><span class="cr-value">${value}</span></div>`;
+}
+
+function rankBadge(label, resort) {
+  const color = resort ? RESORT_COLORS[resort] || 'var(--accent)' : 'var(--text-dim)';
+  return `<span class="rank-row"><span class="rank-label">${label}:</span> <span class="rank-value" style="color:${color}">${resort || '\u2014'}</span></span>`;
+}
+
+function buildCompareChart() {
+  const canvas = document.getElementById('chart-compare-all');
+  if (!canvas) return;
+  destroyChart('compare-all');
+
+  const MAX_DAYS = 7;
+  const datasets = [];
+  let labels = [];
+
+  for (const rn of RESORT_NAMES) {
+    const spread = (DATA.resorts[rn]?.zones?.peak?.model_spread || []).slice(0, MAX_DAYS);
+    if (labels.length === 0) {
+      labels = spread.map(d => formatDateLabel(d.date));
+    }
+    datasets.push({
+      label: rn + ' Snow',
+      data: spread.map(d => (d.models?.GFS||{}).snow_in || 0),
+      type: 'bar',
+      backgroundColor: RESORT_COLORS[rn] + '66',
+      borderColor: RESORT_COLORS[rn],
+      borderWidth: 1,
+      yAxisID: 'snow',
+      order: 1,
+    });
+    datasets.push({
+      label: rn + ' Temp',
+      data: spread.map(d => (d.models?.GFS||{}).temp_high_f ?? null),
+      type: 'line',
+      borderColor: RESORT_COLORS[rn],
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      borderDash: [4, 4],
+      tension: 0.3,
+      pointRadius: 3,
+      pointBackgroundColor: RESORT_COLORS[rn],
+      yAxisID: 'temp',
+      order: 0,
+    });
+  }
+
+  charts['compare-all'] = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: CHART_LEGEND,
+        tooltip: CHART_TOOLTIP,
+      },
+      scales: {
+        x: SCALE_X,
+        snow: { position: 'left', ...SCALE_SNOW, grid: { color: '#1a263488' }, title: { display: true, text: 'Snow (in)', color: '#7ec8e3', font: { size: 11 } } },
+        temp: { position: 'right', ...SCALE_TEMP, grid: { display: false }, title: { display: true, text: 'High Temp (\u00B0F)', color: '#ff8c42', font: { size: 11 } } },
+      },
+    },
+  });
+}
+
+// -- SNOTEL --
+function renderSnotel() {
+  const snotel = DATA.snotel_current || {};
+  const entries = Object.entries(snotel).filter(([n, d]) => !d.error).sort((a, b) => (b[1].snow_depth_in || 0) - (a[1].snow_depth_in || 0));
+  const maxDepth = Math.max(...entries.map(([n, d]) => d.snow_depth_in || 0), 1);
+  let html = '';
+  for (const [name, d] of entries) {
+    const depth = d.snow_depth_in || 0;
+    const pct = (depth / maxDepth * 100).toFixed(0);
+    html += `<div class="snotel-station">
+      <span class="name">${name} (${d.elev_ft}ft)</span>
+      <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
+      <span class="depth">${depth}"</span>
+      <span class="swe">SWE ${f(d.swe_in, '"')}</span>
+    </div>`;
+  }
+  document.getElementById('snotel-body').innerHTML = html;
+}
+
+// -- History --
+function renderHistory() {
+  const hist = DATA.snotel_history || {};
+  const season = DATA.season_stats || {};
+  let html = '';
+  for (const [sname, h] of Object.entries(hist)) {
+    const s = season[sname] || {};
+    const snwd = s.SNWD || {};
+    const wteq = s.WTEQ || {};
+    html += `<div class="history-row"><div class="history-label"><span>${sname}</span></div>`;
+    const depths = h.SNWD || [];
+    if (depths.length > 0) {
+      html += '<div class="spark-bar-row">';
+      const maxD = Math.max(...depths.map(d => d[1] || 0), 1);
+      for (const [date, val] of depths) {
+        const pct = (val / maxD * 100).toFixed(0);
+        const label = date.split('-').slice(1).join('/');
+        html += `<div class="spark-col">
+          <div class="spark-val">${val}"</div>
+          <div class="spark-bar" style="height:${pct}%"></div>
+          <div class="spark-date">${label}</div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    if (snwd.peak) {
+      html += `<div class="season-stats">
+        Season: current ${snwd.current}" | peak ${snwd.peak}" | ${snwd.days} days tracked
+        ${wteq.peak ? `| SWE: current ${wteq.current}" peak ${wteq.peak}"` : ''}
+      </div>`;
+    }
+    html += '</div>';
+  }
+  document.getElementById('history-body').innerHTML = html;
+}
+
+// -- AFD --
+function renderAFD() {
+  const afd = DATA.forecaster_discussion || 'Not available';
+  document.getElementById('afd-body').innerHTML = `<div class="afd-text">${afd}</div>`;
+}
+
+// -- Init --
+loadData();
+setInterval(() => loadData(), 900000);
+
+// Lazy-build model charts when sections expand
+document.addEventListener('click', function(e) {
+  const header = e.target.closest('.section-header');
+  if (!header) return;
+  const body = header.nextElementSibling;
+  if (!body) return;
+  requestAnimationFrame(() => {
+    if (!body.classList.contains('collapsed')) {
+      const canvases = body.querySelectorAll('canvas[id^="chart-models-"]');
+      canvases.forEach(c => {
+        const rn = c.id.replace('chart-models-', '');
+        if (!charts[`models-${rn}`]) buildModelChart(rn);
+      });
+    }
+  });
+});
+</script>
+</body>
+</html>
