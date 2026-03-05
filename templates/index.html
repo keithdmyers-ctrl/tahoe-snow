@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1923">
 <title>Tahoe Snow Report</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#10052;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -48,6 +51,9 @@ body {
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   padding: 14px 24px;
+  padding-top: max(14px, env(safe-area-inset-top));
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -60,6 +66,11 @@ body {
 .header h1 .icon { font-size: 24px; opacity: 0.9; }
 .header .meta { text-align: right; font-size: 13px; color: var(--text-dim); }
 .header .meta .time { color: var(--accent); font-weight: 600; }
+@media (max-width: 420px) {
+  .header { padding: 10px 14px; flex-wrap: wrap; gap: 6px; }
+  .header h1 { font-size: 16px; gap: 6px; }
+  .header h1 .icon { font-size: 20px; }
+}
 .refresh-btn {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.15);
@@ -87,7 +98,13 @@ body {
 }
 
 /* -- Layout -- */
-.container { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+.container {
+  max-width: 1200px; margin: 0 auto;
+  padding: 20px 16px;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
 
 /* -- Hero stats -- */
 .hero-row {
@@ -97,7 +114,7 @@ body {
   margin-bottom: 24px;
 }
 @media (max-width: 900px) { .hero-row { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 500px) { .hero-row { grid-template-columns: 1fr 1fr; gap: 10px; } }
+@media (max-width: 500px) { .hero-row { grid-template-columns: 1fr 1fr; gap: 8px; } }
 
 .hero-card {
   background: linear-gradient(135deg, #1a2634, #1e3a5f);
@@ -131,6 +148,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .hero-card .hero-sub { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+@media (max-width: 500px) {
+  .hero-card { padding: 18px 14px 16px; }
+  .hero-card .hero-value { font-size: 36px; }
+  .hero-card .hero-label { font-size: 10px; letter-spacing: 1px; margin-bottom: 4px; }
+  .hero-card .hero-sub { font-size: 11px; margin-top: 4px; }
+}
 .hero-card.temp .hero-value { color: var(--warm); }
 .hero-card.snowpack .hero-value { color: var(--snow); }
 .hero-card.recent .hero-value { color: var(--safe); }
@@ -148,6 +171,9 @@ body {
   color: var(--text);
   box-shadow: var(--shadow), var(--shadow-glow);
 }
+@media (max-width: 500px) {
+  .summary-banner { padding: 16px; font-size: 14px; line-height: 1.6; }
+}
 
 /* -- Collapsible sections -- */
 .section {
@@ -160,6 +186,7 @@ body {
 }
 .section-header {
   padding: 14px 18px;
+  min-height: 44px;
   font-weight: 600;
   font-size: 14px;
   border-bottom: 1px solid rgba(255,255,255,0.04);
@@ -223,12 +250,23 @@ body {
   padding-bottom: 4px;
 }
 .resort-tabs::-webkit-scrollbar { display: none; }
+.resort-tabs {
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent);
+  mask-image: linear-gradient(to right, black 90%, transparent);
+}
+.resort-tabs.scrolled-end {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
 .resort-tab {
-  padding: 8px 20px;
+  padding: 10px 20px;
   border-radius: 20px;
   cursor: pointer;
   font-weight: 600;
   font-size: 14px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   border: 1px solid transparent;
   background: rgba(255,255,255,0.06);
   color: var(--text-dim);
@@ -255,6 +293,10 @@ body {
   margin-bottom: 12px;
 }
 @media (max-width: 900px) { .zones-row { grid-template-columns: 1fr; } }
+@media (max-width: 500px) {
+  .zone-card { padding: 14px 12px; }
+  .zone-hero .zh-item .zh-val { font-size: 24px; }
+}
 
 .zone-card {
   background: var(--card);
@@ -322,7 +364,8 @@ body {
 
 /* -- Chart -- */
 .chart-container { position: relative; height: 250px; margin: 8px 0; }
-@media (max-width: 800px) { .chart-container { height: 200px; } }
+@media (max-width: 800px) { .chart-container { height: 220px; } }
+@media (max-width: 500px) { .chart-container { height: 200px; } }
 
 /* -- Tables -- */
 table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -368,10 +411,20 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .rank-row { display: inline-flex; gap: 6px; font-size: 13px; }
 .rank-label { color: var(--text-dim); }
 .rank-value { font-weight: 700; }
+@media (max-width: 500px) {
+  .rank-row { font-size: 12px; }
+}
 
 /* -- SNOTEL bars -- */
-.snotel-station { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 13px; }
+.snotel-station { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 13px; }
 .snotel-station .name { width: 160px; color: var(--text-dim); flex-shrink: 0; }
+@media (max-width: 500px) {
+  .snotel-station { flex-wrap: wrap; gap: 4px 10px; }
+  .snotel-station .name { width: 100%; font-size: 12px; }
+  .snotel-station .bar-wrap { flex: 1; min-width: 0; }
+  .snotel-station .depth { width: 50px; }
+  .snotel-station .swe { width: 60px; }
+}
 .snotel-station .bar-wrap { flex: 1; height: 18px; background: rgba(15, 25, 35, 0.6); border-radius: 4px; overflow: hidden; }
 .snotel-station .bar {
   height: 100%; background: linear-gradient(90deg, var(--cold), var(--snow));
@@ -391,6 +444,11 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .spark-bar { width: 100%; background: var(--cold); border-radius: 2px; }
 .spark-date { font-size: 9px; color: var(--text-dim); }
 .season-stats { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+@media (max-width: 500px) {
+  .spark-val { font-size: 11px; }
+  .spark-date { font-size: 10px; }
+  .spark-bar-row { height: 50px; }
+}
 
 /* -- AFD -- */
 .afd-text {
@@ -428,6 +486,11 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .avy-info .avy-advice { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
 .avy-info a { color: var(--accent); text-decoration: none; font-size: 12px; }
 .avy-info a:hover { text-decoration: underline; }
+@media (max-width: 500px) {
+  .avy-banner { gap: 12px; padding: 12px 14px; }
+  .avy-level { font-size: 28px; width: 44px; height: 44px; border-radius: 10px; }
+  .avy-info .avy-label { font-size: 14px; }
+}
 
 /* -- Loading -- */
 .loading-overlay {
@@ -452,7 +515,9 @@ table.data-table tr:hover td { background: var(--card-hover); }
   font-size: 11px; letter-spacing: 0.3px;
   border-top: 1px solid rgba(255,255,255,0.04); margin-top: 40px;
   line-height: 1.6;
+  padding-bottom: max(32px, env(safe-area-inset-bottom));
 }
+@media (max-width: 500px) { .footer { font-size: 10px; padding: 24px 14px; } }
 </style>
 </head>
 <body>
@@ -1141,6 +1206,19 @@ function renderAFD() {
 // -- Init --
 loadData();
 setInterval(() => loadData(), 900000);
+
+// Resort tab scroll hint
+document.addEventListener('DOMContentLoaded', () => {
+  const tabs = document.getElementById('resort-tabs');
+  if (tabs) {
+    const check = () => {
+      const atEnd = tabs.scrollLeft + tabs.clientWidth >= tabs.scrollWidth - 4;
+      tabs.classList.toggle('scrolled-end', atEnd);
+    };
+    tabs.addEventListener('scroll', check, { passive: true });
+    check();
+  }
+});
 
 // Lazy-build model charts when sections expand
 document.addEventListener('click', function(e) {
