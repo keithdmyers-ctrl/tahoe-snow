@@ -865,8 +865,11 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 # Day/night buckets
                 buckets = aggregate_daily(gfs)
 
-                # 24h snow total
+                # 24h snow total (forecast)
                 snow_24h = sum(h["snowfall_in"] for h in gfs[:24])
+
+                # 7-day forecast snow total
+                snow_7d_forecast = sum(h["snowfall_in"] for h in gfs[:168])
 
                 # Multi-model spread (daily)
                 model_spread = multi_model_spread(p)
@@ -878,6 +881,7 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                     "timeline_48h": timeline_48h,
                     "day_night_buckets": buckets,
                     "snow_24h": round(snow_24h, 1),
+                    "snow_7d_forecast": round(snow_7d_forecast, 1),
                     "model_spread": model_spread,
                 }
             else:
@@ -914,6 +918,7 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
             "base_24h_snow_in": base_z.get("snow_24h", 0),
             "mid_24h_snow_in": mid_z.get("snow_24h", 0),
             "peak_24h_snow_in": peak_z.get("snow_24h", 0),
+            "peak_7d_forecast_in": peak_z.get("snow_7d_forecast", 0),
             "peak_slr": pc.get("slr"),
             "peak_quality": pc.get("snow_quality", "N/A"),
             "snowpack_depth_in": max_depth,
@@ -977,6 +982,30 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "best_powder_quality": ranked_slr[0][0] if ranked_slr else None,
     }
 
+    # Historical snowfall from SNOTEL (sum of positive daily depth changes)
+    hist_7d_snow = {}
+    hist_24h_snow = {}
+    for sname, hist in snotel_history.items():
+        snwd = hist.get("SNWD", [])
+        if len(snwd) >= 2:
+            # 7-day: sum positive depth increases over last 7 days
+            recent = snwd[-8:] if len(snwd) >= 8 else snwd
+            total_new = 0.0
+            for i in range(1, len(recent)):
+                delta = (recent[i][1] or 0) - (recent[i-1][1] or 0)
+                if delta > 0:
+                    total_new += delta
+            hist_7d_snow[sname] = round(total_new, 1)
+
+            # 24h: last day's depth increase (last 2 readings)
+            delta_24h = (snwd[-1][1] or 0) - (snwd[-2][1] or 0)
+            hist_24h_snow[sname] = round(max(delta_24h, 0), 1)
+
+    result_hist_7d = max(hist_7d_snow.values()) if hist_7d_snow else 0
+    result_hist_7d_station = max(hist_7d_snow, key=hist_7d_snow.get) if hist_7d_snow else ""
+    result_hist_24h = max(hist_24h_snow.values()) if hist_24h_snow else 0
+    result_hist_24h_station = max(hist_24h_snow, key=hist_24h_snow.get) if hist_24h_snow else ""
+
     # Hero stats — the 4 most important numbers for at-a-glance scanning
     hero_temp_f = current.get("observation", {}).get("temp_f") or current.get("lake_level_temp_f")
     if hero_temp_f is None:
@@ -996,12 +1025,18 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
 
     hero_72h = 0
     hero_72h_resort = ""
+    hero_7d_forecast = 0
+    hero_7d_forecast_resort = ""
     for rn in RESORTS:
         spread = resorts_out.get(rn, {}).get("zones", {}).get("peak", {}).get("model_spread", [])
         total_3d = sum((d.get("models", {}).get("GFS", {}).get("snow_in", 0) for d in spread[:3]), 0)
         if total_3d > hero_72h:
             hero_72h = round(total_3d, 1)
             hero_72h_resort = rn
+        total_7d = sum((d.get("models", {}).get("GFS", {}).get("snow_in", 0) for d in spread[:7]), 0)
+        if total_7d > hero_7d_forecast:
+            hero_7d_forecast = round(total_7d, 1)
+            hero_7d_forecast_resort = rn
 
     result["hero_stats"] = {
         "temp_f": hero_temp_f,
@@ -1011,7 +1046,14 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "snow_24h_resort": hero_24h_resort,
         "snow_72h_in": hero_72h,
         "snow_72h_resort": hero_72h_resort,
+        "snow_24h_hist_in": result_hist_24h,
+        "snow_24h_hist_station": result_hist_24h_station,
+        "snow_7d_hist_in": result_hist_7d,
+        "snow_7d_hist_station": result_hist_7d_station,
+        "snow_7d_forecast_in": hero_7d_forecast,
+        "snow_7d_forecast_resort": hero_7d_forecast_resort,
     }
+    result["hist_7d_snow"] = hist_7d_snow
 
     # Generate summary
     result["summary"] = generate_summary(result)
