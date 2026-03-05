@@ -159,44 +159,44 @@ body {
 .hero-card.recent .hero-value { color: var(--safe); }
 .hero-card.forecast .hero-value { color: var(--accent); }
 
-/* -- Snowfall grid -- */
-.snowfall-grid {
+/* -- Section labels -- */
+.panel-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--text-dim); margin-bottom: 10px; padding-left: 2px;
+}
+
+/* -- Snowfall summary cards -- */
+.snowfall-row {
   display: grid;
-  grid-template-columns: auto repeat(2, 1fr);
-  gap: 0;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+@media (max-width: 700px) { .snowfall-row { grid-template-columns: repeat(2, 1fr); } }
+.sf-card {
   background: var(--card);
   border: 1px solid rgba(255,255,255,0.06);
-  border-radius: var(--radius);
-  overflow: hidden;
+  border-radius: var(--radius-sm);
+  padding: 14px 12px;
+  text-align: center;
+  position: relative;
   box-shadow: var(--shadow), var(--shadow-glow);
 }
-.sf-header {
-  font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;
-  padding: 12px 16px; font-weight: 600;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.02);
+.sf-card .sf-type {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  padding: 2px 8px; border-radius: 3px; display: inline-block; margin-bottom: 6px;
 }
-.sf-label {
-  font-size: 13px; color: var(--text-dim); padding: 14px 16px;
-  display: flex; align-items: center;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-}
-.sf-cell {
-  padding: 14px 16px; text-align: center;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  font-variant-numeric: tabular-nums;
-}
-.sf-cell .sf-val { font-size: 28px; font-weight: 800; line-height: 1; }
-.sf-cell .sf-sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
-.sf-cell.hist .sf-val { color: var(--snow); }
-.sf-cell.fcast .sf-val { color: var(--accent); }
-.snowfall-grid > :nth-last-child(-n+3) { border-bottom: none; }
+.sf-card .sf-type.observed { background: rgba(126,200,227,0.15); color: var(--snow); }
+.sf-card .sf-type.forecast { background: rgba(74,158,255,0.15); color: var(--accent); }
+.sf-card .sf-period { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+.sf-card .sf-val { font-size: 32px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.sf-card.observed .sf-val { color: var(--snow); }
+.sf-card.forecast .sf-val { color: var(--accent); }
+.sf-card .sf-source { font-size: 10px; color: var(--text-dim); margin-top: 6px; }
 @media (max-width: 500px) {
-  .sf-cell .sf-val { font-size: 22px; }
-  .sf-label { font-size: 12px; padding: 10px 12px; }
-  .sf-cell { padding: 10px 12px; }
-  .sf-header { padding: 10px 12px; font-size: 9px; }
+  .sf-card { padding: 10px 8px; }
+  .sf-card .sf-val { font-size: 26px; }
+  .sf-card .sf-period { font-size: 11px; }
 }
 
 /* -- Summary -- */
@@ -580,8 +580,8 @@ table.data-table tr:hover td { background: var(--card-hover); }
 <div class="container" id="app" style="display:none">
 
   <div class="hero-row" id="hero-row"></div>
-  <div class="summary-banner" id="summary"></div>
   <div id="avy-section"></div>
+  <div class="summary-banner" id="summary"></div>
 
   <div class="resort-tabs" id="resort-tabs"></div>
   <div id="resort-panels"></div>
@@ -716,14 +716,14 @@ function renderHero() {
     <div class="hero-sub">${h.snowpack_station || 'SNOTEL'}</div>
   </div>`;
   html += `<div class="hero-card recent">
-    <div class="hero-label">24h Snowfall</div>
+    <div class="hero-label">Next 24h Snow</div>
     <div class="hero-value">${h.snow_24h_in > 0 ? h.snow_24h_in + '"' : '0"'}</div>
-    <div class="hero-sub">${h.snow_24h_resort ? h.snow_24h_resort + ' peak' : 'All resorts'}</div>
+    <div class="hero-sub">${h.snow_24h_resort ? h.snow_24h_resort + ' peak forecast' : 'All resorts'}</div>
   </div>`;
   html += `<div class="hero-card forecast">
-    <div class="hero-label">72h Forecast</div>
+    <div class="hero-label">Next 72h Snow</div>
     <div class="hero-value">${h.snow_72h_in > 0 ? h.snow_72h_in + '"' : '0"'}</div>
-    <div class="hero-sub">${h.snow_72h_resort ? h.snow_72h_resort + ' peak (GFS)' : 'All resorts'}</div>
+    <div class="hero-sub">${h.snow_72h_resort ? h.snow_72h_resort + ' peak forecast' : 'All resorts'}</div>
   </div>`;
   document.getElementById('hero-row').innerHTML = html;
 }
@@ -736,7 +736,11 @@ function renderHeader() {
 }
 
 function renderSummary() {
-  document.getElementById('summary').textContent = DATA.summary || '';
+  let text = DATA.summary || '';
+  // Highlight key numbers and temps in the summary for scannability
+  text = text.replace(/(\d+(\.\d+)?)("|″|inches|in\b)/gi, '<strong class="snow-val">$1$3</strong>');
+  text = text.replace(/(\d+)°F/g, '<strong>$1°F</strong>');
+  document.getElementById('summary').innerHTML = text;
 }
 
 function renderCurrent() {
@@ -818,6 +822,39 @@ function buildResortPanel(rn) {
   if (!rd) return '<div>No data</div>';
   let html = '';
 
+  // Snowfall summary — most actionable data first
+  const sf = rd.snowfall_summary;
+  if (sf) {
+    html += '<div class="panel-label">Snowfall</div>';
+    html += `<div class="snowfall-row">
+      <div class="sf-card observed">
+        <div class="sf-type observed">Observed</div>
+        <div class="sf-period">Last 24 Hours</div>
+        <div class="sf-val">${sf.hist_24h_in > 0 ? sf.hist_24h_in + '"' : '0"'}</div>
+        <div class="sf-source">${sf.hist_24h_station || 'SNOTEL'}</div>
+      </div>
+      <div class="sf-card forecast">
+        <div class="sf-type forecast">Forecast</div>
+        <div class="sf-period">Next 24 Hours</div>
+        <div class="sf-val">${sf.forecast_24h_in > 0 ? sf.forecast_24h_in + '"' : '0"'}</div>
+        <div class="sf-source">Peak elevation</div>
+      </div>
+      <div class="sf-card observed">
+        <div class="sf-type observed">Observed</div>
+        <div class="sf-period">Last 7 Days</div>
+        <div class="sf-val">${sf.hist_7d_in > 0 ? sf.hist_7d_in + '"' : '0"'}</div>
+        <div class="sf-source">${sf.hist_7d_station || 'SNOTEL'}</div>
+      </div>
+      <div class="sf-card forecast">
+        <div class="sf-type forecast">Forecast</div>
+        <div class="sf-period">Next 7 Days</div>
+        <div class="sf-val">${sf.forecast_7d_in > 0 ? sf.forecast_7d_in + '"' : '0"'}</div>
+        <div class="sf-source">Peak elevation</div>
+      </div>
+    </div>`;
+  }
+
+  html += '<div class="panel-label">Current Conditions</div>';
   html += '<div class="zones-row">';
   for (const zk of ['peak', 'mid', 'base']) {
     const zd = rd.zones[zk];
@@ -836,13 +873,13 @@ function buildResortPanel(rn) {
           <div class="zh-sub">Feels ${f(snap.feels_like_f, '\u00B0')}</div>
         </div>
         <div class="zh-item">
-          <div class="zh-label">24h Snow</div>
+          <div class="zh-label">Next 24h</div>
           <div class="zh-val snow-val">${f(zd.snow_24h, '"')}</div>
           <div class="zh-sub">${precipBadge(snap.precip_type)}</div>
         </div>
       </div>
       <div class="zone-details">
-        <div class="zd-row"><span>SLR</span><span class="zd-val">${f(snap.slr, ':1')}</span></div>
+        <div class="zd-row"><span>Snow Ratio</span><span class="zd-val">${f(snap.slr, ':1')}</span></div>
         <div class="zd-row"><span>Quality</span><span class="zd-val">${snap.snow_quality || '\u2014'}</span></div>
         <div class="zd-row"><span>Wind</span><span class="zd-val">${snap.wind_dir || ''} ${f(snap.wind_mph, '')} mph</span></div>
         <div class="zd-row"><span>Gusts</span><span class="zd-val">${f(snap.wind_gust_mph, ' mph')}</span></div>
@@ -850,34 +887,6 @@ function buildResortPanel(rn) {
     </div>`;
   }
   html += '</div>';
-
-  // Snowfall summary grid
-  const sf = rd.snowfall_summary;
-  if (sf) {
-    html += `<div class="snowfall-grid">
-      <div class="sf-header"></div>
-      <div class="sf-header" style="text-align:center">Historical</div>
-      <div class="sf-header" style="text-align:center">Forecast</div>
-      <div class="sf-label">24-Hour</div>
-      <div class="sf-cell hist">
-        <div class="sf-val">${sf.hist_24h_in > 0 ? sf.hist_24h_in + '"' : '0"'}</div>
-        <div class="sf-sub">${sf.hist_24h_station || 'SNOTEL'}</div>
-      </div>
-      <div class="sf-cell fcast">
-        <div class="sf-val">${sf.forecast_24h_in > 0 ? sf.forecast_24h_in + '"' : '0"'}</div>
-        <div class="sf-sub">Peak (GFS)</div>
-      </div>
-      <div class="sf-label">7-Day</div>
-      <div class="sf-cell hist">
-        <div class="sf-val">${sf.hist_7d_in > 0 ? sf.hist_7d_in + '"' : '0"'}</div>
-        <div class="sf-sub">${sf.hist_7d_station || 'SNOTEL'}</div>
-      </div>
-      <div class="sf-cell fcast">
-        <div class="sf-val">${sf.forecast_7d_in > 0 ? sf.forecast_7d_in + '"' : '0"'}</div>
-        <div class="sf-sub">Peak (GFS)</div>
-      </div>
-    </div>`;
-  }
 
   // 48h chart (open)
   html += `
@@ -1104,8 +1113,8 @@ function renderComparison() {
     html += `<div class="compare-col">
       <div class="resort-name" style="border-color:${RESORT_COLORS[rn]}">${rn}</div>
       ${compareRow('Peak Temp', `<span class="${tempClass(c.peak_temp_f)}">${f(c.peak_temp_f, '\u00B0F')}</span>`)}
-      ${compareRow('Peak 24h Snow', `<span class="snow-val">${f(c.peak_24h_snow_in, '"')}</span>`)}
-      ${compareRow('7-Day Forecast', `<span class="snow-val">${f(c.peak_7d_forecast_in, '"')}</span>`)}
+      ${compareRow('Next 24h Snow', `<span class="snow-val">${f(c.peak_24h_snow_in, '"')}</span>`)}
+      ${compareRow('Next 7 Days', `<span class="snow-val">${f(c.peak_7d_forecast_in, '"')}</span>`)}
       ${compareRow('Snowpack', `<span class="snow-val">${f(c.snowpack_depth_in, '"')}</span>`)}
       ${compareRow('Quality', c.peak_quality || '\u2014')}
       <div class="compare-detail">
@@ -1113,7 +1122,7 @@ function renderComparison() {
         ${compareRow('Vert Drop', f(c.vert_ft, ' ft'))}
         ${compareRow('Base Temp', f(c.base_temp_f, '\u00B0F'))}
         ${compareRow('Base/Peak Feels', `${f(c.base_feels_like_f, '\u00B0')} / ${f(c.peak_feels_like_f, '\u00B0')}`)}
-        ${compareRow('Peak SLR', f(c.peak_slr, ':1'))}
+        ${compareRow('Snow Ratio', f(c.peak_slr, ':1'))}
         ${compareRow('Base Precip', c.base_precip_type || '\u2014')}
         ${compareRow('Peak Precip', c.peak_precip_type || '\u2014')}
         ${compareRow('Base/Mid 24h', `${f(c.base_24h_snow_in, '"')} / ${f(c.mid_24h_snow_in, '"')}`)}
