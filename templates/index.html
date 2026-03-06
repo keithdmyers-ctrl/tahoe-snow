@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0f1923">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%230f1923'/><text x='90' y='140' font-size='120' text-anchor='middle'>&#10052;</text></svg>">
+<meta name="apple-mobile-web-app-title" content="Tahoe Snow">
 <title>Tahoe Snow Report</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#10052;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -16,7 +18,7 @@
   --card-hover: #1f2f42;
   --border: #2a3a4a;
   --text: #e0e8f0;
-  --text-dim: #8899aa;
+  --text-dim: #99aabb;
   --accent: #4a9eff;
   --snow: #7ec8e3;
   --cold: #5b8def;
@@ -74,7 +76,7 @@ body {
 .refresh-btn {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.15);
-  color: white;
+  color: var(--text);
   padding: 7px 16px;
   border-radius: 20px;
   cursor: pointer;
@@ -115,6 +117,7 @@ body {
 }
 @media (max-width: 900px) { .hero-row { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 500px) { .hero-row { grid-template-columns: 1fr 1fr; gap: 8px; } }
+@media (max-width: 360px) { .hero-row { grid-template-columns: 1fr; gap: 8px; } }
 
 .hero-card {
   background: linear-gradient(135deg, #1a2634, #1e3a5f);
@@ -140,18 +143,21 @@ body {
 .hero-card.forecast::before { background: linear-gradient(180deg, var(--accent), transparent); }
 .hero-card .hero-label {
   font-size: 11px; color: var(--text-dim);
-  text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;
 }
 .hero-card .hero-value {
   font-size: 48px; font-weight: 800; line-height: 1;
   letter-spacing: -1px;
   font-variant-numeric: tabular-nums;
 }
-.hero-card .hero-sub { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+.hero-card .hero-sub {
+  font-size: 12px; color: var(--text-dim); margin-top: 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 @media (max-width: 500px) {
   .hero-card { padding: 18px 14px 16px; }
   .hero-card .hero-value { font-size: 36px; }
-  .hero-card .hero-label { font-size: 10px; letter-spacing: 1px; margin-bottom: 4px; }
+  .hero-card .hero-label { font-size: 11px; letter-spacing: 1px; margin-bottom: 4px; }
   .hero-card .hero-sub { font-size: 11px; margin-top: 4px; }
 }
 .hero-card.temp .hero-value { color: var(--warm); }
@@ -183,7 +189,7 @@ body {
   box-shadow: var(--shadow), var(--shadow-glow);
 }
 .sf-card .sf-type {
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
   padding: 2px 8px; border-radius: 3px; display: inline-block; margin-bottom: 6px;
 }
 .sf-card .sf-type.observed { background: rgba(126,200,227,0.15); color: var(--snow); }
@@ -192,7 +198,7 @@ body {
 .sf-card .sf-val { font-size: 32px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .sf-card.observed .sf-val { color: var(--snow); }
 .sf-card.forecast .sf-val { color: var(--accent); }
-.sf-card .sf-source { font-size: 10px; color: var(--text-dim); margin-top: 6px; }
+.sf-card .sf-source { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
 @media (max-width: 500px) {
   .sf-card { padding: 10px 8px; }
   .sf-card .sf-val { font-size: 26px; }
@@ -238,6 +244,16 @@ body {
   transition: background 0.15s;
 }
 .section-header:hover { background: var(--card-hover); }
+.section-header:active { opacity: 0.7; }
+.section-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+button.section-header {
+  background: none; border: none; color: inherit; font: inherit;
+  width: 100%; text-align: left; -webkit-appearance: none; appearance: none;
+}
+.resort-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.resort-tab:active { transform: scale(0.97); }
+.refresh-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.refresh-btn:active { transform: scale(0.96); }
 .section-header .toggle {
   color: var(--text-dim);
   font-size: 14px;
@@ -246,18 +262,23 @@ body {
 }
 .section-body {
   padding: 16px 18px;
-  max-height: 3000px;
   overflow: hidden;
-  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s ease;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.25s ease;
   opacity: 1;
 }
 .section-body.collapsed {
-  max-height: 0;
+  max-height: 0 !important;
   padding-top: 0;
   padding-bottom: 0;
   opacity: 0;
+}
+
+/* -- Section previews -- */
+.section-preview {
+  font-weight: 400; font-size: 12px; color: var(--text-dim);
+  margin-left: 8px;
 }
 
 /* -- Stat cards -- */
@@ -273,7 +294,7 @@ body {
   padding: 12px 14px;
   text-align: center;
 }
-.stat-card .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-card .value { font-size: 24px; font-weight: 700; margin: 2px 0; font-variant-numeric: tabular-nums; }
 .stat-card .sub { font-size: 11px; color: var(--text-dim); }
 .stat-card.accent .value { color: var(--accent); }
@@ -290,11 +311,12 @@ body {
   padding-bottom: 4px;
 }
 .resort-tabs::-webkit-scrollbar { display: none; }
-.resort-tabs {
+.resort-tabs.overflowing {
   -webkit-mask-image: linear-gradient(to right, black 90%, transparent);
   mask-image: linear-gradient(to right, black 90%, transparent);
 }
-.resort-tabs.scrolled-end {
+.resort-tabs.overflowing.scrolled-end,
+.resort-tabs:not(.overflowing) {
   -webkit-mask-image: none;
   mask-image: none;
 }
@@ -316,7 +338,7 @@ body {
 .resort-tab:hover { background: rgba(255,255,255,0.1); color: var(--text); }
 .resort-tab.active {
   background: var(--accent);
-  color: white;
+  color: #fff;
   box-shadow: 0 2px 8px rgba(74, 158, 255, 0.3);
 }
 .resort-tab.all-tab { border: 1px solid rgba(255,255,255,0.12); background: transparent; }
@@ -354,7 +376,7 @@ body {
 .zone-card .zone-name { font-weight: 700; font-size: 15px; }
 .zone-card .zone-elev { color: var(--text-dim); font-size: 12px; }
 .zone-card .zone-tag {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
   padding: 2px 8px; border-radius: 4px; letter-spacing: 0.5px;
 }
 .zone-tag.peak { background: #4a9eff33; color: var(--accent); }
@@ -369,7 +391,7 @@ body {
   margin-bottom: 10px;
 }
 .zone-hero .zh-item .zh-val { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.zone-hero .zh-item .zh-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.zone-hero .zh-item .zh-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
 .zone-hero .zh-item .zh-sub { font-size: 11px; color: var(--text-dim); }
 
 /* Zone detail rows */
@@ -400,7 +422,7 @@ body {
 .precip-badge.snow { background: #7ec8e333; color: var(--snow); }
 .precip-badge.rain { background: #45aaf233; color: var(--rain); }
 .precip-badge.mix { background: #a55eea33; color: var(--mix); }
-.precip-badge.none { background: #8899aa22; color: var(--text-dim); }
+.precip-badge.none { background: #99aabb22; color: var(--text-dim); }
 
 /* -- Chart -- */
 .chart-container { position: relative; height: 250px; margin: 8px 0; }
@@ -408,6 +430,12 @@ body {
 @media (max-width: 500px) { .chart-container { height: 200px; } }
 
 /* -- Tables -- */
+/* Scroll hint for tables */
+.scroll-wrap {
+  overflow-x: auto; position: relative;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+}
 table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.data-table th {
   text-align: left; padding: 8px 10px; color: var(--text-dim);
@@ -441,13 +469,21 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .compare-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
 .compare-row .cr-label { color: var(--text-dim); }
 .compare-row .cr-value { font-weight: 600; }
-.compare-detail { display: none; }
+.compare-detail {
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+}
+.compare-detail.open { opacity: 1; }
 .compare-toggle {
-  color: var(--accent); font-size: 12px; font-weight: 500;
-  cursor: pointer; padding-top: 8px; text-align: center;
+  color: var(--accent); font-size: 13px; font-weight: 500;
+  cursor: pointer; padding: 12px 0 4px; text-align: center;
   transition: opacity 0.15s;
+  display: block; width: 100%;
+  background: none; border: none; font-family: inherit;
+  min-height: 44px;
 }
 .compare-toggle:hover { opacity: 0.7; }
+.compare-toggle:active { opacity: 0.5; }
 .rank-row { display: inline-flex; gap: 6px; font-size: 13px; }
 .rank-label { color: var(--text-dim); }
 .rank-value { font-weight: 700; }
@@ -480,13 +516,13 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .history-label span { color: var(--text); font-weight: 600; }
 .spark-bar-row { display: flex; gap: 6px; align-items: end; height: 40px; margin: 4px 0; }
 .spark-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.spark-val { font-size: 10px; color: var(--snow); font-variant-numeric: tabular-nums; }
-.spark-bar { width: 100%; background: var(--cold); border-radius: 2px; }
-.spark-date { font-size: 9px; color: var(--text-dim); }
+.spark-val { font-size: 11px; color: var(--snow); font-variant-numeric: tabular-nums; }
+.spark-bar { width: 100%; background: var(--cold); border-radius: 2px; min-height: 2px; }
+.spark-date { font-size: 11px; color: var(--text-dim); }
 .season-stats { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
 @media (max-width: 500px) {
   .spark-val { font-size: 11px; }
-  .spark-date { font-size: 10px; }
+  .spark-date { font-size: 11px; }
   .spark-bar-row { height: 50px; }
 }
 
@@ -532,22 +568,33 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .avy-info .avy-label { font-size: 14px; }
 }
 
-/* -- Loading -- */
-.loading-overlay {
-  position: fixed; inset: 0; background: var(--bg);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  z-index: 200; gap: 20px;
+/* -- Skeleton loading -- */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
   transition: opacity 0.4s ease;
 }
-.loading-overlay.hidden { opacity: 0; pointer-events: none; }
-.spinner {
-  width: 40px; height: 40px;
-  border: 3px solid rgba(255,255,255,0.08);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.9s cubic-bezier(0.4, 0.1, 0.6, 0.9) infinite;
+.skeleton.hidden { opacity: 0; pointer-events: none; }
+.skel-block {
+  background: linear-gradient(90deg, var(--card) 25%, var(--card-hover) 50%, var(--card) 75%);
+  background-size: 800px 100%;
+  border-radius: var(--radius);
 }
-.loading-text { color: var(--text-dim); font-size: 14px; }
+.skeleton:not(.hidden) .skel-block {
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.skel-hero-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+@media (max-width: 900px) { .skel-hero-row { grid-template-columns: repeat(2, 1fr); } }
+.skel-hero { height: 110px; }
+.skel-banner { height: 80px; margin-bottom: 20px; }
+.skel-tabs { height: 44px; width: 60%; margin-bottom: 16px; border-radius: 22px; }
+.skel-zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 900px) { .skel-zones { grid-template-columns: 1fr; } }
+.skel-zone { height: 180px; }
+.skel-section { height: 50px; margin-bottom: 12px; border-radius: var(--radius); }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .footer {
@@ -557,14 +604,29 @@ table.data-table tr:hover td { background: var(--card-hover); }
   line-height: 1.6;
   padding-bottom: max(32px, env(safe-area-inset-bottom));
 }
-@media (max-width: 500px) { .footer { font-size: 10px; padding: 24px 14px; } }
+@media (max-width: 500px) { .footer { font-size: 11px; padding: 24px 14px; } }
 </style>
 </head>
 <body>
 
-<div class="loading-overlay" id="loading">
-  <div class="spinner"></div>
-  <div class="loading-text">Loading Tahoe snow data...</div>
+<div class="skeleton" id="loading">
+  <div class="container">
+    <div class="skel-hero-row">
+      <div class="skel-block skel-hero"></div>
+      <div class="skel-block skel-hero"></div>
+      <div class="skel-block skel-hero"></div>
+      <div class="skel-block skel-hero"></div>
+    </div>
+    <div class="skel-block skel-banner"></div>
+    <div class="skel-block skel-tabs"></div>
+    <div class="skel-zones">
+      <div class="skel-block skel-zone"></div>
+      <div class="skel-block skel-zone"></div>
+      <div class="skel-block skel-zone"></div>
+    </div>
+    <div class="skel-block skel-section"></div>
+    <div class="skel-block skel-section"></div>
+  </div>
 </div>
 
 <div class="header">
@@ -580,47 +642,48 @@ table.data-table tr:hover td { background: var(--card-hover); }
 <div class="container" id="app" style="display:none">
 
   <div class="hero-row" id="hero-row"></div>
-  <div id="avy-section"></div>
   <div class="summary-banner" id="summary"></div>
 
   <div class="resort-tabs" id="resort-tabs"></div>
   <div id="resort-panels"></div>
   <div id="comparison-panel" class="resort-panel"></div>
 
+  <div id="avy-section"></div>
+
   <div class="section">
-    <div class="section-header" onclick="toggleSection(this)">
-      Current Observation Detail <span class="toggle">&#9662;</span>
-    </div>
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>Current Observation Detail <span class="section-preview" id="preview-current"></span></span> <span class="toggle">&#9662;</span>
+    </button>
     <div class="section-body collapsed">
       <div class="current-row" id="current-row"></div>
     </div>
   </div>
 
   <div class="section">
-    <div class="section-header" onclick="toggleSection(this)">
-      Snowpack &mdash; All SNOTEL Stations <span class="toggle">&#9662;</span>
-    </div>
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>Snowpack &mdash; All SNOTEL Stations <span class="section-preview" id="preview-snotel"></span></span> <span class="toggle">&#9662;</span>
+    </button>
     <div class="section-body collapsed" id="snotel-body"></div>
   </div>
 
   <div class="section">
-    <div class="section-header" onclick="toggleSection(this)">
-      Snowpack History &amp; Season Stats <span class="toggle">&#9662;</span>
-    </div>
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>Snowpack History &amp; Season Stats <span class="section-preview" id="preview-history"></span></span> <span class="toggle">&#9662;</span>
+    </button>
     <div class="section-body collapsed" id="history-body"></div>
   </div>
 
   <div class="section">
-    <div class="section-header" onclick="toggleSection(this)">
-      NWS Forecaster Discussion (Reno WFO) <span class="toggle">&#9662;</span>
-    </div>
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>NWS Forecaster Discussion (Reno WFO)</span> <span class="toggle">&#9662;</span>
+    </button>
     <div class="section-body collapsed" id="afd-body"></div>
   </div>
 
   <div class="footer">
-    Models: GFS + ECMWF + ICON via Open-Meteo &middot;
-    Observations: SNOTEL (NRCS) + NWS &middot;
-    Physics: SLR (Roebber 2003), NWS Wind Chill, Moist Adiabatic Lapse Rate
+    <div>Models: GFS + ECMWF + ICON via Open-Meteo</div>
+    <div>Observations: SNOTEL (NRCS) + NWS</div>
+    <div>Physics: Snow-to-Liquid Ratio (Roebber 2003), NWS Wind Chill</div>
   </div>
 </div>
 
@@ -632,8 +695,8 @@ const RESORT_COLORS = { Heavenly: '#ff4757', Northstar: '#2ed573', Kirkwood: '#4
 
 // Shared chart config
 const CHART_TOOLTIP = { backgroundColor: '#1a2634ee', titleColor: '#e0e8f0', bodyColor: '#e0e8f0', borderColor: '#2a3a4a', borderWidth: 1 };
-const CHART_LEGEND = { labels: { color: '#8899aa', font: { size: 11 } } };
-const SCALE_X = { ticks: { color: '#8899aa', font: { size: 10 } }, grid: { color: '#1a263488' } };
+const CHART_LEGEND = { labels: { color: '#99aabb', font: { size: 11 } } };
+const SCALE_X = { ticks: { color: '#99aabb', font: { size: 11 } }, grid: { color: '#1a263488' } };
 const SCALE_SNOW = { min: 0, ticks: { color: '#7ec8e3', callback: v => v + '"' }, grid: { display: false } };
 const SCALE_TEMP = { ticks: { color: '#ff8c42', callback: v => v + '\u00B0' }, grid: { color: '#1a263488' } };
 
@@ -654,25 +717,36 @@ async function loadData() {
     document.getElementById('app').style.display = 'block';
   } catch (e) {
     document.getElementById('loading').innerHTML =
-      '<div style="color:#ff4757;font-size:14px">Error loading data: ' + e.message + '</div>';
+      '<div class="container" style="padding-top:60px;text-align:center"><div style="color:var(--danger);font-size:15px;margin-bottom:12px">Unable to load snow data</div><div style="color:var(--text-dim);font-size:13px;margin-bottom:16px">' + esc(e.message) + '</div><button class="refresh-btn" onclick="location.reload()" style="margin:0 auto">Retry</button></div>';
   }
 }
 
 async function refreshData() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('loading');
-  btn.textContent = '';
+  btn.innerHTML = '<span style="opacity:0">Refresh</span>';
   try {
     await fetch('/api/refresh');
     const r = await fetch('/api/data');
     DATA = await r.json();
     render();
-  } catch(e) { console.error(e); }
+  } catch(e) {
+    console.error(e);
+    btn.classList.remove('loading');
+    btn.innerHTML = 'Retry';
+    btn.style.borderColor = 'var(--danger)';
+    setTimeout(() => { btn.innerHTML = 'Refresh'; btn.style.borderColor = ''; }, 2000);
+    return;
+  }
   btn.classList.remove('loading');
-  btn.textContent = 'Refresh';
+  btn.innerHTML = '\u2713 Updated';
+  btn.style.borderColor = 'var(--safe)';
+  btn.style.color = 'var(--safe)';
+  setTimeout(() => { btn.innerHTML = 'Refresh'; btn.style.borderColor = ''; btn.style.color = ''; }, 2000);
 }
 
 function f(v, suf='', fallback='\u2014') { return v != null ? v + suf : fallback; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function tempClass(t) { return t != null && t < 32 ? 'temp-cold' : 'temp-warm'; }
 function precipBadge(pt) {
   if (!pt || pt === 'None') return '<span class="precip-badge none">None</span>';
@@ -683,8 +757,18 @@ function precipBadge(pt) {
 function toggleSection(el) {
   const body = el.nextElementSibling;
   const tog = el.querySelector('.toggle');
-  body.classList.toggle('collapsed');
-  tog.style.transform = body.classList.contains('collapsed') ? 'rotate(0deg)' : 'rotate(180deg)';
+  const collapsing = !body.classList.contains('collapsed');
+  if (collapsing) {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    requestAnimationFrame(() => body.classList.add('collapsed'));
+  } else {
+    body.classList.remove('collapsed');
+    body.style.maxHeight = body.scrollHeight + 'px';
+    const clearMax = (e) => { if (e.propertyName === 'max-height') { body.style.maxHeight = ''; body.removeEventListener('transitionend', clearMax); } };
+    body.addEventListener('transitionend', clearMax);
+  }
+  tog.style.transform = collapsing ? 'rotate(0deg)' : 'rotate(180deg)';
+  el.setAttribute('aria-expanded', collapsing ? 'false' : 'true');
 }
 
 function render() {
@@ -699,6 +783,38 @@ function render() {
   renderSnotel();
   renderHistory();
   renderAFD();
+  renderPreviews();
+}
+
+function renderPreviews() {
+  // Current observation preview
+  const c = DATA.current_conditions;
+  const obs = c.observation || {};
+  const temp = obs.temp_f || c.lake_level_temp_f;
+  const cond = obs.conditions || '';
+  const previewCurrent = document.getElementById('preview-current');
+  if (previewCurrent && temp != null) {
+    previewCurrent.textContent = `\u2014 ${Math.round(temp)}\u00B0F${cond ? ', ' + cond : ''}`;
+  }
+
+  // Snowpack preview
+  const snotel = DATA.snotel_current || {};
+  const snotelEntries = Object.entries(snotel).filter(([n, d]) => !d.error);
+  const deepest = snotelEntries.reduce((max, e) => (e[1].snow_depth_in || 0) > (max[1]?.snow_depth_in || 0) ? e : max, [null, {}]);
+  const previewSnotel = document.getElementById('preview-snotel');
+  if (previewSnotel && deepest[0]) {
+    previewSnotel.textContent = `\u2014 ${snotelEntries.length} stations, deepest ${deepest[1].snow_depth_in}"`;
+  }
+
+  // History preview
+  const season = DATA.season_stats || {};
+  const snames = Object.keys(season);
+  const previewHistory = document.getElementById('preview-history');
+  if (previewHistory && snames.length > 0) {
+    const first = season[snames[0]];
+    const snwd = first.SNWD || {};
+    if (snwd.current) previewHistory.textContent = `\u2014 ${snwd.current}" current, ${snwd.peak}" peak`;
+  }
 }
 
 function renderHero() {
@@ -736,9 +852,9 @@ function renderHeader() {
 }
 
 function renderSummary() {
-  let text = DATA.summary || '';
+  let text = esc(DATA.summary || '');
   // Highlight key numbers and temps in the summary for scannability
-  text = text.replace(/(\d+(\.\d+)?)("|″|inches|in\b)/gi, '<strong class="snow-val">$1$3</strong>');
+  text = text.replace(/(\d+(\.\d+)?)(&quot;|″|inches|in\b)/gi, '<strong class="snow-val">$1$3</strong>');
   text = text.replace(/(\d+)°F/g, '<strong>$1°F</strong>');
   document.getElementById('summary').innerHTML = text;
 }
@@ -756,7 +872,8 @@ function renderCurrent() {
   let html = '';
   html += statCard('Temperature', f(temp, '\u00B0F'), feels != null ? `Feels ${feels}\u00B0F` : '', 'accent');
   html += statCard('Conditions', cond || 'N/A', '', '');
-  html += statCard('Wind', `${wdir} ${wind}`, gust > 0 ? `Gusts ${gust} mph` : 'mph', '');
+  const windStr = wind > 0 ? `${wdir} ${wind} mph` : 'Calm';
+  html += statCard('Wind', windStr, gust > 0 ? `Gusts ${gust} mph` : '', '');
   html += statCard('Humidity', f(hum, '%'), '', '');
   html += statCard('Snow Level', f(c.snow_level_ft, ' ft'), '', 'snow-card');
   html += statCard('Freeze Level', f(c.freezing_level_ft, ' ft'), '', 'accent');
@@ -891,9 +1008,9 @@ function buildResortPanel(rn) {
   // 48h chart (open)
   html += `
   <div class="section">
-    <div class="section-header" onclick="toggleSection(this)">
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="true">
       48-Hour Forecast &mdash; ${rn} Peak <span class="toggle" style="transform:rotate(180deg)">&#9662;</span>
-    </div>
+    </button>
     <div class="section-body">
       <div class="chart-container"><canvas id="chart-hourly-${rn}"></canvas></div>
     </div>
@@ -905,11 +1022,11 @@ function buildResortPanel(rn) {
   if (buckets.length > 0) {
     html += `
     <div class="section">
-      <div class="section-header" onclick="toggleSection(this)">
+      <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
         Day/Night Accumulation &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
-      </div>
+      </button>
       <div class="section-body collapsed">
-        <div style="overflow-x:auto">
+        <div class="scroll-wrap">
         <table class="data-table">
           <thead><tr>
             <th>Date</th><th>Period</th><th>Snow</th><th>Liquid</th>
@@ -918,7 +1035,7 @@ function buildResortPanel(rn) {
     for (const b of buckets.slice(0, 20)) {
       const sc = b.snow_in > 0 ? 'snow-val' : '';
       html += `<tr>
-        <td>${b.date}</td><td>${b.period}</td>
+        <td>${formatDateLabel(b.date)}</td><td>${b.period}</td>
         <td class="${sc}">${b.snow_in}"</td><td>${b.liquid_in}"</td>
         <td class="${tempClass(b.temp_high_f)}">${f(b.temp_high_f, '\u00B0')}</td>
         <td class="${tempClass(b.temp_low_f)}">${f(b.temp_low_f, '\u00B0')}</td>
@@ -935,12 +1052,12 @@ function buildResortPanel(rn) {
   if (spread.length > 0) {
     html += `
     <div class="section">
-      <div class="section-header" onclick="toggleSection(this)">
+      <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
         Multi-Model Comparison &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
-      </div>
+      </button>
       <div class="section-body collapsed">
         <div class="chart-container"><canvas id="chart-models-${rn}"></canvas></div>
-        <div style="overflow-x:auto;margin-top:12px">
+        <div class="scroll-wrap" style="margin-top:12px">
         <table class="data-table">
           <thead><tr><th>Date</th><th>GFS</th><th>ECMWF</th><th>ICON</th><th>High</th><th>Spread</th><th>Confidence</th></tr></thead>
           <tbody>`;
@@ -963,11 +1080,15 @@ function buildResortPanel(rn) {
   // Nearby SNOTEL (collapsed)
   const ns = rd.nearest_snotel || [];
   if (ns.length > 0) {
-    html += `<div class="section"><div class="section-header" onclick="toggleSection(this)">Nearby SNOTEL <span class="toggle">&#9662;</span></div><div class="section-body collapsed">`;
+    const maxNsDepth = Math.max(...ns.map(s => s.snow_depth_in || 0), 1);
+    html += `<div class="section"><button class="section-header" onclick="toggleSection(this)" aria-expanded="false">Nearby SNOTEL <span class="toggle">&#9662;</span></button><div class="section-body collapsed">`;
     for (const s of ns) {
+      const depth = s.snow_depth_in || 0;
+      const pct = (depth / maxNsDepth * 100).toFixed(0);
       html += `<div class="snotel-station">
         <span class="name">${s.name} (${s.elev_ft}ft)</span>
-        <span class="depth">${f(s.snow_depth_in, '"')}</span>
+        <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
+        <span class="depth">${f(depth, '"')}</span>
         <span class="swe">SWE ${f(s.swe_in, '"')}</span>
       </div>`;
     }
@@ -1020,7 +1141,7 @@ function buildHourlyChart(rn) {
         {
           label: 'Wind (mph)',
           data: timeline.map(h => h.wind_mph || 0),
-          borderColor: '#8899aa44', backgroundColor: 'transparent',
+          borderColor: '#99aabb44', backgroundColor: 'transparent',
           type: 'line', tension: 0.3, pointRadius: 0, borderWidth: 1, borderDash: [4, 4],
           yAxisID: 'temp', order: 0,
         },
@@ -1129,14 +1250,16 @@ function renderComparison() {
         ${compareRow('SWE', f(c.snowpack_swe_in, '"'))}
         ${compareRow('Aspect', c.aspect || '\u2014')}
       </div>
-      <div class="compare-toggle" onclick="toggleCompareDetail(this)">More &#9662;</div>
+      <button class="compare-toggle" onclick="toggleCompareDetail(this)">More &#9662;</button>
     </div>`;
   }
   html += '</div>';
 
   html += `<div class="section" style="margin-top:16px">
-    <div class="section-header">7-Day Forecast &mdash; All Resorts (Peak)</div>
-    <div class="section-body"><div class="chart-container" style="height:280px"><canvas id="chart-compare-all"></canvas></div></div>
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="true">
+      7-Day Forecast &mdash; All Resorts (Peak) <span class="toggle" style="transform:rotate(180deg)">&#9662;</span>
+    </button>
+    <div class="section-body"><div class="chart-container" style="height:300px"><canvas id="chart-compare-all"></canvas></div></div>
   </div>`;
 
   document.getElementById('comparison-panel').innerHTML = html;
@@ -1146,8 +1269,16 @@ function renderComparison() {
 
 function toggleCompareDetail(el) {
   const detail = el.previousElementSibling;
-  const showing = detail.style.display === 'block';
-  detail.style.display = showing ? 'none' : 'block';
+  const showing = detail.classList.contains('open');
+  if (showing) {
+    detail.style.maxHeight = detail.scrollHeight + 'px';
+    requestAnimationFrame(() => { detail.classList.remove('open'); detail.style.maxHeight = '0'; });
+  } else {
+    detail.classList.add('open');
+    detail.style.maxHeight = detail.scrollHeight + 'px';
+    const clearMax = (e) => { if (e.propertyName === 'max-height') { detail.style.maxHeight = ''; detail.removeEventListener('transitionend', clearMax); } };
+    detail.addEventListener('transitionend', clearMax);
+  }
   el.innerHTML = showing ? 'More &#9662;' : 'Less &#9652;';
 }
 
@@ -1266,8 +1397,9 @@ function renderHistory() {
     }
     if (snwd.peak) {
       html += `<div class="season-stats">
-        Season: current ${snwd.current}" | peak ${snwd.peak}" | ${snwd.days} days tracked
-        ${wteq.peak ? `| SWE: current ${wteq.current}" peak ${wteq.peak}"` : ''}
+        Depth: <strong>${snwd.current}"</strong> now, <strong>${snwd.peak}"</strong> peak
+        ${wteq.peak ? ` &middot; SWE: <strong>${wteq.current}"</strong> now, <strong>${wteq.peak}"</strong> peak` : ''}
+        &middot; ${snwd.days} days tracked
       </div>`;
     }
     html += '</div>';
@@ -1277,7 +1409,7 @@ function renderHistory() {
 
 // -- AFD --
 function renderAFD() {
-  const afd = DATA.forecaster_discussion || 'Not available';
+  const afd = esc(DATA.forecaster_discussion || 'Not available');
   document.getElementById('afd-body').innerHTML = `<div class="afd-text">${afd}</div>`;
 }
 
@@ -1290,10 +1422,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabs = document.getElementById('resort-tabs');
   if (tabs) {
     const check = () => {
+      const overflows = tabs.scrollWidth > tabs.clientWidth + 4;
+      tabs.classList.toggle('overflowing', overflows);
       const atEnd = tabs.scrollLeft + tabs.clientWidth >= tabs.scrollWidth - 4;
       tabs.classList.toggle('scrolled-end', atEnd);
     };
     tabs.addEventListener('scroll', check, { passive: true });
+    new ResizeObserver(check).observe(tabs);
     check();
   }
 });
