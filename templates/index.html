@@ -719,6 +719,11 @@ async function loadData() {
   try {
     const r = await fetch('/api/data');
     DATA = await r.json();
+    if (DATA.error) {
+      // Data still loading in background — retry in 5s
+      setTimeout(loadData, 5000);
+      return;
+    }
     render();
     const overlay = document.getElementById('loading');
     overlay.classList.add('hidden');
@@ -781,7 +786,7 @@ function toggleSection(el) {
 }
 
 function render() {
-  if (!DATA) return;
+  if (!DATA || DATA.error) return;
   renderHero();
   renderHeader();
   renderAlerts();
@@ -801,7 +806,7 @@ function render() {
 
 function renderPreviews() {
   // Current observation preview
-  const c = DATA.current_conditions;
+  const c = DATA.current_conditions || {};
   const obs = c.observation || {};
   const temp = obs.temp_f || c.lake_level_temp_f;
   const cond = obs.conditions || '';
@@ -873,7 +878,7 @@ function renderSummary() {
 }
 
 function renderCurrent() {
-  const c = DATA.current_conditions;
+  const c = DATA.current_conditions || {};
   const obs = c.observation || {};
   const temp = obs.temp_f || c.lake_level_temp_f;
   const feels = obs.feels_like_f;
