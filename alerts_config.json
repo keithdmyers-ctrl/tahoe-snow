@@ -1,0 +1,28 @@
+{
+  "enabled": true,
+  "check_interval_minutes": 30,
+  "resorts": {
+    "Heavenly": {
+      "enabled": true
+    },
+    "Northstar": {
+      "enabled": true
+    },
+    "Kirkwood": {
+      "enabled": true
+    }
+  },
+  "thresholds": {
+    "snow_24h_inches": 6,
+    "snow_48h_inches": 12,
+    "powder_quality_slr_min": 12,
+    "avalanche_danger_min": 3
+  },
+  "notifications": {
+    "desktop": true,
+    "webhook_url": "",
+    "webhook_method": "POST",
+    "log": true
+  },
+  "cooldown_hours": 6
+}

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+{% include "base.css" %}
+
+/* Oakland scene — Figma v2 */
+
+/* Override header for gradient style */
+.scene > .header {
+    height: 48px;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    padding: 0 16px;
+}
+.scene > .header .location {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+.scene > .header .timestamp {
+    color: rgba(255,255,255,0.7);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Content area */
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Temperature row */
+.temps-row {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 14px 24px 0;
+    gap: 24px;
+    flex-shrink: 0;
+}
+
+.temp-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.temp-block .label {
+    font-size: 9px;
+    color: #94a3b8;
+    letter-spacing: 1.2px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.temp-block .value {
+    font-size: 48px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.temp-block .value.stale { color: #94a3b8; }
+
+.temp-block .sub {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+    min-height: 14px;
+}
+
+/* Conditions row */
+.conditions-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 6px 24px 8px;
+    gap: 20px;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.conditions-row .cond { color: #3b82f6; font-weight: 600; }
+.conditions-row .wind { color: #64748b; font-weight: 500; }
+.conditions-row .nws-ref { color: #94a3b8; font-size: 11px; font-weight: 500; }
+
+/* Barometer strip */
+.baro-strip {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    margin: 4px 16px 0;
+    padding: 0 16px;
+    background: #f1f5f9;
+    border-radius: 8px;
+    gap: 16px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.baro-pressure {
+    font-weight: 700;
+    font-size: 12px;
+    color: #1e293b;
+}
+
+.baro-trend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.baro-arrow {
+    font-size: 12px;
+}
+.baro-arrow.rising { color: #22c55e; }
+.baro-arrow.falling { color: #ef4444; }
+.baro-arrow.steady { color: #94a3b8; }
+
+.baro-label { color: #64748b; font-weight: 500; }
+
+.baro-forecast-wrap {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+}
+
+.baro-forecast {
+    color: #475569;
+    font-weight: 500;
+}
+
+.baro-rain {
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    min-width: 48px;
+    text-align: center;
+}
+.rain-low { background: #e8f5e9; color: #2e7d32; }
+.rain-med { background: #fff3e0; color: #e65100; }
+.rain-high { background: #ffebee; color: #c62828; }
+
+/* Hourly forecast strip */
+.hourly-strip {
+    display: flex;
+    margin-top: 8px;
+    height: 76px;
+    min-height: 76px;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    background: #ffffff;
+    flex-shrink: 0;
+}
+
+.hour-cell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    gap: 3px;
+}
+
+.hour-cell .time { font-size: 9px; color: #94a3b8; font-weight: 600; }
+.hour-cell .icon { font-size: 18px; line-height: 1; height: 20px; display: flex; align-items: center; justify-content: center; }
+.hour-cell .htemp { font-size: 13px; font-weight: 700; color: #1e293b; }
+.hour-cell .precip { font-size: 9px; color: #3b82f6; font-weight: 600; height: 12px; }
+
+/* Precip probability background bar */
+.hour-cell {
+    position: relative;
+    overflow: hidden;
+}
+.hour-cell .precip-bg {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(59, 130, 246, 0.08);
+    pointer-events: none;
+}
+.hour-cell .precip-bg.med { background: rgba(59, 130, 246, 0.15); }
+.hour-cell .precip-bg.high { background: rgba(59, 130, 246, 0.25); }
+
+/* 5-day forecast */
+.forecast-row {
+    display: flex;
+    padding: 8px 24px;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.forecast-day {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.forecast-day .day-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.forecast-day .fc-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.forecast-day .fc-temps {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e293b;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.forecast-day .fc-temps .lo {
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.forecast-day .fc-cond {
+    font-size: 9px;
+    color: #3b82f6;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* Bottom bar */
+.bottom-bar {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    padding: 0 16px;
+    font-size: 10px;
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+    height: 32px;
+    align-items: center;
+}
+.bottom-bar .legend { color: rgba(255,255,255,0.7); font-weight: 500; }
+.bottom-bar .active { color: rgba(255,255,255,0.9); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="scene">
+    <!-- Header -->
+    <div class="header">
+        <span class="location">{{ location }}</span>
+        <span class="timestamp">{{ timestamp }}</span>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <!-- NWS Alerts -->
+        {% if alerts %}
+        <div style="background:#fef3c7; padding:4px 16px; display:flex; align-items:center; gap:8px; font-size:11px; flex-shrink:0;">
+            <span style="color:#92400e; font-weight:700;">&#9888;</span>
+            <span style="color:#92400e; font-weight:600;">{{ alerts[0].event }}</span>
+            {% if alerts|length > 1 %}<span style="color:#b45309;">+{{ alerts|length - 1 }} more</span>{% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Temperature blocks -->
+        <div class="temps-row">
+            <div class="temp-block">
+                <div class="label">Indoor</div>
+                <div class="value">{{ indoor_temp }}°</div>
+                {% if indoor_humidity is not none %}
+                <div class="sub">{{ indoor_humidity }}% rh</div>
+                {% else %}
+                <div class="sub">&nbsp;</div>
+                {% endif %}
+            </div>
+            <div class="temp-block">
+                <div class="label">Outdoor</div>
+                <div class="value {{ 'stale' if outdoor_stale else '' }}">{{ outdoor_temp }}°</div>
+                {% if outdoor_humidity is not none %}
+                <div class="sub">{{ outdoor_humidity }}% rh</div>
+                {% else %}
+                <div class="sub">&nbsp;</div>
+                {% endif %}
+            </div>
+            <div class="temp-block">
+                <div class="label">Today's High</div>
+                <div class="value">{{ today_high }}°</div>
+                <div class="sub">{{ today_low }}° low{% if temp_anomaly is not none %} · {{ "%+d"|format(temp_anomaly) }}° avg{% endif %}</div>
+            </div>
+        </div>
+
+        <!-- Current conditions -->
+        <div class="conditions-row">
+            <span class="cond">{{ conditions }}</span>
+            {% if wind %}<span class="wind">{{ wind }}</span>{% endif %}
+            {% if nws_temp %}<span class="nws-ref">NWS: {{ nws_temp }}°F</span>{% endif %}
+        </div>
+
+        <!-- Barometer / Rain Prediction -->
+        {% if pressure_forecast and pressure_forecast.rain_pct is not none %}
+        {% set pf = pressure_forecast %}
+        {% set rt = rain_timing %}
+        <div class="baro-strip">
+            <span class="baro-pressure">{{ "%.0f"|format(outdoor_pressure) if outdoor_pressure else "--" }} hPa</span>
+            <span class="baro-trend">
+                <span class="baro-arrow {{ pf.trend_dir }}">{% if pf.trend_dir == 'rising' %}&#9650;{% elif pf.trend_dir == 'falling' %}&#9660;{% else %}&#9644;{% endif %}</span>
+                <span class="baro-label">{{ pf.trend_label }}{% if pf.trend_3h is not none %} ({{ "%+.1f"|format(pf.trend_3h) }}/3h){% endif %}</span>
+            </span>
+            <div class="baro-forecast-wrap">
+                {% if rt and rt.will_rain %}
+                <span class="baro-forecast">{{ rt.summary }}</span>
+                <span class="baro-rain {% if rt.combined_pct < 25 %}rain-low{% elif rt.combined_pct < 55 %}rain-med{% else %}rain-high{% endif %}">{{ rt.combined_pct }}%</span>
+                {% else %}
+                <span class="baro-forecast">{{ rt.summary if rt else pf.forecast }}</span>
+                <span class="baro-rain rain-low">dry</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Hourly strip (next 16 hours) -->
+        <div class="hourly-strip">
+            {% for h in hourly %}
+            <div class="hour-cell">
+                {% if h.precip_pct > 0 %}
+                <div class="precip-bg {{ 'high' if h.precip_pct >= 50 else 'med' if h.precip_pct >= 25 else '' }}" style="height: {{ h.precip_pct }}%;"></div>
+                {% endif %}
+                <span class="time">{{ h.time }}</span>
+                <span class="icon">{{ h.icon }}</span>
+                <span class="htemp">{{ h.temp }}°</span>
+                {% if h.precip_pct > 0 %}
+                <span class="precip">{{ h.precip_pct }}%</span>
+                {% else %}
+                <span class="precip">&nbsp;</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- 5-day forecast -->
+        <div class="forecast-row">
+            {% for day in forecast %}
+            <div class="forecast-day">
+                <div class="day-name">{{ day.name }}</div>
+                <div class="fc-icon">{{ day.icon }}</div>
+                <div class="fc-temps">{{ day.hi }}° <span class="lo">{{ day.lo }}°</span></div>
+                <div class="fc-cond">{{ day.short }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+        <span class="legend">A: Oakland | B: Heavenly | C: Refresh | D: Detail</span>
+        <span class="active">{{ scene_hint }}</span>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+{% include "base.css" %}
+
+/* Detail scene — matching gradient/slate theme */
+
+/* Override header for gradient style */
+.scene > .header {
+    height: 48px;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    padding: 0 16px;
+}
+.scene > .header .location {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+.scene > .header .timestamp {
+    color: rgba(255,255,255,0.7);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Zone panels — 3 zones fill remaining space */
+.zone-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 16px 4px;
+    border-top: 1px solid #e2e8f0;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Zone header */
+.zp-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.zp-icon { font-size: 10px; font-weight: 700; color: #64748b; }
+.zp-name { font-weight: 700; font-size: 14px; color: #1e293b; }
+.zp-label { font-size: 10px; color: #94a3b8; font-weight: 500; }
+.zp-elev { font-size: 10px; color: #94a3b8; margin-left: auto; font-weight: 500; }
+
+/* Metrics row */
+.zp-metrics {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding-left: 16px;
+    flex-shrink: 0;
+}
+
+.zp-temp { font-size: 24px; font-weight: 700; color: #1e293b; line-height: 1; }
+.zp-feels { font-size: 10px; color: #94a3b8; font-weight: 500; }
+.zp-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 4px; }
+.zp-precip { font-size: 11px; font-weight: 700; }
+.zp-precip.snow-type { color: #3b82f6; }
+.zp-precip.mix-type { color: #f97316; }
+.zp-precip.rain-type { color: #64748b; }
+.zp-precip.none-type { color: #cbd5e1; }
+.zp-wind { font-size: 11px; color: #64748b; font-weight: 500; }
+.zp-wind.warn { color: #f97316; }
+.zp-wind.danger { color: #ef4444; font-weight: 700; }
+.zp-snow { font-size: 14px; font-weight: 700; }
+.zp-snow.hot { color: #ef4444; }
+.zp-snow.active { color: #3b82f6; }
+.zp-snow.none { color: #cbd5e1; }
+.zp-quality { font-size: 9px; color: #3b82f6; font-weight: 600; }
+
+/* Conditions sub-row (last zone only) */
+.zp-conditions {
+    display: flex;
+    gap: 12px;
+    padding-left: 16px;
+    height: 18px;
+    align-items: center;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.zp-conditions .zc-item { color: #64748b; font-weight: 500; }
+.zp-conditions .zc-val { font-weight: 700; color: #1e293b; }
+.zp-conditions .zc-val.blue { color: #3b82f6; }
+.zp-conditions .avy {
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-weight: 700;
+    font-size: 9px;
+    color: #64748b;
+}
+.zp-conditions .avy.avy-low { border-color: #22c55e; color: #16a34a; }
+.zp-conditions .avy.avy-mod { border-color: #eab308; color: #ca8a04; }
+.zp-conditions .avy.avy-con { border-color: #f97316; color: #ea580c; }
+.zp-conditions .avy.avy-high { border-color: #ef4444; color: #dc2626; }
+.zp-conditions .avy.avy-ext { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+
+/* Timeline strip */
+.zp-timeline {
+    display: flex;
+    padding: 4px 0 0 16px;
+    flex: 1;
+    min-height: 0;
+    align-items: flex-end;
+    overflow: hidden;
+}
+
+.tl-cell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    gap: 1px;
+}
+
+.tl-cell .t-time { font-size: 8px; color: #94a3b8; font-weight: 600; line-height: 1; }
+.tl-cell .t-temp { font-size: 10px; font-weight: 700; color: #1e293b; line-height: 1.2; }
+.tl-cell .t-barwrap { width: 100%; height: 16px; display: flex; align-items: flex-end; justify-content: center; }
+.tl-cell .t-bar { width: 60%; border-radius: 2px 2px 0 0; }
+.t-bar.sn { background: #3b82f6; }
+.t-bar.mx { background: #f97316; }
+.t-bar.rn { background: #94a3b8; }
+.tl-cell .t-snow { font-size: 7px; color: #3b82f6; font-weight: 600; line-height: 1; height: 8px; }
+
+/* Bottom bar */
+.bottom-bar {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    padding: 0 16px;
+    font-size: 10px;
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+    height: 32px;
+    align-items: center;
+}
+.bottom-bar .legend { color: rgba(255,255,255,0.7); font-weight: 500; }
+.bottom-bar .active { color: rgba(255,255,255,0.9); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="scene">
+    <!-- Header -->
+    <div class="header">
+        <span class="location">HEAVENLY DETAIL</span>
+        <span class="timestamp">{{ timestamp }}</span>
+    </div>
+
+    {% for zone in zones %}
+    <div class="zone-panel">
+        <div class="zp-header">
+            <span class="zp-icon">{{ zone.icon }}</span>
+            <span class="zp-name">{{ zone.name }}</span>
+            <span class="zp-label">{{ zone.label }}</span>
+            <span class="zp-elev">{{ zone.elev }}ft</span>
+        </div>
+        <div class="zp-metrics">
+            <span class="zp-temp">{{ zone.temp }}°</span>
+            <span class="zp-feels">feels {{ zone.feels }}°</span>
+            <span class="zp-sep"></span>
+            <span class="zp-precip {{ zone.precip_class }}">{{ zone.precip_icon }} {{ zone.precip_type }}</span>
+            <span class="zp-sep"></span>
+            <span class="zp-wind {{ 'danger' if zone.gust > 40 else 'warn' if zone.gust > 25 else '' }}">{{ zone.wind_dir }} {{ zone.wind_mph }}{% if zone.gust > 0 %}g{{ zone.gust|int }}{% endif %}mph</span>
+            <span class="zp-sep"></span>
+            <span class="zp-snow {{ 'hot' if zone.snow_24h > 6 else 'active' if zone.snow_24h > 0 else 'none' }}">{{ zone.snow_str }} 24h</span>
+            {% if zone.quality %}<span class="zp-quality">{{ zone.quality }}</span>{% endif %}
+        </div>
+        {% if loop.last %}
+        <div class="zp-conditions">
+            <span class="zc-item"><span class="zc-val blue">Snow {{ snow_level }}</span></span>
+            <span class="zc-item">Frz <span class="zc-val">{{ freeze_level }}</span></span>
+            <span class="zc-item">Avy <span class="avy {{ avy_class }}">{{ avy_label }}</span></span>
+            {% if storm and storm.in_storm %}
+            <span class="zc-item">Storm <span class="zc-val blue">{{ storm.storm_total_in }}"</span></span>
+            {% endif %}
+            {% for s in snotel_stations[:3] %}
+            <span class="zc-item">{{ s.name[:8] }}: <span class="zc-val">{{ s.depth }}"</span></span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="zp-timeline">
+            {% for h in zone.hourly %}
+            <div class="tl-cell">
+                <span class="t-time">{{ h.time }}</span>
+                <span class="t-temp">{{ h.temp }}°</span>
+                <div class="t-barwrap">
+                    {% if h.snow > 0 %}
+                    <div class="t-bar {{ h.bar_class }}" style="height:{{ h.bar_pct }}%;min-height:2px;"></div>
+                    {% endif %}
+                </div>
+                <span class="t-snow">{% if h.snow >= 0.5 %}{{ h.snow_label }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+        <span class="legend">A: Oakland | B: Heavenly | C: Refresh | D: Detail</span>
+        <span class="active">{{ scene_hint }}</span>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+{% include "base.css" %}
+
+/* Heavenly scene — matching Oakland Figma v2 theme */
+
+/* Override header for gradient style */
+.scene > .header {
+    height: 48px;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    padding: 0 16px;
+}
+.scene > .header .location {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+.scene > .header .timestamp {
+    color: rgba(255,255,255,0.7);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Content area */
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Top summary row — compact inline metrics */
+.summary-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    gap: 16px;
+    flex-shrink: 0;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.summary-metric {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.summary-metric .label {
+    font-size: 9px;
+    color: #94a3b8;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.summary-metric .val {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1;
+}
+
+.summary-metric .val-sm {
+    font-size: 14px;
+    font-weight: 600;
+    color: #3b82f6;
+}
+
+.summary-metric .sub {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+/* Conditions strip — snow level, freeze, avy */
+.conditions-strip {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    margin: 2px 16px 0;
+    padding: 0 16px;
+    background: #f1f5f9;
+    border-radius: 8px;
+    gap: 24px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.conditions-strip .metric {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.conditions-strip .metric-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.conditions-strip .metric-val {
+    font-weight: 700;
+    color: #1e293b;
+    font-size: 12px;
+}
+
+.conditions-strip .metric-val.blue { color: #3b82f6; }
+
+.conditions-strip .avy-badge {
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-weight: 700;
+    font-size: 11px;
+    color: #64748b;
+}
+
+.avy-badge.avy-low { border-color: #22c55e; color: #16a34a; }
+.avy-badge.avy-mod { border-color: #eab308; color: #ca8a04; }
+.avy-badge.avy-con { border-color: #f97316; color: #ea580c; }
+.avy-badge.avy-high { border-color: #ef4444; color: #dc2626; }
+.avy-badge.avy-ext { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+
+/* Zone cards row */
+.zone-row {
+    display: flex;
+    padding: 8px 16px;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.zone-card {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.zone-card .zone-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.zone-card .zone-name {
+    font-weight: 700;
+    font-size: 13px;
+    color: #1e293b;
+}
+
+.zone-card .zone-elev {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.zone-card .zone-metrics {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.zone-card .zone-temp {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1;
+}
+
+.zone-card .zone-feels {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.zone-card .zone-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.zone-card .zone-snow {
+    font-weight: 700;
+    font-size: 12px;
+}
+.zone-card .zone-snow.hot { color: #ef4444; }
+.zone-card .zone-snow.active { color: #3b82f6; }
+.zone-card .zone-snow.none { color: #cbd5e1; }
+
+.zone-card .zone-wind { color: #64748b; font-weight: 500; }
+.zone-card .zone-wind.warn { color: #f97316; }
+.zone-card .zone-wind.danger { color: #ef4444; }
+
+.zone-card .zone-precip {
+    font-size: 10px;
+    font-weight: 700;
+}
+.zone-card .zone-precip.snow-type { color: #3b82f6; }
+.zone-card .zone-precip.mix-type { color: #f97316; }
+.zone-card .zone-precip.rain-type { color: #64748b; }
+
+.zone-card .zone-quality {
+    font-size: 10px;
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+/* 7-day snow forecast */
+.forecast-row {
+    display: flex;
+    padding: 6px 16px;
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.forecast-day {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 6px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.forecast-day .day-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.forecast-day .fc-snow {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+}
+.forecast-day .fc-snow.hot { color: #ef4444; }
+.forecast-day .fc-snow.active { color: #3b82f6; }
+.forecast-day .fc-snow.none { color: #cbd5e1; }
+
+.forecast-day .fc-temps {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.forecast-day .fc-temps .lo {
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.forecast-day .fc-bar {
+    width: 80%;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.forecast-day .fc-bar-fill { height: 100%; border-radius: 2px; }
+.fc-bar-fill.hot { background: #ef4444; }
+.fc-bar-fill.active { background: #3b82f6; }
+
+.forecast-day .fc-icon {
+    font-size: 22px;
+    line-height: 1;
+}
+
+.forecast-day .fc-cond {
+    font-size: 9px;
+    color: #64748b;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* Snowpack footer */
+.snowpack-bar {
+    display: flex;
+    padding: 0 16px;
+    gap: 12px;
+    font-size: 10px;
+    height: 24px;
+    align-items: center;
+    flex-shrink: 0;
+    background: #f1f5f9;
+    border-top: 1px solid #e2e8f0;
+}
+
+.snowpack-bar .snowpack-title {
+    font-weight: 700;
+    color: #1e293b;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.snotel-item { color: #64748b; font-weight: 500; }
+.snotel-item .depth { font-weight: 700; color: #1e293b; }
+
+/* Bottom bar */
+.bottom-bar {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    padding: 0 16px;
+    font-size: 10px;
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+    height: 32px;
+    align-items: center;
+}
+.bottom-bar .legend { color: rgba(255,255,255,0.7); font-weight: 500; }
+.bottom-bar .active { color: rgba(255,255,255,0.9); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="scene">
+    <!-- Header -->
+    <div class="header">
+        <span class="location">HEAVENLY — Lake Tahoe</span>
+        <span class="timestamp">{{ timestamp }}</span>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <!-- NWS Alerts -->
+        {% if alerts %}
+        <div style="background:#fef3c7; padding:4px 16px; display:flex; align-items:center; gap:8px; font-size:11px; flex-shrink:0;">
+            <span style="color:#92400e; font-weight:700;">&#9888;</span>
+            <span style="color:#92400e; font-weight:600;">{{ alerts[0].event }}</span>
+            {% if alerts|length > 1 %}<span style="color:#b45309;">+{{ alerts|length - 1 }} more</span>{% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Lake-level conditions — compact row -->
+        <div class="summary-row">
+            <div class="summary-metric">
+                <span class="label">Tahoe</span>
+                <span class="val">{{ tahoe_temp }}°</span>
+                <span class="sub">feels {{ tahoe_feels }}°</span>
+            </div>
+            <div class="summary-metric">
+                <span class="val-sm">{{ tahoe_conditions }}</span>
+            </div>
+            <div class="summary-metric">
+                <span class="sub">{{ tahoe_wind }}</span>
+            </div>
+        </div>
+
+        <!-- Conditions strip — snow level, freeze, avy -->
+        <div class="conditions-strip">
+            <div class="metric">
+                <span class="metric-label">Snow Level</span>
+                <span class="metric-val blue">{{ snow_level }}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Freeze</span>
+                <span class="metric-val">{{ freeze_level }}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Avalanche</span>
+                <span class="avy-badge {{ avy_class }}">{{ avy_label }}</span>
+            </div>
+            {% if storm and storm.in_storm %}
+            <div class="metric">
+                <span class="metric-label">Storm Total</span>
+                <span class="metric-val blue">{{ storm.storm_total_in }}"</span>
+            </div>
+            {% endif %}
+            {% if lifts_open is not none %}
+            <div class="metric">
+                <span class="metric-label">Lifts</span>
+                <span class="metric-val">{{ lifts_open }}/{{ lifts_total }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Chain controls -->
+        {% if chains %}
+        <div style="background:#fef3c7; padding:4px 16px; display:flex; align-items:center; gap:8px; font-size:11px; flex-shrink:0;">
+            <span style="color:#92400e; font-weight:700;">&#9888; Chains:</span>
+            {% for c in chains[:2] %}
+            <span style="color:#92400e; font-weight:500;">{{ c.route }} — {{ c.status[:40] }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Zone cards -->
+        <div class="zone-row">
+            {% for zone in zones %}
+            <div class="zone-card">
+                <div class="zone-header">
+                    <span class="zone-name">{{ zone.name }}</span>
+                    <span class="zone-elev">{{ zone.elev }}ft</span>
+                </div>
+                <div class="zone-metrics">
+                    <span class="zone-temp">{{ zone.temp }}°</span>
+                    <span class="zone-feels">feels {{ zone.feels }}°</span>
+                </div>
+                <div class="zone-detail-row">
+                    <span class="zone-snow {{ 'hot' if zone.snow > 6 else 'active' if zone.snow > 0 else 'none' }}">
+                        {{ zone.snow_str }} 24h
+                    </span>
+                    <span class="zone-precip {{ 'snow-type' if zone.precip_type == 'Snow' else 'mix-type' if zone.precip_type == 'Mix' else 'rain-type' if zone.precip_type == 'Rain' else '' }}">
+                        {{ zone.precip_type }}
+                    </span>
+                </div>
+                <div class="zone-detail-row">
+                    <span class="zone-wind {{ 'danger' if zone.gust > 40 else 'warn' if zone.gust > 25 else '' }}">
+                        {{ zone.wind_dir }} {{ zone.wind_mph }}{% if zone.gust > 0 %}g{{ zone.gust|int }}{% endif %}mph
+                    </span>
+                    {% if zone.quality %}
+                    <span class="zone-quality">{{ zone.quality }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- 7-day snow forecast -->
+        <div class="forecast-row">
+            {% for day in snow_days %}
+            <div class="forecast-day">
+                <div class="day-name">{{ day.name }}</div>
+                {% if day.snow > 0 %}
+                <div class="fc-snow {{ 'hot' if day.snow > 6 else 'active' }}">
+                    {{ day.snow_str }}
+                </div>
+                {% else %}
+                <div class="fc-icon">{{ day.icon }}</div>
+                {% endif %}
+                <div class="fc-temps">{{ day.hi }}° <span class="lo">{{ day.lo }}°</span></div>
+                {% if day.snow > 0 %}
+                <div class="fc-bar">
+                    <div class="fc-bar-fill {{ 'hot' if day.snow > 6 else 'active' }}"
+                         style="width: {{ [day.snow * 5, 100] | min }}%"></div>
+                </div>
+                {% else %}
+                <div class="fc-cond">{{ day.short }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Snowpack -->
+        <div class="snowpack-bar">
+            <span class="snowpack-title">Snowpack</span>
+            {% for s in snotel_stations %}
+            <span class="snotel-item">{{ s.name }}: <span class="depth">{{ s.depth }}"</span></span>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+        <span class="legend">A: Oakland | B: Heavenly | C: Refresh | D: Detail</span>
+        <span class="active">{{ scene_hint }}</span>
+    </div>
+</div>
+</body>
+</html>

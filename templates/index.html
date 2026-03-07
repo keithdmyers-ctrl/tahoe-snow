@@ -642,13 +642,17 @@ table.data-table tr:hover td { background: var(--card-hover); }
 <div class="container" id="app" style="display:none">
 
   <div class="hero-row" id="hero-row"></div>
+  <div id="alerts-section"></div>
   <div class="summary-banner" id="summary"></div>
 
+  <div id="storm-section"></div>
   <div class="resort-tabs" id="resort-tabs"></div>
   <div id="resort-panels"></div>
   <div id="comparison-panel" class="resort-panel"></div>
 
   <div id="avy-section"></div>
+  <div id="chains-section"></div>
+  <div id="lifts-section"></div>
 
   <div class="section">
     <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
@@ -775,9 +779,13 @@ function render() {
   if (!DATA) return;
   renderHero();
   renderHeader();
+  renderAlerts();
   renderSummary();
+  renderStorm();
   renderCurrent();
   renderAvalanche();
+  renderChains();
+  renderLifts();
   renderResortTabs();
   renderComparison();
   renderSnotel();
@@ -875,8 +883,17 @@ function renderCurrent() {
   const windStr = wind > 0 ? `${wdir} ${wind} mph` : 'Calm';
   html += statCard('Wind', windStr, gust > 0 ? `Gusts ${gust} mph` : '', '');
   html += statCard('Humidity', f(hum, '%'), '', '');
-  html += statCard('Snow Level', f(c.snow_level_ft, ' ft'), '', 'snow-card');
-  html += statCard('Freeze Level', f(c.freezing_level_ft, ' ft'), '', 'accent');
+  const snd = DATA.sounding || {};
+  const snowLvl = snd.snow_level_ft || c.snow_level_ft;
+  const frzLvl = snd.freezing_level_ft || c.freezing_level_ft;
+  const lvlSrc = snd.snow_level_ft ? ' (sounding)' : '';
+  html += statCard('Snow Level', f(snowLvl, ' ft'), lvlSrc, 'snow-card');
+  html += statCard('Freeze Level', f(frzLvl, ' ft'), lvlSrc, 'accent');
+  if (c.observed_lapse_rate_c_km != null) {
+    const lr = c.observed_lapse_rate_c_km;
+    const lrSub = lr < 0 ? 'Inversion detected' : lr < 4 ? 'Weak lapse' : lr > 8 ? 'Strong lapse' : 'Normal';
+    html += statCard('Lapse Rate', lr.toFixed(1) + ' \u00B0C/km', lrSub, '');
+  }
   document.getElementById('current-row').innerHTML = html;
 }
 
@@ -898,6 +915,99 @@ function renderAvalanche() {
         ${a.link ? `<a href="${a.link}" target="_blank">Full forecast &rarr;</a>` : ''}
       </div>
     </div>`;
+}
+
+function renderAlerts() {
+  const alerts = DATA.alerts || [];
+  if (!alerts.length) { document.getElementById('alerts-section').innerHTML = ''; return; }
+  const severityColors = { Extreme: 'var(--danger)', Severe: 'var(--danger)', Moderate: 'var(--moderate)', Minor: 'var(--snow)' };
+  let html = '';
+  for (const a of alerts) {
+    const color = severityColors[a.severity] || 'var(--moderate)';
+    html += `<div style="background:${color}22; border-left:3px solid ${color}; padding:10px 14px; margin-bottom:6px; border-radius:var(--radius-sm);">
+      <div style="font-weight:600; color:${color};">${a.event}</div>
+      <div style="font-size:0.85em; color:var(--text-dim);">${a.headline}</div>
+    </div>`;
+  }
+  document.getElementById('alerts-section').innerHTML = html;
+}
+
+function renderStorm() {
+  const storm = DATA.storm;
+  const sounding = DATA.sounding;
+  if ((!storm || !storm.in_storm) && !sounding) {
+    document.getElementById('storm-section').innerHTML = ''; return;
+  }
+  let html = '';
+  if (storm && storm.in_storm) {
+    const dur = storm.duration_hours ? `${storm.duration_hours}h` : '';
+    html += `<div style="background:var(--snow)15; border:1px solid var(--snow)40; padding:12px 16px; border-radius:var(--radius); margin-bottom:8px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:1.3em;">&#10052;</span>
+        <span style="font-weight:600; color:var(--snow);">Active Storm</span>
+        ${dur ? `<span style="color:var(--text-dim); font-size:0.85em;">${dur}</span>` : ''}
+        <span style="margin-left:auto; font-size:1.4em; font-weight:700; color:var(--snow);">${storm.storm_total_in}"</span>
+      </div>
+    </div>`;
+  }
+  if (sounding) {
+    const items = [];
+    if (sounding.freezing_level_ft) items.push(`Freeze: ${sounding.freezing_level_ft.toLocaleString()} ft`);
+    if (sounding.snow_level_ft) items.push(`Snow: ${sounding.snow_level_ft.toLocaleString()} ft`);
+    if (sounding.lapse_rate_c_km != null) {
+      const lr = sounding.lapse_rate_c_km;
+      const label = lr < 0 ? ' (inversion)' : lr > 8 ? ' (unstable)' : '';
+      items.push(`Lapse: ${lr.toFixed(1)}\u00B0C/km${label}`);
+    }
+    if (items.length) {
+      html += `<div style="display:flex; gap:16px; flex-wrap:wrap; font-size:0.85em; color:var(--text-dim); padding:4px 0;">
+        <span style="color:var(--accent);">Reno Sounding</span> ${items.join(' &middot; ')}
+      </div>`;
+    }
+  }
+  document.getElementById('storm-section').innerHTML = html;
+}
+
+function renderChains() {
+  const chains = DATA.chains || [];
+  if (!chains.length) { document.getElementById('chains-section').innerHTML = ''; return; }
+  let html = `<div style="background:var(--moderate)15; border:1px solid var(--moderate)40; padding:12px 16px; border-radius:var(--radius); margin-bottom:8px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <span style="font-size:1.1em;">&#9888;</span>
+      <span style="font-weight:600; color:var(--moderate);">Chain Controls Active</span>
+    </div>`;
+  for (const c of chains) {
+    html += `<div style="font-size:0.85em; color:var(--text); padding:2px 0;">
+      <span style="font-weight:600;">${c.route}</span> &mdash; ${c.status}
+      ${c.location ? `<span style="color:var(--text-dim);"> (${c.location})</span>` : ''}
+    </div>`;
+  }
+  html += '</div>';
+  document.getElementById('chains-section').innerHTML = html;
+}
+
+function renderLifts() {
+  const lifts = DATA.lifts;
+  if (!lifts) { document.getElementById('lifts-section').innerHTML = ''; return; }
+  const resorts = ['heavenly', 'northstar', 'kirkwood'];
+  const names = { heavenly: 'Heavenly', northstar: 'Northstar', kirkwood: 'Kirkwood' };
+  let items = [];
+  for (const r of resorts) {
+    const d = lifts[r];
+    if (!d || d.error) continue;
+    const pct = d.total > 0 ? Math.round(d.open / d.total * 100) : 0;
+    const color = pct > 75 ? 'var(--safe)' : pct > 25 ? 'var(--moderate)' : 'var(--danger)';
+    items.push(`<div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-weight:600;">${names[r]}</span>
+      <span style="color:${color}; font-weight:700;">${d.open}/${d.total}</span>
+      <span style="color:var(--text-dim); font-size:0.85em;">lifts open</span>
+      ${d.hold > 0 ? `<span style="color:var(--moderate); font-size:0.85em;">(${d.hold} on hold)</span>` : ''}
+    </div>`);
+  }
+  if (!items.length) { document.getElementById('lifts-section').innerHTML = ''; return; }
+  document.getElementById('lifts-section').innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:12px 24px; padding:8px 0; font-size:0.9em;">
+    ${items.join('')}
+  </div>`;
 }
 
 // -- Resort tabs --
@@ -1355,6 +1465,14 @@ function buildCompareChart() {
 function renderSnotel() {
   const snotel = DATA.snotel_current || {};
   const entries = Object.entries(snotel).filter(([n, d]) => !d.error).sort((a, b) => (b[1].snow_depth_in || 0) - (a[1].snow_depth_in || 0));
+
+  // Include CSSL (Central Sierra Snow Lab) if available
+  const cssl = DATA.cssl;
+  if (cssl && cssl.snow_depth_in != null) {
+    entries.push(['CSSL (Snow Lab)', { snow_depth_in: cssl.snow_depth_in, swe_in: cssl.swe_in, elev_ft: cssl.elev_ft || 6890 }]);
+    entries.sort((a, b) => (b[1].snow_depth_in || 0) - (a[1].snow_depth_in || 0));
+  }
+
   const maxDepth = Math.max(...entries.map(([n, d]) => d.snow_depth_in || 0), 1);
   let html = '';
   for (const [name, d] of entries) {

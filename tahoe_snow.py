@@ -80,8 +80,8 @@ DIR_MAP = {
     "WNW": 292.5, "NW": 315, "NNW": 337.5,
 }
 
-MODELS = ["gfs_seamless", "ecmwf_ifs025", "icon_seamless"]
-MODEL_LABELS = {"gfs_seamless": "GFS", "ecmwf_ifs025": "ECMWF", "icon_seamless": "ICON"}
+MODELS = ["gfs_seamless", "ecmwf_ifs025", "icon_seamless", "gfs_hrrr"]
+MODEL_LABELS = {"gfs_seamless": "GFS", "ecmwf_ifs025": "ECMWF", "icon_seamless": "ICON", "gfs_hrrr": "HRRR"}
 
 # Water year starts Oct 1
 def water_year_start() -> str:
@@ -131,10 +131,53 @@ def orographic_multiplier(elev_ft: float, wind_mph: float, wind_dir: float) -> f
     return d * e * w
 
 
+def compute_lapse_rate(snotel: dict) -> float | None:
+    """Compute actual lapse rate (C/km) from SNOTEL stations at different elevations.
+
+    Returns the observed lapse rate (positive = temp decreases with altitude),
+    or None if insufficient data. Typical range: 4-9 C/km.
+    Inversions (negative lapse) are common in Tahoe — this detects them.
+    """
+    points = []  # (elev_m, temp_c)
+    for name, st_info in SNOTEL_STATIONS.items():
+        data = snotel.get(name, {})
+        temp_f = data.get("temp_f")
+        if temp_f is not None and "error" not in data:
+            elev_m = st_info["elev_ft"] * 0.3048
+            temp_c = (temp_f - 32) * 5 / 9
+            points.append((elev_m, temp_c))
+
+    if len(points) < 3:
+        return None
+
+    # Linear regression: temp_c = intercept - lapse_rate * elev_m
+    elevs = np.array([p[0] for p in points])
+    temps = np.array([p[1] for p in points])
+    # polyfit degree 1: [slope, intercept]
+    slope, _ = np.polyfit(elevs, temps, 1)
+    # slope is dT/dz in C/m, lapse rate convention is positive for decrease
+    lapse_per_km = -slope * 1000.0
+
+    # Clamp to physically reasonable range (allow inversions down to -3 C/km)
+    lapse_per_km = max(-3.0, min(12.0, lapse_per_km))
+    return round(lapse_per_km, 2)
+
+
+# Module-level observed lapse rate — set during analyze_all()
+_observed_lapse_rate: float | None = None
+
+
 def estimate_temp_c(base_c: float, base_m: float, target_m: float,
                     saturated: bool = True) -> float:
-    # Moist adiabatic: ~5.5C/km (during precip). Standard: ~6.5C/km (dry/avg).
-    lapse = 5.5 / 1000.0 if saturated else 6.5 / 1000.0
+    """Estimate temperature at target elevation using best available lapse rate.
+
+    Priority: observed SNOTEL lapse rate > standard lapse rates.
+    Moist adiabatic: ~5.5C/km (during precip). Standard: ~6.5C/km (dry/avg).
+    """
+    if _observed_lapse_rate is not None:
+        lapse = _observed_lapse_rate / 1000.0
+    else:
+        lapse = 5.5 / 1000.0 if saturated else 6.5 / 1000.0
     return base_c - ((target_m - base_m) * lapse)
 
 
@@ -363,6 +406,432 @@ def fetch_snotel_season(station_id: str, state: str) -> dict:
         return {}
     except Exception:
         return {}
+
+
+def fetch_nbm(lat: float, lon: float) -> dict:
+    """Fetch National Blend of Models (NBM) via Open-Meteo.
+
+    NBM is NWS's bias-corrected multi-model consensus — typically more accurate
+    than any single model for US locations. Provides temp, precip, and
+    precipitation probability.
+    """
+    try:
+        params = {
+            "latitude": lat, "longitude": lon,
+            "hourly": ",".join([
+                "temperature_2m", "precipitation", "precipitation_probability",
+                "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m",
+            ]),
+            "models": "ncep_nbm_conus",
+            "forecast_days": 7,
+            "timezone": "America/Los_Angeles",
+        }
+        resp = requests.get("https://api.open-meteo.com/v1/forecast",
+                            params=params, timeout=20)
+        if resp.status_code == 200:
+            return resp.json()
+        return {"error": f"HTTP {resp.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# Well-known Weather.com public API key (used by WU web widgets)
+_WU_API_KEY = "e1f10a1e78da46f5b10a1e78da96f525"
+
+
+def fetch_pws_nearby(lat: float, lon: float, max_stations: int = 5) -> list[dict]:
+    """Fetch current observations from nearby Weather Underground personal stations.
+
+    Averages multiple PWS readings for better ground truth than a single
+    NWS airport station. Free, no API key registration needed.
+    """
+    try:
+        # Step 1: Find nearby stations
+        resp = requests.get("https://api.weather.com/v3/location/near", params={
+            "geocode": f"{lat},{lon}",
+            "product": "pws",
+            "format": "json",
+            "apiKey": _WU_API_KEY,
+        }, timeout=10)
+        if resp.status_code != 200:
+            return []
+
+        loc = resp.json().get("location", {})
+        station_ids = loc.get("stationId", [])[:max_stations]
+        if not station_ids:
+            return []
+
+        # Step 2: Fetch observations from each station
+        results = []
+        for sid in station_ids:
+            try:
+                obs_resp = requests.get(
+                    "https://api.weather.com/v2/pws/observations/current",
+                    params={
+                        "stationId": sid,
+                        "format": "json",
+                        "units": "e",  # imperial
+                        "apiKey": _WU_API_KEY,
+                    }, timeout=8)
+                if obs_resp.status_code == 200:
+                    obs_data = obs_resp.json().get("observations", [{}])[0]
+                    imp = obs_data.get("imperial", {})
+                    results.append({
+                        "station_id": sid,
+                        "temp_f": imp.get("temp"),
+                        "humidity_pct": obs_data.get("humidity"),
+                        "wind_mph": imp.get("windSpeed"),
+                        "wind_gust_mph": imp.get("windGust"),
+                        "pressure_inhg": imp.get("pressure"),
+                        "precip_rate_in": imp.get("precipRate"),
+                        "precip_total_in": imp.get("precipTotal"),
+                        "solar_radiation": obs_data.get("solarRadiation"),
+                        "uv": obs_data.get("uv"),
+                        "timestamp": obs_data.get("obsTimeLocal"),
+                    })
+            except Exception:
+                continue
+        return results
+    except Exception:
+        return []
+
+
+def aggregate_pws(stations: list[dict]) -> dict:
+    """Aggregate multiple PWS readings into a consensus observation.
+
+    Uses median for temperature (robust to outlier stations) and
+    averages for other metrics.
+    """
+    if not stations:
+        return {}
+
+    def _median(vals):
+        vals = sorted(v for v in vals if v is not None)
+        if not vals:
+            return None
+        n = len(vals)
+        return vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
+
+    def _mean(vals):
+        vals = [v for v in vals if v is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    temps = [s["temp_f"] for s in stations]
+    return {
+        "temp_f": _median(temps),
+        "humidity_pct": _median([s.get("humidity_pct") for s in stations]),
+        "wind_mph": _mean([s.get("wind_mph") for s in stations]),
+        "pressure_inhg": _median([s.get("pressure_inhg") for s in stations]),
+        "precip_rate_in": _mean([s.get("precip_rate_in") for s in stations]),
+        "precip_total_in": max((s.get("precip_total_in") or 0 for s in stations), default=0),
+        "stations_used": len(stations),
+        "is_raining": any((s.get("precip_rate_in") or 0) > 0 for s in stations),
+    }
+
+
+def fetch_cssl_snow() -> dict:
+    """Fetch Central Sierra Snow Lab data from CDEC (California Data Exchange Center).
+
+    Station CSL — UC Berkeley's snow lab at Donner Summit (~6890ft).
+    More granular than SNOTEL for real-time storm tracking.
+    """
+    try:
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        start = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+
+        result = {}
+        # Sensor 3 = Snow Depth (daily)
+        resp = requests.get(
+            "https://cdec.water.ca.gov/dynamicapp/req/JSONDataServlet",
+            params={
+                "Stations": "CSL",
+                "SensorNums": "3",
+                "dur_code": "D",
+                "Start": start,
+                "End": today,
+            }, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            valid = [d for d in data if d.get("value") is not None and d["value"] != -9999]
+            if valid:
+                result["snow_depth_in"] = valid[-1]["value"]
+                result["snow_depth_date"] = valid[-1].get("obsDate", "")
+                # Calculate 24h change
+                if len(valid) >= 2:
+                    delta = valid[-1]["value"] - valid[-2]["value"]
+                    result["snow_24h_change_in"] = round(delta, 1)
+
+        # Sensor 18 = Snow Water Content (daily)
+        resp2 = requests.get(
+            "https://cdec.water.ca.gov/dynamicapp/req/JSONDataServlet",
+            params={
+                "Stations": "CSL",
+                "SensorNums": "18",
+                "dur_code": "D",
+                "Start": start,
+                "End": today,
+            }, timeout=15)
+        if resp2.status_code == 200:
+            data2 = resp2.json()
+            valid2 = [d for d in data2 if d.get("value") is not None and d["value"] != -9999]
+            if valid2:
+                result["swe_in"] = valid2[-1]["value"]
+
+        result["source"] = "CDEC/CSSL"
+        result["elev_ft"] = 6890
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def fetch_nws_alerts(lat: float, lon: float) -> list[dict]:
+    """Fetch active NWS alerts (watches, warnings, advisories) for a location."""
+    headers = {"User-Agent": "TahoeSnowStation/1.0 (keith@local)"}
+    try:
+        resp = requests.get("https://api.weather.gov/alerts/active", params={
+            "point": f"{lat},{lon}",
+            "status": "actual",
+        }, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            return []
+        alerts = []
+        for f in resp.json().get("features", []):
+            p = f.get("properties", {})
+            alerts.append({
+                "event": p.get("event", ""),
+                "severity": p.get("severity", ""),
+                "urgency": p.get("urgency", ""),
+                "headline": p.get("headline", ""),
+                "description": (p.get("description", "") or "")[:500],
+                "onset": p.get("onset", ""),
+                "expires": p.get("expires", ""),
+            })
+        return alerts
+    except Exception:
+        return []
+
+
+def fetch_sounding(station: str = "REV") -> dict:
+    """Fetch latest upper-air sounding from Iowa State Mesonet.
+
+    Reno (REV) soundings provide the actual measured atmosphere profile
+    over Tahoe — real lapse rate, freezing level, moisture, and inversions.
+    Launched twice daily: 00Z and 12Z.
+
+    Returns dict with profile levels and derived snow/freeze levels.
+    """
+    try:
+        now = datetime.now(timezone.utc)
+        # Find most recent sounding time (00Z or 12Z)
+        if now.hour >= 12:
+            sounding_time = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        else:
+            sounding_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # If it's very recent, the sounding may not be posted yet — try previous
+        if (now - sounding_time).total_seconds() < 3600:
+            sounding_time -= timedelta(hours=12)
+
+        ts = sounding_time.strftime("%Y%m%d%H%M")
+        resp = requests.get("https://mesonet.agron.iastate.edu/json/raob.py",
+                            params={"ts": ts, "station": station}, timeout=15)
+        if resp.status_code != 200:
+            return {"error": f"HTTP {resp.status_code}"}
+
+        profiles = resp.json().get("profiles", [])
+        if not profiles:
+            return {"error": "no_data"}
+
+        levels = profiles[0].get("profile", [])
+        if not levels:
+            return {"error": "empty_profile"}
+
+        # Extract key levels in the Tahoe elevation range
+        profile = []
+        freezing_level_m = None
+        snow_level_m = None
+        prev_temp = None
+        prev_hght = None
+
+        for lev in levels:
+            h = lev.get("hght")
+            t = lev.get("tmpc")
+            dp = lev.get("dwpc")
+            if h is None or t is None:
+                continue
+            profile.append({
+                "hght_m": h,
+                "hght_ft": round(h * 3.28084),
+                "temp_c": t,
+                "dewpoint_c": dp,
+                "dp_depression": round(t - dp, 1) if dp is not None else None,
+            })
+
+            # Find freezing level (0°C crossing)
+            if prev_temp is not None and prev_hght is not None:
+                if prev_temp > 0 and t <= 0 and freezing_level_m is None:
+                    frac = prev_temp / (prev_temp - t) if prev_temp != t else 0
+                    freezing_level_m = prev_hght + frac * (h - prev_hght)
+                # Snow level (~1°C wet bulb crossing, approximate as 1°C)
+                if prev_temp > 1 and t <= 1 and snow_level_m is None:
+                    frac = (prev_temp - 1) / (prev_temp - t) if prev_temp != t else 0
+                    snow_level_m = prev_hght + frac * (h - prev_hght)
+
+            prev_temp = t
+            prev_hght = h
+
+        # Compute observed lapse rate from profile in Tahoe range (1500-3500m)
+        tahoe_levels = [p for p in profile if 1500 <= p["hght_m"] <= 3500]
+        lapse_rate = None
+        if len(tahoe_levels) >= 3:
+            h_low, t_low = tahoe_levels[0]["hght_m"], tahoe_levels[0]["temp_c"]
+            h_high, t_high = tahoe_levels[-1]["hght_m"], tahoe_levels[-1]["temp_c"]
+            if h_high > h_low:
+                lapse_rate = round(-(t_high - t_low) / ((h_high - h_low) / 1000), 2)
+
+        return {
+            "station": station,
+            "time": sounding_time.isoformat(),
+            "levels": len(profile),
+            "freezing_level_ft": round(freezing_level_m * 3.28084) if freezing_level_m else None,
+            "snow_level_ft": round(snow_level_m * 3.28084) if snow_level_m else None,
+            "lapse_rate_c_km": lapse_rate,
+            "profile_summary": [p for p in profile if 1500 <= p["hght_m"] <= 3500][::3],  # every 3rd level
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def fetch_climate_normals(lat: float, lon: float) -> dict:
+    """Fetch 30-year climate normals from Open-Meteo for current month.
+
+    Returns average high, low, and precipitation for the current month
+    based on 1991-2020 climate data. Used to show anomalies.
+    """
+    try:
+        now = datetime.now()
+        month = now.month
+        # Fetch just the current month across the 30-year baseline
+        params = {
+            "latitude": lat, "longitude": lon,
+            "start_date": "1991-01-01", "end_date": "2020-12-31",
+            "models": "EC_Earth3P_HR",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+        }
+        resp = requests.get("https://climate-api.open-meteo.com/v1/climate",
+                            params=params, timeout=20)
+        if resp.status_code != 200:
+            return {"error": f"HTTP {resp.status_code}"}
+
+        daily = resp.json().get("daily", {})
+        times = daily.get("time", [])
+        highs = daily.get("temperature_2m_max", [])
+        lows = daily.get("temperature_2m_min", [])
+        precip = daily.get("precipitation_sum", [])
+
+        # Filter to current month
+        month_highs = []
+        month_lows = []
+        month_precip = []
+        for i, t in enumerate(times):
+            if f"-{month:02d}-" in t:
+                if i < len(highs) and highs[i] is not None:
+                    month_highs.append(highs[i])
+                if i < len(lows) and lows[i] is not None:
+                    month_lows.append(lows[i])
+                if i < len(precip) and precip[i] is not None:
+                    month_precip.append(precip[i])
+
+        if not month_highs:
+            return {"error": "no_data"}
+
+        avg_high_c = sum(month_highs) / len(month_highs)
+        avg_low_c = sum(month_lows) / len(month_lows)
+        avg_precip_mm = sum(month_precip) / 30  # avg daily precip
+
+        return {
+            "month": now.strftime("%B"),
+            "avg_high_f": round(avg_high_c * 9/5 + 32),
+            "avg_low_f": round(avg_low_c * 9/5 + 32),
+            "avg_precip_in_month": round(sum(month_precip) / (30 * 25.4), 1),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def fetch_caltrans_chains() -> list[dict]:
+    """Fetch Caltrans chain control status for District 3 (Tahoe area).
+
+    Returns a list of active chain controls on I-80 and US-50 corridors.
+    Data updates every 5 minutes from Caltrans CWWP.
+    """
+    try:
+        resp = requests.get("https://cwwp2.dot.ca.gov/data/d3/cc/ccStatusD03.json",
+                            timeout=10)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        controls = []
+        for item in data:
+            loc = item.get("Location", {})
+            route = loc.get("route", "")
+            # Filter to I-80 and US-50 (main Tahoe corridors)
+            if route not in ("I-80", "US-50", "80", "50"):
+                continue
+            status_desc = item.get("StatusDescription", "")
+            if not status_desc or "no chain" in status_desc.lower():
+                continue
+            controls.append({
+                "route": route,
+                "status": status_desc,
+                "location": loc.get("locationDescription", ""),
+                "lat": loc.get("latitude"),
+                "lon": loc.get("longitude"),
+                "elevation": loc.get("elevation"),
+                "timestamp": item.get("Timestamp", ""),
+            })
+        return controls
+    except Exception:
+        return []
+
+
+def fetch_lift_status(resort: str = "heavenly") -> dict:
+    """Fetch lift status from Liftie.info API.
+
+    Args:
+        resort: Resort slug — heavenly, northstar, or kirkwood.
+    Returns dict with open/closed counts and per-lift status.
+    """
+    try:
+        resp = requests.get(f"https://liftie.info/api/resort/{resort}",
+                            headers={"User-Agent": "TahoeSnowStation/1.0"},
+                            timeout=10)
+        if resp.status_code != 200:
+            return {"error": f"HTTP {resp.status_code}"}
+        data = resp.json()
+        lifts = data.get("lifts", {}).get("status", {})
+        open_lifts = [name for name, status in lifts.items() if status == "open"]
+        closed_lifts = [name for name, status in lifts.items() if status == "closed"]
+        hold_lifts = [name for name, status in lifts.items() if status == "hold"]
+        return {
+            "resort": resort,
+            "open": len(open_lifts),
+            "closed": len(closed_lifts),
+            "hold": len(hold_lifts),
+            "total": len(lifts),
+            "open_names": open_lifts,
+            "hold_names": hold_lifts,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def fetch_all_lift_status() -> dict:
+    """Fetch lift status for all three Tahoe resorts."""
+    results = {}
+    for slug in ("heavenly", "northstar", "kirkwood"):
+        results[slug] = fetch_lift_status(slug)
+    return results
 
 
 def fetch_avalanche() -> dict:
@@ -761,7 +1230,11 @@ def generate_summary(analysis: dict) -> str:
 
 def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 afd_text: str, avy: dict, hrrr: dict) -> dict:
+    global _observed_lapse_rate
     now = datetime.now(timezone.utc)
+
+    # Compute observed lapse rate from SNOTEL station temperatures
+    _observed_lapse_rate = compute_lapse_rate(snotel)
 
     # Base conditions from observation or NWS hourly
     base_temp_f = None
@@ -961,6 +1434,10 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 break
         if not afd_snippet:
             afd_snippet = afd_text[:1500].strip()
+
+    # Include lapse rate info in current conditions
+    if _observed_lapse_rate is not None:
+        current["observed_lapse_rate_c_km"] = _observed_lapse_rate
 
     result = {
         "generated": now.isoformat(),
