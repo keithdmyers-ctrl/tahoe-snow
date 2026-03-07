@@ -665,15 +665,6 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
   <div class="section">
     <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
-      <span>Snowpack &mdash; All SNOTEL Stations <span class="section-preview" id="preview-snotel"></span></span> <span class="toggle">&#9662;</span>
-    </button>
-    <div class="section-body collapsed" id="snotel-body">
-      <div style="position:relative; height:320px;"><canvas id="chart-snotel-depth"></canvas></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
       <span>Snowpack History &amp; Season Stats <span class="section-preview" id="preview-history"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="history-body">
@@ -687,6 +678,13 @@ table.data-table tr:hover td { background: var(--card-hover); }
       <span>NWS Forecaster Discussion (Reno WFO)</span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="afd-body"></div>
+  </div>
+
+  <div class="section">
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>Snowpack &mdash; All SNOTEL Stations <span class="section-preview" id="preview-snotel"></span></span> <span class="toggle">&#9662;</span>
+    </button>
+    <div class="section-body collapsed" id="snotel-body"></div>
   </div>
 
   <div class="footer">
@@ -1479,73 +1477,27 @@ const SNOTEL_COLORS = [
 
 function renderSnotel() {
   const snotel = DATA.snotel_current || {};
-  const entries = Object.entries(snotel).filter(([n, d]) => !d.error && d.snow_depth_in > 0)
-    .sort((a, b) => (b[1].snow_depth_in || 0) - (a[1].snow_depth_in || 0));
+  const entries = Object.entries(snotel).filter(([n, d]) => !d.error).sort((a, b) => (b[1].snow_depth_in || 0) - (a[1].snow_depth_in || 0));
 
   const cssl = DATA.cssl;
-  if (cssl && cssl.snow_depth_in != null && cssl.snow_depth_in > 0) {
+  if (cssl && cssl.snow_depth_in != null) {
     entries.push(['CSSL (Snow Lab)', { snow_depth_in: cssl.snow_depth_in, swe_in: cssl.swe_in, elev_ft: cssl.elev_ft || 6890 }]);
     entries.sort((a, b) => (b[1].snow_depth_in || 0) - (a[1].snow_depth_in || 0));
   }
 
-  // Build horizontal bar chart
-  destroyChart('snotel-depth');
-  const canvas = document.getElementById('chart-snotel-depth');
-  if (!canvas || !entries.length) return;
-
-  const labels = entries.map(([n, d]) => `${n} (${d.elev_ft}ft)`);
-  const depths = entries.map(([n, d]) => d.snow_depth_in || 0);
-  const swes = entries.map(([n, d]) => d.swe_in || 0);
-
-  charts['snotel-depth'] = new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Snow Depth (in)',
-          data: depths,
-          backgroundColor: entries.map((_, i) => SNOTEL_COLORS[i % SNOTEL_COLORS.length] + 'aa'),
-          borderColor: entries.map((_, i) => SNOTEL_COLORS[i % SNOTEL_COLORS.length]),
-          borderWidth: 1,
-          borderRadius: 4,
-        },
-        {
-          label: 'SWE (in)',
-          data: swes,
-          backgroundColor: 'rgba(46, 213, 115, 0.5)',
-          borderColor: '#2ed573',
-          borderWidth: 1,
-          borderRadius: 4,
-        },
-      ],
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: CHART_LEGEND,
-        tooltip: {
-          ...CHART_TOOLTIP,
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.raw}"`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          ...SCALE_X,
-          title: { display: true, text: 'Inches', color: '#99aabb', font: { size: 11 } },
-          grid: { color: '#1a263488' },
-        },
-        y: {
-          ticks: { color: '#e0e8f0', font: { size: 12 } },
-          grid: { display: false },
-        },
-      },
-    },
-  });
+  const maxDepth = Math.max(...entries.map(([n, d]) => d.snow_depth_in || 0), 1);
+  let html = '';
+  for (const [name, d] of entries) {
+    const depth = d.snow_depth_in || 0;
+    const pct = (depth / maxDepth * 100).toFixed(0);
+    html += `<div class="snotel-station">
+      <span class="name">${name} (${d.elev_ft}ft)</span>
+      <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
+      <span class="depth">${depth}"</span>
+      <span class="swe">SWE ${f(d.swe_in, '"')}</span>
+    </div>`;
+  }
+  document.getElementById('snotel-body').innerHTML = html;
 }
 
 // -- History --
@@ -1678,8 +1630,7 @@ document.addEventListener('click', function(e) {
         const rn = c.id.replace('chart-models-', '');
         if (!charts[`models-${rn}`]) buildModelChart(rn);
       });
-      // Lazy-build snotel/history charts
-      if (body.querySelector('#chart-snotel-depth') && !charts['snotel-depth']) renderSnotel();
+      // Lazy-build history chart
       if (body.querySelector('#chart-snotel-history') && !charts['snotel-history']) renderHistory();
     }
   });
