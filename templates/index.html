@@ -1259,9 +1259,9 @@ function buildHourlyChart(rn) {
         {
           label: 'Wind (mph)',
           data: timeline.map(h => h.wind_mph || 0),
-          borderColor: '#99aabb44', backgroundColor: 'transparent',
-          type: 'line', tension: 0.3, pointRadius: 0, borderWidth: 1, borderDash: [4, 4],
-          yAxisID: 'temp', order: 0,
+          borderColor: '#99aabb88', backgroundColor: 'transparent',
+          type: 'line', tension: 0.3, pointRadius: 0, borderWidth: 1.5, borderDash: [4, 4],
+          yAxisID: 'wind', order: 0,
         },
       ],
     },
@@ -1286,6 +1286,7 @@ function buildHourlyChart(rn) {
         x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 45 } },
         temp: { position: 'left', ...SCALE_TEMP },
         snow: { position: 'right', ...SCALE_SNOW },
+        wind: { position: 'right', min: 0, ticks: { color: '#99aabb', callback: v => v + ' mph', font: { size: 10 } }, grid: { display: false } },
       },
     },
   });
