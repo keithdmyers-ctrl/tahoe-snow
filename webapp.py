@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, render_template, jsonify
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tahoe_snow import (
     fetch_nws_observations, fetch_nws_forecast, fetch_open_meteo_multi,
     fetch_nbm, fetch_pws_nearby, aggregate_pws, fetch_cssl_snow,
