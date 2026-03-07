@@ -26,8 +26,6 @@ import json
 import sys
 import math
 from datetime import datetime, timedelta, timezone
-from dataclasses import dataclass, field, asdict
-from typing import Optional
 
 import numpy as np
 import requests
@@ -163,19 +161,11 @@ def compute_lapse_rate(snotel: dict) -> float | None:
     return round(lapse_per_km, 2)
 
 
-# Module-level observed lapse rate — set during analyze_all()
-_observed_lapse_rate: float | None = None
-
-
 def estimate_temp_c(base_c: float, base_m: float, target_m: float,
-                    saturated: bool = True) -> float:
-    """Estimate temperature at target elevation using best available lapse rate.
-
-    Priority: observed SNOTEL lapse rate > standard lapse rates.
-    Moist adiabatic: ~5.5C/km (during precip). Standard: ~6.5C/km (dry/avg).
-    """
-    if _observed_lapse_rate is not None:
-        lapse = _observed_lapse_rate / 1000.0
+                    saturated: bool = True, observed_lapse_rate: float | None = None) -> float:
+    """Estimate temperature at target elevation using best available lapse rate."""
+    if observed_lapse_rate is not None:
+        lapse = observed_lapse_rate / 1000.0
     else:
         lapse = 5.5 / 1000.0 if saturated else 6.5 / 1000.0
     return base_c - ((target_m - base_m) * lapse)
@@ -219,7 +209,7 @@ def fetch_nws_observations(lat: float, lon: float) -> dict:
                             headers=headers, timeout=10)
         if resp.status_code != 200:
             return {}
-        obs_url = resp.json()["properties"].get("observationStations", "")
+        obs_url = resp.json().get("properties", {}).get("observationStations", "")
         if not obs_url:
             return {}
         stations = requests.get(obs_url, headers=headers, timeout=10).json().get("features", [])
@@ -260,14 +250,16 @@ def fetch_nws_forecast(lat: float, lon: float) -> dict:
                             headers=headers, timeout=10)
         if resp.status_code != 200:
             return {}
-        props = resp.json()["properties"]
+        props = resp.json().get("properties")
+        if not props:
+            return {}
         result = {}
         fr = requests.get(props["forecast"], headers=headers, timeout=10)
         if fr.status_code == 200:
-            result["periods"] = fr.json()["properties"]["periods"]
+            result["periods"] = fr.json().get("properties", {}).get("periods", [])
         hr = requests.get(props["forecastHourly"], headers=headers, timeout=10)
         if hr.status_code == 200:
-            result["hourly"] = hr.json()["properties"]["periods"][:156]  # up to 6.5 days
+            result["hourly"] = hr.json().get("properties", {}).get("periods", [])[:156]  # up to 6.5 days
         return result
     except Exception:
         return {}
@@ -536,7 +528,6 @@ def fetch_cssl_snow() -> dict:
     More granular than SNOTEL for real-time storm tracking.
     """
     try:
-        from datetime import datetime, timezone
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         start = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
 
@@ -925,7 +916,7 @@ def fetch_hrrr(lat: float, lon: float) -> dict:
 # Multi-Model Processing
 # ---------------------------------------------------------------------------
 
-def parse_open_meteo(om: dict, elev_ft: int) -> dict:
+def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None = None) -> dict:
     """
     Parse Open-Meteo multi-model response into structured per-model,
     per-hour forecasts with elevation-adjusted snow physics applied.
@@ -955,7 +946,8 @@ def parse_open_meteo(om: dict, elev_ft: int) -> dict:
             tc = temps[i] if i < len(temps) and temps[i] is not None else None
             # Adjust temperature to target elevation
             if tc is not None:
-                tc = estimate_temp_c(tc, base_elev_m, target_m)
+                tc = estimate_temp_c(tc, base_elev_m, target_m,
+                                     observed_lapse_rate=observed_lapse_rate)
             tf = round(tc * 9/5 + 32, 1) if tc is not None else None
             ws = wspd[i] if i < len(wspd) and wspd[i] is not None else 0
             wd = wdir[i] if i < len(wdir) and wdir[i] is not None else 0
@@ -1230,11 +1222,10 @@ def generate_summary(analysis: dict) -> str:
 
 def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 afd_text: str, avy: dict, hrrr: dict) -> dict:
-    global _observed_lapse_rate
     now = datetime.now(timezone.utc)
 
     # Compute observed lapse rate from SNOTEL station temperatures
-    _observed_lapse_rate = compute_lapse_rate(snotel)
+    observed_lapse_rate = compute_lapse_rate(snotel)
 
     # Base conditions from observation or NWS hourly
     base_temp_f = None
@@ -1250,14 +1241,15 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         if hourly:
             base_temp_f = hourly[0].get("temperature")
             try: base_wind_mph = float(hourly[0].get("windSpeed", "0 mph").split()[0])
-            except: pass
+            except Exception: pass
             base_wind_dir = DIR_MAP.get(hourly[0].get("windDirection", "W"), 270)
 
     base_temp_c = (base_temp_f - 32) * 5 / 9 if base_temp_f else 0.0
     base_elev_m = 6225 * 0.3048
 
     # Snow level
-    profile = [(ft * 0.3048, estimate_temp_c(base_temp_c, base_elev_m, ft * 0.3048))
+    profile = [(ft * 0.3048, estimate_temp_c(base_temp_c, base_elev_m, ft * 0.3048,
+                                              observed_lapse_rate=observed_lapse_rate))
                for ft in range(5000, 11500, 250)]
     threshold = 1.0
     snow_level_m = None
@@ -1288,7 +1280,7 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         zones = {}
         for zk in ("base", "mid", "peak"):
             loc = resort[zk]
-            parsed = parse_open_meteo(resort_om, loc["elev_ft"])
+            parsed = parse_open_meteo(resort_om, loc["elev_ft"], observed_lapse_rate=observed_lapse_rate)
             zones[zk] = {
                 "label": loc["label"],
                 "elev_ft": loc["elev_ft"],
@@ -1436,8 +1428,8 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
             afd_snippet = afd_text[:1500].strip()
 
     # Include lapse rate info in current conditions
-    if _observed_lapse_rate is not None:
-        current["observed_lapse_rate_c_km"] = _observed_lapse_rate
+    if observed_lapse_rate is not None:
+        current["observed_lapse_rate_c_km"] = observed_lapse_rate
 
     result = {
         "generated": now.isoformat(),
@@ -1596,7 +1588,7 @@ def format_report(a: dict, compact: bool = False) -> str:
     try:
         dt = datetime.fromisoformat(a["generated"])
         L.append(f"  {dt.strftime('%A, %B %d %Y  %I:%M %p %Z')}")
-    except: L.append(f"  {a['generated']}")
+    except Exception: L.append(f"  {a['generated']}")
     L.append("=" * W)
 
     # ── Summary ──
@@ -1705,7 +1697,7 @@ def format_report(a: dict, compact: bool = False) -> str:
                     try:
                         tdt = datetime.fromisoformat(h["time"])
                         tstr = tdt.strftime("%a %m/%d %I%p")
-                    except: tstr = h.get("time", "?")[:16]
+                    except Exception: tstr = h.get("time", "?")[:16]
                     L.append(f"  {tstr:16s} {_f(h.get('temp_f'), ''):>5s} "
                               f"{_f(h.get('feels_like_f'), ''):>5s} "
                               f"{h.get('snowfall_in', 0):4.1f}\" "

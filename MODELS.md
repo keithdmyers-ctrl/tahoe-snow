@@ -34,9 +34,9 @@ All free public data, no API keys, no subscriptions. Runs on a Raspberry Pi with
     │  Numerical   │     │ Observation │     │   Local     │
     │  Weather     │     │  Networks   │     │   Sensors   │
     │  Models      │     │             │     │             │
-    │ GFS, ECMWF,  │     │ NWS, SNOTEL │     │  BME280,    │
-    │ ICON, HRRR,  │     │ PWS, CSSL,  │     │  DHT22      │
-    │ NBM          │     │ Soundings   │     │  (ESP32)    │
+    │ GFS, ECMWF,  │     │ NWS, SNOTEL │     │  BME280     │
+    │ ICON, HRRR,  │     │ PWS, CSSL,  │     │  (ESP32)    │
+    │ NBM          │     │ Soundings   │     │             │
     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
            │                   │                   │
            └────────────────┬──┴───────────────────┘

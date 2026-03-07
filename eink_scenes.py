@@ -8,7 +8,7 @@ Buttons (GPIO on Inky Impression 7.3"):
   A (GPIO 5):  Show Oakland scene
   B (GPIO 6):  Show Heavenly scene
   C (GPIO 16): Force refresh current scene
-  D (GPIO 24): (reserved)
+  D (GPIO 24): Show Heavenly Detail scene
 
 Runs as a daemon. Also supports cron-triggered refresh.
 
@@ -55,7 +55,7 @@ PREVIEW_DIR = os.path.dirname(os.path.abspath(__file__))
 BTN_A = 5   # Oakland
 BTN_B = 6   # Heavenly
 BTN_C = 16  # Refresh
-BTN_D = 24  # Reserved
+BTN_D = 24  # Heavenly Detail
 
 # Weather condition → emoji mapping for NWS shortForecast text
 CONDITION_ICONS = {
@@ -630,8 +630,10 @@ def render_scene(scene: str, preview=False, force_refresh=False):
 
 
 def save_state(scene: str):
-    with open(STATE_FILE, "w") as f:
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump({"scene": scene, "updated": time.time()}, f)
+    os.replace(tmp, STATE_FILE)
 
 
 def load_state() -> str:

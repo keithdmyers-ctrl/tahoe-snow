@@ -92,7 +92,8 @@ def get_analysis(force: bool = False) -> dict:
     except Exception as e:
         with _lock:
             _cache["loading"] = False
-        return _cache["data"] or {"error": str(e)}
+            cached = _cache["data"]
+        return cached or {"error": str(e)}
 
 
 # ---------------------------------------------------------------------------

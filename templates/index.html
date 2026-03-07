@@ -713,15 +713,24 @@ function formatDateLabel(dateStr) {
   catch(e) { return dateStr; }
 }
 
+let _loadRetries = 0;
+const MAX_LOAD_RETRIES = 24; // 2 minutes at 5s intervals
+
 async function loadData() {
   try {
     const r = await fetch('/api/data');
     DATA = await r.json();
     if (DATA.error) {
-      // Data still loading in background — retry in 5s
-      setTimeout(loadData, 5000);
+      _loadRetries++;
+      if (_loadRetries < MAX_LOAD_RETRIES) {
+        setTimeout(loadData, 5000);
+        return;
+      }
+      document.getElementById('loading').innerHTML =
+        '<div class="container" style="padding-top:60px;text-align:center"><div style="color:var(--danger);font-size:15px;margin-bottom:12px">Data loading timed out</div><div style="color:var(--text-dim);font-size:13px;margin-bottom:16px">The server is still fetching weather data. This can take a few minutes on first load.</div><button class="refresh-btn" onclick="_loadRetries=0;loadData()" style="margin:0 auto">Retry</button></div>';
       return;
     }
+    _loadRetries = 0;
     render();
     const overlay = document.getElementById('loading');
     overlay.classList.add('hidden');
@@ -763,7 +772,7 @@ function tempClass(t) { return t != null && t < 32 ? 'temp-cold' : 'temp-warm'; 
 function precipBadge(pt) {
   if (!pt || pt === 'None') return '<span class="precip-badge none">None</span>';
   const cls = pt.toLowerCase().includes('snow') ? 'snow' : pt.toLowerCase().includes('rain') ? 'rain' : pt.toLowerCase().includes('mix') ? 'mix' : 'none';
-  return `<span class="precip-badge ${cls}">${pt}</span>`;
+  return `<span class="precip-badge ${cls}">${esc(pt)}</span>`;
 }
 
 function toggleSection(el) {
@@ -845,17 +854,17 @@ function renderHero() {
   html += `<div class="hero-card snowpack">
     <div class="hero-label">Snowpack</div>
     <div class="hero-value">${h.snowpack_in > 0 ? h.snowpack_in + '"' : '\u2014'}</div>
-    <div class="hero-sub">${h.snowpack_station || 'SNOTEL'}</div>
+    <div class="hero-sub">${esc(h.snowpack_station || 'SNOTEL')}</div>
   </div>`;
   html += `<div class="hero-card recent">
     <div class="hero-label">Next 24h Snow</div>
     <div class="hero-value">${h.snow_24h_in > 0 ? h.snow_24h_in + '"' : '0"'}</div>
-    <div class="hero-sub">${h.snow_24h_resort ? h.snow_24h_resort + ' peak forecast' : 'All resorts'}</div>
+    <div class="hero-sub">${h.snow_24h_resort ? esc(h.snow_24h_resort) + ' peak forecast' : 'All resorts'}</div>
   </div>`;
   html += `<div class="hero-card forecast">
     <div class="hero-label">Next 72h Snow</div>
     <div class="hero-value">${h.snow_72h_in > 0 ? h.snow_72h_in + '"' : '0"'}</div>
-    <div class="hero-sub">${h.snow_72h_resort ? h.snow_72h_resort + ' peak forecast' : 'All resorts'}</div>
+    <div class="hero-sub">${h.snow_72h_resort ? esc(h.snow_72h_resort) + ' peak forecast' : 'All resorts'}</div>
   </div>`;
   document.getElementById('hero-row').innerHTML = html;
 }
@@ -887,8 +896,8 @@ function renderCurrent() {
   const cond = obs.conditions || '';
   let html = '';
   html += statCard('Temperature', f(temp, '\u00B0F'), feels != null ? `Feels ${feels}\u00B0F` : '', 'accent');
-  html += statCard('Conditions', cond || 'N/A', '', '');
-  const windStr = wind > 0 ? `${wdir} ${wind} mph` : 'Calm';
+  html += statCard('Conditions', esc(cond) || 'N/A', '', '');
+  const windStr = wind > 0 ? `${esc(wdir)} ${wind} mph` : 'Calm';
   html += statCard('Wind', windStr, gust > 0 ? `Gusts ${gust} mph` : '', '');
   html += statCard('Humidity', f(hum, '%'), '', '');
   const snd = DATA.sounding || {};
@@ -915,12 +924,12 @@ function renderAvalanche() {
   const cls = a.danger_label.toLowerCase();
   const colors = { low: 'var(--safe)', moderate: 'var(--moderate)', considerable: 'var(--danger)', high: 'var(--danger)', extreme: 'var(--danger)' };
   document.getElementById('avy-section').innerHTML = `
-    <div class="avy-banner ${cls}">
-      <div class="avy-level" style="color:${colors[cls] || 'var(--text)'}">${a.danger_level}</div>
+    <div class="avy-banner ${esc(cls)}">
+      <div class="avy-level" style="color:${colors[cls] || 'var(--text)'}">${esc(String(a.danger_level || ''))}</div>
       <div class="avy-info">
-        <div class="avy-label">Avalanche Danger: ${a.danger_label}</div>
-        <div class="avy-advice">${a.travel_advice || ''}</div>
-        ${a.link ? `<a href="${a.link}" target="_blank">Full forecast &rarr;</a>` : ''}
+        <div class="avy-label">Avalanche Danger: ${esc(a.danger_label || '')}</div>
+        <div class="avy-advice">${esc(a.travel_advice || '')}</div>
+        ${a.link ? `<a href="${esc(a.link)}" target="_blank">Full forecast &rarr;</a>` : ''}
       </div>
     </div>`;
 }
@@ -933,8 +942,8 @@ function renderAlerts() {
   for (const a of alerts) {
     const color = severityColors[a.severity] || 'var(--moderate)';
     html += `<div style="background:${color}22; border-left:3px solid ${color}; padding:10px 14px; margin-bottom:6px; border-radius:var(--radius-sm);">
-      <div style="font-weight:600; color:${color};">${a.event}</div>
-      <div style="font-size:0.85em; color:var(--text-dim);">${a.headline}</div>
+      <div style="font-weight:600; color:${color};">${esc(a.event || '')}</div>
+      <div style="font-size:0.85em; color:var(--text-dim);">${esc(a.headline || '')}</div>
     </div>`;
   }
   document.getElementById('alerts-section').innerHTML = html;
@@ -986,8 +995,8 @@ function renderChains() {
     </div>`;
   for (const c of chains) {
     html += `<div style="font-size:0.85em; color:var(--text); padding:2px 0;">
-      <span style="font-weight:600;">${c.route}</span> &mdash; ${c.status}
-      ${c.location ? `<span style="color:var(--text-dim);"> (${c.location})</span>` : ''}
+      <span style="font-weight:600;">${esc(c.route || '')}</span> &mdash; ${esc(c.status || '')}
+      ${c.location ? `<span style="color:var(--text-dim);"> (${esc(c.location)})</span>` : ''}
     </div>`;
   }
   html += '</div>';
@@ -1098,7 +1107,7 @@ function buildResortPanel(rn) {
     html += `
     <div class="zone-card">
       <div class="zone-header">
-        <div><span class="zone-tag ${zk}">${zk}</span> <span class="zone-name">${zd.label || zk}</span></div>
+        <div><span class="zone-tag ${zk}">${esc(zk)}</span> <span class="zone-name">${esc(zd.label || zk)}</span></div>
         <span class="zone-elev">${f(zd.elev_ft, ' ft')}</span>
       </div>
       <div class="zone-hero">
@@ -1115,8 +1124,8 @@ function buildResortPanel(rn) {
       </div>
       <div class="zone-details">
         <div class="zd-row"><span>Snow Ratio</span><span class="zd-val">${f(snap.slr, ':1')}</span></div>
-        <div class="zd-row"><span>Quality</span><span class="zd-val">${snap.snow_quality || '\u2014'}</span></div>
-        <div class="zd-row"><span>Wind</span><span class="zd-val">${snap.wind_dir || ''} ${f(snap.wind_mph, '')} mph</span></div>
+        <div class="zd-row"><span>Quality</span><span class="zd-val">${esc(snap.snow_quality || '\u2014')}</span></div>
+        <div class="zd-row"><span>Wind</span><span class="zd-val">${esc(snap.wind_dir || '')} ${f(snap.wind_mph, '')} mph</span></div>
         <div class="zd-row"><span>Gusts</span><span class="zd-val">${f(snap.wind_gust_mph, ' mph')}</span></div>
       </div>
     </div>`;
@@ -1153,7 +1162,7 @@ function buildResortPanel(rn) {
     for (const b of buckets.slice(0, 20)) {
       const sc = b.snow_in > 0 ? 'snow-val' : '';
       html += `<tr>
-        <td>${formatDateLabel(b.date)}</td><td>${b.period}</td>
+        <td>${formatDateLabel(b.date)}</td><td>${esc(b.period || '')}</td>
         <td class="${sc}">${b.snow_in}"</td><td>${b.liquid_in}"</td>
         <td class="${tempClass(b.temp_high_f)}">${f(b.temp_high_f, '\u00B0')}</td>
         <td class="${tempClass(b.temp_low_f)}">${f(b.temp_low_f, '\u00B0')}</td>
@@ -1204,7 +1213,7 @@ function buildResortPanel(rn) {
       const depth = s.snow_depth_in || 0;
       const pct = (depth / maxNsDepth * 100).toFixed(0);
       html += `<div class="snotel-station">
-        <span class="name">${s.name} (${s.elev_ft}ft)</span>
+        <span class="name">${esc(s.name || '')} (${s.elev_ft}ft)</span>
         <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
         <span class="depth">${f(depth, '"')}</span>
         <span class="swe">SWE ${f(s.swe_in, '"')}</span>
@@ -1356,18 +1365,18 @@ function renderComparison() {
       ${compareRow('Next 24h Snow', `<span class="snow-val">${f(c.peak_24h_snow_in, '"')}</span>`)}
       ${compareRow('Next 7 Days', `<span class="snow-val">${f(c.peak_7d_forecast_in, '"')}</span>`)}
       ${compareRow('Snowpack', `<span class="snow-val">${f(c.snowpack_depth_in, '"')}</span>`)}
-      ${compareRow('Quality', c.peak_quality || '\u2014')}
+      ${compareRow('Quality', esc(c.peak_quality || '\u2014'))}
       <div class="compare-detail">
         ${compareRow('Elevation', `${f(c.base_elev_ft)}\u2014${f(c.peak_elev_ft)} ft`)}
         ${compareRow('Vert Drop', f(c.vert_ft, ' ft'))}
         ${compareRow('Base Temp', f(c.base_temp_f, '\u00B0F'))}
         ${compareRow('Base/Peak Feels', `${f(c.base_feels_like_f, '\u00B0')} / ${f(c.peak_feels_like_f, '\u00B0')}`)}
         ${compareRow('Snow Ratio', f(c.peak_slr, ':1'))}
-        ${compareRow('Base Precip', c.base_precip_type || '\u2014')}
-        ${compareRow('Peak Precip', c.peak_precip_type || '\u2014')}
+        ${compareRow('Base Precip', esc(c.base_precip_type || '\u2014'))}
+        ${compareRow('Peak Precip', esc(c.peak_precip_type || '\u2014'))}
         ${compareRow('Base/Mid 24h', `${f(c.base_24h_snow_in, '"')} / ${f(c.mid_24h_snow_in, '"')}`)}
         ${compareRow('SWE', f(c.snowpack_swe_in, '"'))}
-        ${compareRow('Aspect', c.aspect || '\u2014')}
+        ${compareRow('Aspect', esc(c.aspect || '\u2014'))}
       </div>
       <button class="compare-toggle" onclick="toggleCompareDetail(this)">More &#9662;</button>
     </div>`;
@@ -1407,7 +1416,7 @@ function compareRow(label, value) {
 
 function rankBadge(label, resort) {
   const color = resort ? RESORT_COLORS[resort] || 'var(--accent)' : 'var(--text-dim)';
-  return `<span class="rank-row"><span class="rank-label">${label}:</span> <span class="rank-value" style="color:${color}">${resort || '\u2014'}</span></span>`;
+  return `<span class="rank-row"><span class="rank-label">${label}:</span> <span class="rank-value" style="color:${color}">${esc(resort || '\u2014')}</span></span>`;
 }
 
 function buildCompareChart() {
@@ -1492,7 +1501,7 @@ function renderSnotel() {
     const depth = d.snow_depth_in || 0;
     const pct = (depth / maxDepth * 100).toFixed(0);
     html += `<div class="snotel-station">
-      <span class="name">${name} (${d.elev_ft}ft)</span>
+      <span class="name">${esc(name)} (${d.elev_ft}ft)</span>
       <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
       <span class="depth">${depth}"</span>
       <span class="swe">SWE ${f(d.swe_in, '"')}</span>

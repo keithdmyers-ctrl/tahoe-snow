@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+*.png
+.alerts_state.json
+.forecast_verification.json
+.scene_state.json
+.pressure_history.json
+.storm_state.json
+sensor_data.json
+alerts.log

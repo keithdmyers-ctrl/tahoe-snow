@@ -44,8 +44,10 @@ def _load_history() -> list[dict]:
 
 
 def _save_history(history: list[dict]):
-    with open(HISTORY_FILE, "w") as f:
+    tmp = HISTORY_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(history, f)
+    os.replace(tmp, HISTORY_FILE)
 
 
 def _sea_level_pressure(station_hpa: float, elevation_m: float) -> float:

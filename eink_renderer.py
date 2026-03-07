@@ -21,7 +21,7 @@ DISPLAY_W = 800
 DISPLAY_H = 480
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
-_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=False)
+_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
 
 
 def _chromium_screenshot(html_path: str, png_path: str) -> bool:
@@ -82,7 +82,7 @@ def render_template(template_name: str, context: dict) -> Image.Image:
         f.write(html)
         html_path = f.name
 
-    png_path = html_path.replace(".html", ".png")
+    png_path = os.path.splitext(html_path)[0] + ".png"
 
     try:
         if not _chromium_screenshot(html_path, png_path):

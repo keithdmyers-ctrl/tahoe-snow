@@ -32,8 +32,10 @@ def load_data():
 
 
 def save_data(data):
-    with open(DATA_FILE, "w") as f:
+    tmp = DATA_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(data, f, indent=2)
+    os.replace(tmp, DATA_FILE)
 
 
 class SensorHandler(BaseHTTPRequestHandler):
@@ -44,6 +46,11 @@ class SensorHandler(BaseHTTPRequestHandler):
             return
 
         length = int(self.headers.get("Content-Length", 0))
+        if length > 4096:
+            self.send_response(413)
+            self.end_headers()
+            self.wfile.write(b"Request too large")
+            return
         body = self.rfile.read(length)
         try:
             reading = json.loads(body)

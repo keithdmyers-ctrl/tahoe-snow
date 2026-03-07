@@ -37,8 +37,10 @@ def _load_data() -> dict:
 
 
 def _save_data(data: dict):
-    with open(VERIFY_FILE, "w") as f:
+    tmp = VERIFY_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(data, f)
+    os.replace(tmp, VERIFY_FILE)
 
 
 def log_forecast(source: str, metric: str, value: float,
