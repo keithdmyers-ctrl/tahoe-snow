@@ -8,7 +8,10 @@ Multi-source weather forecasting app for Oakland local weather and Tahoe ski res
 - **E-ink display**: Raspberry Pi 5 with Inky Impression 7.3", ESP32 for outdoor temp sensor
 
 ## Key Components
-- Weather data aggregation from NOAA/NWS, Open-Meteo, SNOTEL
+- Weather data aggregation from NOAA/NWS, Open-Meteo, SNOTEL, CDEC, Synoptic/MesoWest
+- NWS raw gridpoint forecasts (forecaster-edited snow amounts, snow levels, QPF)
+- Open-Meteo ensemble probabilistic forecasts (GFS 30-member, ECMWF 50-member)
+- Synoptic/MesoWest mesonet stations (requires SYNOPTIC_TOKEN env var)
 - Local barometric pressure prediction (BME280 sensor)
 - Tahoe resort conditions: Heavenly, Northstar, Kirkwood
 - E-ink display renderer with Oakland + Tahoe split layout

@@ -21,10 +21,12 @@ from flask import Flask, render_template, jsonify
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tahoe_snow import (
-    fetch_nws_observations, fetch_nws_forecast, fetch_open_meteo_multi,
-    fetch_nbm, fetch_pws_nearby, aggregate_pws, fetch_cssl_snow,
+    fetch_nws_observations, fetch_nws_forecast, fetch_nws_gridpoints,
+    fetch_open_meteo_multi,
+    fetch_nbm, fetch_pws_nearby, aggregate_pws,
+    fetch_synoptic_stations, fetch_cssl_snow,
     fetch_nws_alerts, fetch_sounding, fetch_climate_normals,
-    fetch_caltrans_chains, fetch_all_lift_status,
+    fetch_ensemble, fetch_caltrans_chains, fetch_all_lift_status,
     fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
     fetch_avalanche, fetch_forecast_discussion,
     analyze_all, RESORTS, SNOTEL_STATIONS,
@@ -64,10 +66,13 @@ def get_analysis(force: bool = False) -> dict:
 
         # Additional data sources
         tahoe_nbm = fetch_nbm(39.17, -120.145)
+        nws_grids = fetch_nws_gridpoints(39.17, -120.145)
         cssl = fetch_cssl_snow()
         tahoe_alerts = fetch_nws_alerts(39.17, -120.145)
         sounding = fetch_sounding("REV")
         normals = fetch_climate_normals(39.17, -120.145)
+        ensemble = fetch_ensemble(39.17, -120.145)
+        synoptic = fetch_synoptic_stations(39.17, -120.145, radius_miles=30)
         storm = get_storm_total(snotel)
         chains = fetch_caltrans_chains()
         lifts = fetch_all_lift_status()
@@ -76,10 +81,13 @@ def get_analysis(force: bool = False) -> dict:
 
         # Attach extra data to analysis for the web UI
         analysis["nbm"] = tahoe_nbm if "error" not in tahoe_nbm else None
+        analysis["nws_grids"] = nws_grids if "error" not in nws_grids else None
         analysis["cssl"] = cssl if "error" not in cssl else None
         analysis["alerts"] = tahoe_alerts or []
         analysis["sounding"] = sounding if "error" not in sounding else None
         analysis["normals"] = normals if "error" not in normals else None
+        analysis["ensemble"] = ensemble if ensemble.get("models") else None
+        analysis["synoptic"] = synoptic if "error" not in synoptic else None
         analysis["storm"] = storm
         analysis["chains"] = chains
         analysis["lifts"] = lifts

@@ -23,6 +23,8 @@ Usage:
 """
 
 import json
+import os
+import re
 import sys
 import math
 from datetime import datetime, timedelta, timezone
@@ -273,6 +275,9 @@ def fetch_open_meteo(lat: float, lon: float) -> dict:
             "hourly": ",".join([
                 "temperature_2m", "precipitation", "snowfall", "snow_depth",
                 "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m",
+                "freezing_level_height", "weather_code", "cloud_cover",
+                "relative_humidity_2m", "dew_point_2m",
+                "apparent_temperature", "pressure_msl", "visibility", "cape",
             ]),
             "models": ",".join(MODELS),
             "forecast_days": 16,
@@ -302,6 +307,9 @@ def fetch_open_meteo_multi(locations: dict) -> dict:
             "hourly": ",".join([
                 "temperature_2m", "precipitation", "snowfall", "snow_depth",
                 "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m",
+                "freezing_level_height", "weather_code", "cloud_cover",
+                "relative_humidity_2m", "dew_point_2m",
+                "apparent_temperature", "pressure_msl", "visibility", "cape",
             ]),
             "models": ",".join(MODELS),
             "forecast_days": 16,
@@ -398,6 +406,77 @@ def fetch_snotel_season(station_id: str, state: str) -> dict:
         return {}
     except Exception:
         return {}
+
+
+def fetch_nws_gridpoints(lat: float, lon: float) -> dict:
+    """Fetch raw NWS gridpoint forecast data — snowfall amounts, snow levels, QPF.
+
+    Unlike /forecast (text periods) or /forecastHourly (simplified hourly),
+    the raw gridpoints endpoint has forecaster-edited numerical grids:
+      - snowfallAmount: 6-hour snow accumulation (mm → inches)
+      - snowLevel: snow level height (m → ft)
+      - quantitativePrecipitation: liquid equivalent QPF (mm → inches)
+      - probabilityOfPrecipitation: precip probability (%)
+      - iceAccumulation: ice accumulation (mm → inches)
+    """
+    headers = {"User-Agent": "TahoeSnowStation/1.0 (keith@local)"}
+    try:
+        resp = requests.get(f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}",
+                            headers=headers, timeout=10)
+        if resp.status_code != 200:
+            return {"error": f"points HTTP {resp.status_code}"}
+        props = resp.json().get("properties", {})
+        wfo = props.get("gridId", "")
+        grid_x = props.get("gridX")
+        grid_y = props.get("gridY")
+        if not wfo or grid_x is None:
+            return {"error": "No grid coordinates"}
+
+        grid_resp = requests.get(
+            f"https://api.weather.gov/gridpoints/{wfo}/{grid_x},{grid_y}",
+            headers=headers, timeout=15)
+        if grid_resp.status_code != 200:
+            return {"error": f"gridpoints HTTP {grid_resp.status_code}"}
+
+        grid_props = grid_resp.json().get("properties", {})
+        result = {"wfo": wfo, "gridX": grid_x, "gridY": grid_y}
+
+        for field in ("snowfallAmount", "snowLevel", "quantitativePrecipitation",
+                       "probabilityOfPrecipitation", "iceAccumulation"):
+            field_data = grid_props.get(field, {})
+            uom = field_data.get("uom", "")
+            values = field_data.get("values", [])
+            parsed = []
+            for v in values:
+                val = v.get("value")
+                if val is None:
+                    continue
+                valid_time = v.get("validTime", "")
+                parts = valid_time.split("/")
+                start = parts[0] if parts else ""
+                duration_str = parts[1] if len(parts) > 1 else "PT1H"
+                # Parse duration to hours
+                dur_match = re.match(r"PT?(\d+)H", duration_str)
+                dur_hours = int(dur_match.group(1)) if dur_match else 1
+
+                # Convert units
+                if field == "snowLevel":
+                    converted = round(val * 3.28084)  # m → ft
+                elif field == "probabilityOfPrecipitation":
+                    converted = val  # already %
+                else:
+                    converted = round(val / 25.4, 2)  # mm → inches
+
+                parsed.append({
+                    "start": start,
+                    "hours": dur_hours,
+                    "value": converted,
+                })
+            result[field] = parsed
+
+        return result
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def fetch_nbm(lat: float, lon: float) -> dict:
@@ -519,6 +598,69 @@ def aggregate_pws(stations: list[dict]) -> dict:
         "stations_used": len(stations),
         "is_raining": any((s.get("precip_rate_in") or 0) > 0 for s in stations),
     }
+
+
+def fetch_synoptic_stations(lat: float, lon: float, radius_miles: int = 30) -> dict:
+    """Fetch nearby weather station observations from Synoptic/MesoWest API.
+
+    Accesses 170,000+ stations: RAWS, DOT road sensors, ski area stations,
+    NWS/FAA, and private mesonets. Free tier: 5K requests/month.
+
+    Requires SYNOPTIC_TOKEN env var (register free at synopticdata.com).
+    Returns empty result gracefully if token not set.
+    """
+    token = os.environ.get("SYNOPTIC_TOKEN", "")
+    if not token:
+        return {"stations": [], "note": "SYNOPTIC_TOKEN not set"}
+    try:
+        resp = requests.get("https://api.synopticdata.com/v2/stations/latest", params={
+            "token": token,
+            "radius": f"{lat},{lon},{radius_miles}",
+            "vars": "air_temp,snow_depth,wind_speed,wind_gust,wind_direction,"
+                    "relative_humidity,dew_point_temperature,pressure",
+            "units": "english",
+            "status": "active",
+            "limit": "25",
+        }, timeout=15)
+        if resp.status_code != 200:
+            return {"error": f"HTTP {resp.status_code}"}
+
+        data = resp.json()
+        if data.get("SUMMARY", {}).get("RESPONSE_CODE") != 1:
+            return {"error": data.get("SUMMARY", {}).get("RESPONSE_MESSAGE", "API error")}
+
+        stations = []
+        for stn in data.get("STATION", []):
+            obs = stn.get("OBSERVATIONS", {})
+            elev_m = stn.get("ELEVATION")
+            elev_ft = round(float(elev_m) * 3.28084) if elev_m else None
+
+            def _val(key):
+                v = obs.get(key)
+                if isinstance(v, dict):
+                    return v.get("value")
+                return v
+
+            stations.append({
+                "id": stn.get("STID", ""),
+                "name": stn.get("NAME", ""),
+                "network": stn.get("MNET_SHORTNAME", ""),
+                "lat": float(stn.get("LATITUDE", 0)),
+                "lon": float(stn.get("LONGITUDE", 0)),
+                "elev_ft": elev_ft,
+                "distance_mi": round(float(stn.get("DISTANCE", 0)), 1) if stn.get("DISTANCE") else None,
+                "temp_f": _val("air_temp_value_1"),
+                "wind_mph": _val("wind_speed_value_1"),
+                "wind_gust_mph": _val("wind_gust_value_1"),
+                "wind_dir_deg": _val("wind_direction_value_1"),
+                "humidity_pct": _val("relative_humidity_value_1"),
+                "snow_depth_in": _val("snow_depth_value_1"),
+                "pressure_inhg": _val("pressure_value_1"),
+            })
+
+        return {"stations": stations, "count": len(stations)}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def fetch_cssl_snow() -> dict:
@@ -750,6 +892,103 @@ def fetch_climate_normals(lat: float, lon: float) -> dict:
         return {"error": str(e)}
 
 
+def fetch_ensemble(lat: float, lon: float) -> dict:
+    """Fetch ensemble forecasts for probabilistic snow/temp predictions.
+
+    Queries GFS (31 members) and ECMWF (51 members) ensembles via Open-Meteo.
+    Aggregates per-member hourly data into daily snowfall percentiles
+    (p10/p25/p50/p75/p90) — gives true uncertainty ranges rather than
+    comparing different deterministic models.
+    """
+    result = {"models": {}}
+    for model, label in [("gfs_seamless", "GFS"), ("ecmwf_ifs025", "ECMWF")]:
+        try:
+            params = {
+                "latitude": lat, "longitude": lon,
+                "hourly": "temperature_2m,precipitation,snowfall",
+                "models": model,
+                "forecast_days": 7,
+                "timezone": "America/Los_Angeles",
+            }
+            resp = requests.get("https://ensemble-api.open-meteo.com/v1/ensemble",
+                                params=params, timeout=30)
+            if resp.status_code != 200:
+                result["models"][label] = {"error": f"HTTP {resp.status_code}"}
+                continue
+
+            data = resp.json()
+            hourly = data.get("hourly", {})
+            times = hourly.get("time", [])
+            if not times:
+                result["models"][label] = {"error": "No time data"}
+                continue
+
+            # Find per-member keys for snowfall and temperature
+            snow_keys = sorted(k for k in hourly if k.startswith("snowfall_member"))
+            temp_keys = sorted(k for k in hourly if k.startswith("temperature_2m_member"))
+            if not snow_keys:
+                result["models"][label] = {"error": "No member data"}
+                continue
+
+            n_members = len(snow_keys)
+
+            # Aggregate hourly → daily per member
+            daily_snow = {}   # date → [member_total, ...]
+            daily_temps = {}  # date → {member_idx: [temps], ...}
+            for i, t in enumerate(times):
+                date = t[:10]
+                if date not in daily_snow:
+                    daily_snow[date] = [0.0] * n_members
+                    daily_temps[date] = {j: [] for j in range(n_members)}
+                for j, mk in enumerate(snow_keys):
+                    vals = hourly.get(mk, [])
+                    v = vals[i] if i < len(vals) and vals[i] is not None else 0.0
+                    daily_snow[date][j] += v  # cm
+                for j, tk in enumerate(temp_keys):
+                    if j >= n_members:
+                        break
+                    vals = hourly.get(tk, [])
+                    v = vals[i] if i < len(vals) and vals[i] is not None else None
+                    if v is not None:
+                        daily_temps[date][j].append(v)
+
+            def _pct(arr, p):
+                if not arr:
+                    return 0
+                idx = int(p / 100 * (len(arr) - 1))
+                return arr[min(idx, len(arr) - 1)]
+
+            daily_out = []
+            for date in sorted(daily_snow.keys()):
+                snow_in = sorted(round(v / 2.54, 1) for v in daily_snow[date])
+                temp_highs = sorted(
+                    round(max(daily_temps[date][j]) * 9/5 + 32, 1)
+                    for j in range(min(n_members, len(temp_keys)))
+                    if daily_temps[date][j]
+                )
+                entry = {
+                    "date": date,
+                    "snow_p10": _pct(snow_in, 10),
+                    "snow_p25": _pct(snow_in, 25),
+                    "snow_p50": _pct(snow_in, 50),
+                    "snow_p75": _pct(snow_in, 75),
+                    "snow_p90": _pct(snow_in, 90),
+                    "snow_max": snow_in[-1] if snow_in else 0,
+                    "members": n_members,
+                }
+                if temp_highs:
+                    entry["temp_p10_f"] = _pct(temp_highs, 10)
+                    entry["temp_p50_f"] = _pct(temp_highs, 50)
+                    entry["temp_p90_f"] = _pct(temp_highs, 90)
+                daily_out.append(entry)
+
+            result["models"][label] = daily_out
+        except Exception as e:
+            result["models"][label] = {"error": str(e)}
+
+    return result
+
+
 def fetch_caltrans_chains() -> list[dict]:
     """Fetch Caltrans chain control status for District 3 (Tahoe area).
 
@@ -940,6 +1179,15 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
         wspd = hourly.get(f"wind_speed_10m_{model}", [])
         wdir = hourly.get(f"wind_direction_10m_{model}", [])
         wgust = hourly.get(f"wind_gusts_10m_{model}", [])
+        freezing = hourly.get(f"freezing_level_height_{model}", [])
+        wcode = hourly.get(f"weather_code_{model}", [])
+        cloud = hourly.get(f"cloud_cover_{model}", [])
+        rh = hourly.get(f"relative_humidity_2m_{model}", [])
+        dewpt = hourly.get(f"dew_point_2m_{model}", [])
+        apparent = hourly.get(f"apparent_temperature_{model}", [])
+        psl = hourly.get(f"pressure_msl_{model}", [])
+        vis = hourly.get(f"visibility_{model}", [])
+        cape_data = hourly.get(f"cape_{model}", [])
 
         hours = []
         for i in range(len(times)):
@@ -971,6 +1219,16 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
 
             fl = wind_chill_f(tf, ws * 0.621371) if tf is not None else None
 
+            # Extract new optional fields (may be None if model doesn't provide them)
+            fz = freezing[i] if i < len(freezing) and freezing[i] is not None else None
+            wc = wcode[i] if i < len(wcode) and wcode[i] is not None else None
+            cc = cloud[i] if i < len(cloud) and cloud[i] is not None else None
+            hm = rh[i] if i < len(rh) and rh[i] is not None else None
+            dp = dewpt[i] if i < len(dewpt) and dewpt[i] is not None else None
+            ps = psl[i] if i < len(psl) and psl[i] is not None else None
+            vi = vis[i] if i < len(vis) and vis[i] is not None else None
+            ca = cape_data[i] if i < len(cape_data) and cape_data[i] is not None else None
+
             hours.append({
                 "time": times[i],
                 "temp_f": tf, "temp_c": round(tc, 1) if tc is not None else None,
@@ -985,6 +1243,14 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
                 "precip_type": pt,
                 "slr": round(slr, 1),
                 "snow_quality": snow_quality_str(slr),
+                "freezing_level_ft": round(fz * 3.28084) if fz is not None else None,
+                "weather_code": int(wc) if wc is not None else None,
+                "cloud_cover_pct": round(cc) if cc is not None else None,
+                "humidity_pct": round(hm) if hm is not None else None,
+                "dewpoint_f": round(dp * 9/5 + 32, 1) if dp is not None else None,
+                "pressure_hpa": round(ps, 1) if ps is not None else None,
+                "visibility_mi": round(vi / 1609.34, 1) if vi is not None else None,
+                "cape_jkg": round(ca) if ca is not None else None,
             })
 
         parsed["models"][label] = hours
