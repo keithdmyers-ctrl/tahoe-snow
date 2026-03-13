@@ -20,6 +20,7 @@
   --text: #e0e8f0;
   --text-dim: #99aabb;
   --accent: #4a9eff;
+  --accent-dark: #1976d2;
   --snow: #7ec8e3;
   --cold: #5b8def;
   --warm: #ff8c42;
@@ -30,8 +31,20 @@
   --rain: #45aaf2;
   --radius: 12px;
   --radius-sm: 8px;
+  --radius-pill: 20px;
   --shadow: 0 1px 3px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.15);
   --shadow-glow: inset 0 1px 0 rgba(255,255,255,0.04);
+  /* Alpha variants for backgrounds (8% and 25% opacity) */
+  --snow-bg: rgba(126, 200, 227, 0.08);
+  --snow-bg-strong: rgba(126, 200, 227, 0.25);
+  --safe-bg: rgba(46, 213, 115, 0.08);
+  --safe-bg-strong: rgba(46, 213, 115, 0.25);
+  --danger-bg: rgba(255, 71, 87, 0.08);
+  --danger-bg-strong: rgba(255, 71, 87, 0.25);
+  --moderate-bg: rgba(255, 165, 2, 0.08);
+  --moderate-bg-strong: rgba(255, 165, 2, 0.25);
+  --accent-bg: rgba(74, 158, 255, 0.08);
+  --accent-bg-strong: rgba(74, 158, 255, 0.25);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -337,9 +350,9 @@ button.section-header {
 }
 .resort-tab:hover { background: rgba(255,255,255,0.1); color: var(--text); }
 .resort-tab.active {
-  background: var(--accent);
+  background: var(--accent-dark);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(74, 158, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.4);
 }
 .resort-tab.all-tab { border: 1px solid rgba(255,255,255,0.12); background: transparent; }
 .resort-tab.all-tab.active { border: none; }
@@ -433,8 +446,14 @@ button.section-header {
 /* Scroll hint for tables */
 .scroll-wrap {
   overflow-x: auto; position: relative;
+}
+.scroll-wrap.overflowing {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
   mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+}
+.scroll-wrap.overflowing.scrolled-end {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.data-table th {
@@ -529,7 +548,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 /* -- AFD -- */
 .afd-text {
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
-  font-size: 12.5px; line-height: 1.7;
+  font-size: 13px; line-height: 1.7;
   color: var(--text-dim); white-space: pre-wrap;
   max-height: 400px; overflow-y: auto;
   scrollbar-width: thin;
@@ -547,9 +566,9 @@ table.data-table tr:hover td { background: var(--card-hover); }
   display: flex; align-items: center; gap: 16px;
   padding: 14px 18px; border-radius: var(--radius); margin-bottom: 16px;
 }
-.avy-banner.low { background: #2ed57315; border: 1px solid #2ed57344; }
-.avy-banner.moderate { background: #ffa50215; border: 1px solid #ffa50244; }
-.avy-banner.considerable, .avy-banner.high, .avy-banner.extreme { background: #ff475715; border: 1px solid #ff475744; }
+.avy-banner.low { background: var(--safe-bg); border: 1px solid var(--safe-bg-strong); }
+.avy-banner.moderate { background: var(--moderate-bg); border: 1px solid var(--moderate-bg-strong); }
+.avy-banner.considerable, .avy-banner.high, .avy-banner.extreme { background: var(--danger-bg); border: 1px solid var(--danger-bg-strong); }
 .avy-level {
   font-size: 36px; font-weight: 900;
   width: 56px; height: 56px;
@@ -597,6 +616,83 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* -- Weather alerts -- */
+.alert-card {
+  padding: 10px 14px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--moderate);
+}
+.alert-card.extreme, .alert-card.severe { border-left-color: var(--danger); background: var(--danger-bg); }
+.alert-card.moderate { border-left-color: var(--moderate); background: var(--moderate-bg); }
+.alert-card.minor { border-left-color: var(--snow); background: var(--snow-bg); }
+.alert-card .alert-event { font-weight: 600; }
+.alert-card.extreme .alert-event, .alert-card.severe .alert-event { color: var(--danger); }
+.alert-card.moderate .alert-event { color: var(--moderate); }
+.alert-card.minor .alert-event { color: var(--snow); }
+.alert-card .alert-headline { font-size: 0.85em; color: var(--text-dim); }
+
+/* -- Storm banner -- */
+.storm-banner {
+  background: var(--snow-bg);
+  border: 1px solid var(--snow-bg-strong);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+.storm-banner .storm-row { display: flex; align-items: center; gap: 8px; }
+.storm-banner .storm-icon { font-size: 1.3em; }
+.storm-banner .storm-label { font-weight: 600; color: var(--snow); }
+.storm-banner .storm-dur { color: var(--text-dim); font-size: 0.85em; }
+.storm-banner .storm-total { margin-left: auto; font-size: 1.4em; font-weight: 700; color: var(--snow); }
+
+/* -- Sounding row -- */
+.sounding-row {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  font-size: 0.85em; color: var(--text-dim); padding: 4px 0;
+}
+.sounding-row .sounding-src { color: var(--accent); }
+
+/* -- Chain controls -- */
+.chains-banner {
+  background: var(--moderate-bg);
+  border: 1px solid var(--moderate-bg-strong);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+.chains-banner .chains-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.chains-banner .chains-icon { font-size: 1.1em; }
+.chains-banner .chains-label { font-weight: 600; color: var(--moderate); }
+.chains-banner .chain-route { font-size: 0.85em; color: var(--text); padding: 2px 0; }
+.chains-banner .chain-route-name { font-weight: 600; }
+.chains-banner .chain-location { color: var(--text-dim); }
+
+/* -- Lift status -- */
+.lifts-row {
+  display: flex; flex-wrap: wrap; gap: 12px 24px;
+  padding: 8px 0; font-size: 0.9em;
+}
+.lifts-row .lift-item { display: flex; align-items: center; gap: 8px; }
+.lifts-row .lift-resort { font-weight: 600; }
+.lifts-row .lift-count { font-weight: 700; }
+.lifts-row .lift-label { color: var(--text-dim); font-size: 0.85em; }
+.lifts-row .lift-hold { color: var(--moderate); font-size: 0.85em; }
+
+/* -- Season stats -- */
+.season-stats-row {
+  display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 13px; margin-top: 12px;
+}
+.season-stats-row .station-stat { min-width: 200px; }
+.season-stats-row .station-name { color: var(--text); font-weight: 600; }
+.season-stats-row .station-sep { color: var(--text-dim); }
+.season-stats-row .station-current { color: var(--snow); font-weight: 600; }
+.season-stats-row .station-dim { color: var(--text-dim); }
+@media (max-width: 500px) {
+  .season-stats-row { gap: 8px 16px; font-size: 12px; }
+  .season-stats-row .station-stat { min-width: 160px; }
+}
+
 .footer {
   text-align: center; padding: 32px 20px; color: var(--text-dim);
   font-size: 11px; letter-spacing: 0.3px;
@@ -611,6 +707,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
 <div class="skeleton" id="loading">
   <div class="container">
+    <div style="text-align:center;padding:12px 0 20px;color:var(--text-dim);font-size:14px;font-weight:500;" id="loading-status">Loading weather data&hellip;</div>
     <div class="skel-hero-row">
       <div class="skel-block skel-hero"></div>
       <div class="skel-block skel-hero"></div>
@@ -669,7 +766,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
     </button>
     <div class="section-body collapsed" id="history-body">
       <div style="position:relative; height:300px;"><canvas id="chart-snotel-history"></canvas></div>
-      <div id="season-stats-row" style="margin-top:12px;"></div>
+      <div id="season-stats-row"></div>
     </div>
   </div>
 
@@ -723,6 +820,9 @@ async function loadData() {
     if (DATA.error) {
       _loadRetries++;
       if (_loadRetries < MAX_LOAD_RETRIES) {
+        const elapsed = _loadRetries * 5;
+        const statusEl = document.getElementById('loading-status');
+        if (statusEl) statusEl.textContent = `Loading weather data\u2026 (${elapsed}s)`;
         setTimeout(loadData, 5000);
         return;
       }
@@ -734,11 +834,15 @@ async function loadData() {
     render();
     const overlay = document.getElementById('loading');
     overlay.classList.add('hidden');
-    setTimeout(() => overlay.style.display = 'none', 400);
+    overlay.addEventListener('transitionend', function onEnd() {
+      overlay.removeEventListener('transitionend', onEnd);
+      overlay.style.display = 'none';
+    });
     document.getElementById('app').style.display = 'block';
   } catch (e) {
+    console.error('loadData error:', e);
     document.getElementById('loading').innerHTML =
-      '<div class="container" style="padding-top:60px;text-align:center"><div style="color:var(--danger);font-size:15px;margin-bottom:12px">Unable to load snow data</div><div style="color:var(--text-dim);font-size:13px;margin-bottom:16px">' + esc(e.message) + '</div><button class="refresh-btn" onclick="location.reload()" style="margin:0 auto">Retry</button></div>';
+      '<div class="container" style="padding-top:60px;text-align:center"><div style="color:var(--danger);font-size:15px;margin-bottom:12px">Unable to connect to weather server</div><div style="color:var(--text-dim);font-size:13px;margin-bottom:16px">Check your connection and try again.</div><button class="refresh-btn" onclick="location.reload()" style="margin:0 auto">Retry</button></div>';
   }
 }
 
@@ -756,7 +860,8 @@ async function refreshData() {
     btn.classList.remove('loading');
     btn.innerHTML = 'Retry';
     btn.style.borderColor = 'var(--danger)';
-    setTimeout(() => { btn.innerHTML = 'Refresh'; btn.style.borderColor = ''; }, 2000);
+    btn.style.color = 'var(--danger)';
+    // Error state persists until next click — do not auto-revert
     return;
   }
   btn.classList.remove('loading');
@@ -809,6 +914,7 @@ function render() {
   renderHistory();
   renderAFD();
   renderPreviews();
+  requestAnimationFrame(initScrollWraps);
 }
 
 function renderPreviews() {
@@ -854,7 +960,7 @@ function renderHero() {
   html += `<div class="hero-card snowpack">
     <div class="hero-label">Snowpack</div>
     <div class="hero-value">${h.snowpack_in > 0 ? h.snowpack_in + '"' : '\u2014'}</div>
-    <div class="hero-sub">${esc(h.snowpack_station || 'SNOTEL')}</div>
+    <div class="hero-sub">${esc(h.snowpack_station || 'Snow station')}</div>
   </div>`;
   html += `<div class="hero-card recent">
     <div class="hero-label">Next 24h Snow</div>
@@ -872,8 +978,27 @@ function renderHero() {
 function renderHeader() {
   try {
     const d = new Date(DATA.generated);
-    document.getElementById('header-time').textContent = d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const timeStr = d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    document.getElementById('header-time').textContent = timeStr;
+    updateStaleness(d);
   } catch(e) {}
+}
+
+function updateStaleness(dataTime) {
+  const el = document.getElementById('header-time');
+  if (!el) return;
+  const diffMin = Math.round((Date.now() - dataTime.getTime()) / 60000);
+  const baseStr = dataTime.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  if (diffMin < 2) {
+    el.textContent = baseStr;
+    el.style.color = '';
+  } else if (diffMin < 60) {
+    el.textContent = baseStr + ' (' + diffMin + 'm ago)';
+    el.style.color = diffMin > 20 ? 'var(--moderate)' : '';
+  } else {
+    el.textContent = baseStr + ' (' + Math.round(diffMin / 60) + 'h ago)';
+    el.style.color = 'var(--danger)';
+  }
 }
 
 function renderSummary() {
@@ -937,13 +1062,12 @@ function renderAvalanche() {
 function renderAlerts() {
   const alerts = DATA.alerts || [];
   if (!alerts.length) { document.getElementById('alerts-section').innerHTML = ''; return; }
-  const severityColors = { Extreme: 'var(--danger)', Severe: 'var(--danger)', Moderate: 'var(--moderate)', Minor: 'var(--snow)' };
   let html = '';
   for (const a of alerts) {
-    const color = severityColors[a.severity] || 'var(--moderate)';
-    html += `<div style="background:${color}22; border-left:3px solid ${color}; padding:10px 14px; margin-bottom:6px; border-radius:var(--radius-sm);">
-      <div style="font-weight:600; color:${color};">${esc(a.event || '')}</div>
-      <div style="font-size:0.85em; color:var(--text-dim);">${esc(a.headline || '')}</div>
+    const cls = (a.severity || 'moderate').toLowerCase();
+    html += `<div class="alert-card ${esc(cls)}">
+      <div class="alert-event">${esc(a.event || '')}</div>
+      <div class="alert-headline">${esc(a.headline || '')}</div>
     </div>`;
   }
   document.getElementById('alerts-section').innerHTML = html;
@@ -958,12 +1082,12 @@ function renderStorm() {
   let html = '';
   if (storm && storm.in_storm) {
     const dur = storm.duration_hours ? `${storm.duration_hours}h` : '';
-    html += `<div style="background:var(--snow)15; border:1px solid var(--snow)40; padding:12px 16px; border-radius:var(--radius); margin-bottom:8px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:1.3em;">&#10052;</span>
-        <span style="font-weight:600; color:var(--snow);">Active Storm</span>
-        ${dur ? `<span style="color:var(--text-dim); font-size:0.85em;">${dur}</span>` : ''}
-        <span style="margin-left:auto; font-size:1.4em; font-weight:700; color:var(--snow);">${storm.storm_total_in}"</span>
+    html += `<div class="storm-banner">
+      <div class="storm-row">
+        <span class="storm-icon">&#10052;</span>
+        <span class="storm-label">Active Storm</span>
+        ${dur ? `<span class="storm-dur">${dur}</span>` : ''}
+        <span class="storm-total">${storm.storm_total_in}"</span>
       </div>
     </div>`;
   }
@@ -977,8 +1101,8 @@ function renderStorm() {
       items.push(`Lapse: ${lr.toFixed(1)}\u00B0C/km${label}`);
     }
     if (items.length) {
-      html += `<div style="display:flex; gap:16px; flex-wrap:wrap; font-size:0.85em; color:var(--text-dim); padding:4px 0;">
-        <span style="color:var(--accent);">Reno Sounding</span> ${items.join(' &middot; ')}
+      html += `<div class="sounding-row">
+        <span class="sounding-src">Reno Sounding</span> ${items.join(' &middot; ')}
       </div>`;
     }
   }
@@ -988,15 +1112,15 @@ function renderStorm() {
 function renderChains() {
   const chains = DATA.chains || [];
   if (!chains.length) { document.getElementById('chains-section').innerHTML = ''; return; }
-  let html = `<div style="background:var(--moderate)15; border:1px solid var(--moderate)40; padding:12px 16px; border-radius:var(--radius); margin-bottom:8px;">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <span style="font-size:1.1em;">&#9888;</span>
-      <span style="font-weight:600; color:var(--moderate);">Chain Controls Active</span>
+  let html = `<div class="chains-banner">
+    <div class="chains-header">
+      <span class="chains-icon">&#9888;</span>
+      <span class="chains-label">Chain Controls Active</span>
     </div>`;
   for (const c of chains) {
-    html += `<div style="font-size:0.85em; color:var(--text); padding:2px 0;">
-      <span style="font-weight:600;">${esc(c.route || '')}</span> &mdash; ${esc(c.status || '')}
-      ${c.location ? `<span style="color:var(--text-dim);"> (${esc(c.location)})</span>` : ''}
+    html += `<div class="chain-route">
+      <span class="chain-route-name">${esc(c.route || '')}</span> &mdash; ${esc(c.status || '')}
+      ${c.location ? `<span class="chain-location"> (${esc(c.location)})</span>` : ''}
     </div>`;
   }
   html += '</div>';
@@ -1013,43 +1137,64 @@ function renderLifts() {
     const d = lifts[r];
     if (!d || d.error) continue;
     const pct = d.total > 0 ? Math.round(d.open / d.total * 100) : 0;
-    const color = pct > 75 ? 'var(--safe)' : pct > 25 ? 'var(--moderate)' : 'var(--danger)';
-    items.push(`<div style="display:flex; align-items:center; gap:8px;">
-      <span style="font-weight:600;">${names[r]}</span>
-      <span style="color:${color}; font-weight:700;">${d.open}/${d.total}</span>
-      <span style="color:var(--text-dim); font-size:0.85em;">lifts open</span>
-      ${d.hold > 0 ? `<span style="color:var(--moderate); font-size:0.85em;">(${d.hold} on hold)</span>` : ''}
+    const colorCls = pct > 75 ? 'safe' : pct > 25 ? 'moderate' : 'danger';
+    items.push(`<div class="lift-item">
+      <span class="lift-resort">${names[r]}</span>
+      <span class="lift-count" style="color:var(--${colorCls})">${d.open}/${d.total}</span>
+      <span class="lift-label">lifts open</span>
+      ${d.hold > 0 ? `<span class="lift-hold">(${d.hold} on hold)</span>` : ''}
     </div>`);
   }
   if (!items.length) { document.getElementById('lifts-section').innerHTML = ''; return; }
-  document.getElementById('lifts-section').innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:12px 24px; padding:8px 0; font-size:0.9em;">
-    ${items.join('')}
-  </div>`;
+  document.getElementById('lifts-section').innerHTML = `<div class="lifts-row">${items.join('')}</div>`;
 }
 
-// -- Resort tabs --
+// -- Resort tabs (accessible) --
 function renderResortTabs() {
-  let tabs = '<div class="resort-tab all-tab active" onclick="showResort(\'all\')">Compare All</div>';
+  let tabs = '<div class="resort-tab all-tab active" role="tab" tabindex="0" aria-selected="true" data-resort="all">Compare All</div>';
   for (const rn of RESORT_NAMES) {
-    tabs += `<div class="resort-tab" onclick="showResort('${rn}')" data-resort="${rn}">${rn}</div>`;
+    tabs += `<div class="resort-tab" role="tab" tabindex="-1" aria-selected="false" data-resort="${rn}">${rn}</div>`;
   }
-  document.getElementById('resort-tabs').innerHTML = tabs;
+  const tabBar = document.getElementById('resort-tabs');
+  tabBar.setAttribute('role', 'tablist');
+  tabBar.innerHTML = tabs;
+  // Bind click + keyboard handlers
+  tabBar.querySelectorAll('[role="tab"]').forEach(tab => {
+    tab.addEventListener('click', () => showResort(tab.dataset.resort));
+    tab.addEventListener('keydown', (e) => {
+      const allTabs = [...tabBar.querySelectorAll('[role="tab"]')];
+      const idx = allTabs.indexOf(tab);
+      let target = null;
+      if (e.key === 'ArrowRight') target = allTabs[(idx + 1) % allTabs.length];
+      else if (e.key === 'ArrowLeft') target = allTabs[(idx - 1 + allTabs.length) % allTabs.length];
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showResort(tab.dataset.resort); return; }
+      if (target) { e.preventDefault(); target.focus(); showResort(target.dataset.resort); }
+    });
+  });
   let panels = '';
   for (const rn of RESORT_NAMES) {
-    panels += `<div class="resort-panel" id="panel-${rn}">${buildResortPanel(rn)}</div>`;
+    panels += `<div class="resort-panel" role="tabpanel" id="panel-${rn}">${buildResortPanel(rn)}</div>`;
   }
   document.getElementById('resort-panels').innerHTML = panels;
   showResort('all');
 }
 
 function showResort(name) {
-  document.querySelectorAll('.resort-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.resort-tab').forEach(t => {
+    t.classList.remove('active');
+    t.setAttribute('aria-selected', 'false');
+    t.setAttribute('tabindex', '-1');
+  });
   document.querySelectorAll('.resort-panel').forEach(p => p.classList.remove('active'));
+  const activeTab = document.querySelector(`[data-resort="${name}"]`);
+  if (activeTab) {
+    activeTab.classList.add('active');
+    activeTab.setAttribute('aria-selected', 'true');
+    activeTab.setAttribute('tabindex', '0');
+  }
   if (name === 'all') {
-    document.querySelector('.all-tab').classList.add('active');
     document.getElementById('comparison-panel').classList.add('active');
   } else {
-    document.querySelector(`[data-resort="${name}"]`).classList.add('active');
     document.getElementById(`panel-${name}`).classList.add('active');
   }
   requestAnimationFrame(() => {
@@ -1378,7 +1523,7 @@ function renderComparison() {
         ${compareRow('SWE', f(c.snowpack_swe_in, '"'))}
         ${compareRow('Aspect', esc(c.aspect || '\u2014'))}
       </div>
-      <button class="compare-toggle" onclick="toggleCompareDetail(this)">More &#9662;</button>
+      <button class="compare-toggle" onclick="toggleCompareDetail(this)" aria-expanded="false">More &#9662;</button>
     </div>`;
   }
   html += '</div>';
@@ -1408,6 +1553,7 @@ function toggleCompareDetail(el) {
     detail.addEventListener('transitionend', clearMax);
   }
   el.innerHTML = showing ? 'More &#9662;' : 'Less &#9652;';
+  el.setAttribute('aria-expanded', showing ? 'false' : 'true');
 }
 
 function compareRow(label, value) {
@@ -1581,19 +1727,19 @@ function renderHistory() {
   });
 
   // Season stats summary below the chart
-  let statsHtml = '<div style="display:flex; flex-wrap:wrap; gap:12px 24px; font-size:13px;">';
+  let statsHtml = '<div class="season-stats-row">';
   for (const sname of stationNames) {
     const s = season[sname] || {};
     const snwd = s.SNWD || {};
     const wteq = s.WTEQ || {};
     if (!snwd.peak) continue;
-    statsHtml += `<div style="min-width:200px;">
-      <span style="color:var(--text); font-weight:600;">${sname}</span>
-      <span style="color:var(--text-dim);"> &mdash; </span>
-      <span style="color:var(--snow); font-weight:600;">${snwd.current}"</span>
-      <span style="color:var(--text-dim);"> now, </span>
-      <span style="color:var(--text-dim);">${snwd.peak}" peak</span>
-      ${wteq.current ? `<span style="color:var(--text-dim);"> &middot; SWE ${wteq.current}"</span>` : ''}
+    statsHtml += `<div class="station-stat">
+      <span class="station-name">${sname}</span>
+      <span class="station-sep"> &mdash; </span>
+      <span class="station-current">${snwd.current}"</span>
+      <span class="station-dim"> now, </span>
+      <span class="station-dim">${snwd.peak}" peak</span>
+      ${wteq.current ? `<span class="station-dim"> &middot; SWE ${wteq.current}"</span>` : ''}
     </div>`;
   }
   statsHtml += '</div>';
@@ -1609,6 +1755,12 @@ function renderAFD() {
 // -- Init --
 loadData();
 setInterval(() => loadData(), 900000);
+// Update staleness indicator every minute
+setInterval(() => {
+  if (DATA && DATA.generated) {
+    try { updateStaleness(new Date(DATA.generated)); } catch(e) {}
+  }
+}, 60000);
 
 // Resort tab scroll hint
 document.addEventListener('DOMContentLoaded', () => {
@@ -1625,6 +1777,21 @@ document.addEventListener('DOMContentLoaded', () => {
     check();
   }
 });
+
+// Scroll-wrap overflow detection for table masks
+function initScrollWraps() {
+  document.querySelectorAll('.scroll-wrap').forEach(sw => {
+    const check = () => {
+      const overflows = sw.scrollWidth > sw.clientWidth + 4;
+      sw.classList.toggle('overflowing', overflows);
+      const atEnd = sw.scrollLeft + sw.clientWidth >= sw.scrollWidth - 4;
+      sw.classList.toggle('scrolled-end', atEnd);
+    };
+    sw.addEventListener('scroll', check, { passive: true });
+    new ResizeObserver(check).observe(sw);
+    check();
+  });
+}
 
 // Lazy-build model charts when sections expand
 document.addEventListener('click', function(e) {

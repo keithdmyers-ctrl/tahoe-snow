@@ -5,24 +5,8 @@
 <style>
 {% include "base.css" %}
 
-/* Detail scene — matching gradient/slate theme */
-
-/* Override header for gradient style */
-.scene > .header {
-    height: 48px;
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    padding: 0 16px;
-}
-.scene > .header .location {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 1px;
-}
-.scene > .header .timestamp {
-    color: rgba(255,255,255,0.7);
-    font-size: 12px;
-    font-weight: 500;
-}
+/* Detail scene — matching slate theme */
+/* Header and bottom bar use shared styles from base.css */
 
 /* Zone panels — 3 zones fill remaining space */
 .zone-panel {
@@ -130,21 +114,9 @@
 .t-bar.sn { background: #3b82f6; }
 .t-bar.mx { background: #f97316; }
 .t-bar.rn { background: #94a3b8; }
-.tl-cell .t-snow { font-size: 7px; color: #3b82f6; font-weight: 600; line-height: 1; height: 8px; }
+.tl-cell .t-snow { font-size: 8px; color: #3b82f6; font-weight: 600; line-height: 1; height: 9px; }
 
-/* Bottom bar */
-.bottom-bar {
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    padding: 0 16px;
-    font-size: 10px;
-    display: flex;
-    justify-content: space-between;
-    flex-shrink: 0;
-    height: 32px;
-    align-items: center;
-}
-.bottom-bar .legend { color: rgba(255,255,255,0.7); font-weight: 500; }
-.bottom-bar .active { color: rgba(255,255,255,0.9); font-weight: 600; }
+/* Bottom bar uses shared styles from base.css */
 </style>
 </head>
 <body>

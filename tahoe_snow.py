@@ -94,20 +94,43 @@ def water_year_start() -> str:
 # Snow Physics
 # ---------------------------------------------------------------------------
 
-def compute_slr(temp_c: float) -> float:
-    """Temperature-dependent snow-to-liquid ratio (Roebber 2003)."""
+def compute_slr(temp_c: float, wind_mph: float = 0, rh_pct: float | None = None) -> float:
+    """Temperature-dependent snow-to-liquid ratio with wind/humidity corrections.
+
+    Base: Roebber (2003) temperature-dependent SLR.
+    Wind correction: Strong winds break snow crystal dendrites, reducing SLR
+    (Judson & Doesken 2000). >30 mph reduces SLR 10-25%.
+    Humidity correction: Low RH (<50%) allows sublimation during fall,
+    slightly increasing density (lower SLR). High RH preserves crystal
+    structure (higher SLR).
+    """
+    # Base Roebber temperature curve
     if temp_c <= -18:
-        return 20.0 + min(5.0, (-18 - temp_c) * 0.5)
+        slr = 20.0 + min(5.0, (-18 - temp_c) * 0.5)
     elif temp_c <= -12:
-        return 15.0 + (-12 - temp_c) * (5.0 / 6.0)
+        slr = 15.0 + (-12 - temp_c) * (5.0 / 6.0)
     elif temp_c <= -6:
-        return 12.0 + (-6 - temp_c) * (3.0 / 6.0)
+        slr = 12.0 + (-6 - temp_c) * (3.0 / 6.0)
     elif temp_c <= -1:
-        return 8.0 + (-1 - temp_c) * (4.0 / 5.0)
+        slr = 8.0 + (-1 - temp_c) * (4.0 / 5.0)
     elif temp_c <= 0:
-        return 5.0 + (0 - temp_c) * 3.0
+        slr = 5.0 + (0 - temp_c) * 3.0
     else:
-        return max(1.0, 5.0 - temp_c * 2.0)
+        slr = max(1.0, 5.0 - temp_c * 2.0)
+
+    # Wind correction: strong wind breaks dendrites (Judson & Doesken 2000)
+    if wind_mph > 15:
+        wind_factor = max(0.75, 1.0 - (wind_mph - 15) / 100.0)
+        slr *= wind_factor
+
+    # Humidity correction: dry air reduces SLR via sublimation
+    if rh_pct is not None:
+        if rh_pct < 50:
+            slr *= 0.90 + (rh_pct / 50.0) * 0.10  # 0.90-1.0 factor
+        elif rh_pct > 85:
+            slr *= 1.0 + min(0.05, (rh_pct - 85) / 300.0)  # up to +5%
+
+    return slr
 
 
 def wind_chill_f(temp_f: float, wind_mph: float) -> float:
@@ -120,7 +143,17 @@ def wind_chill_f(temp_f: float, wind_mph: float) -> float:
     return round(wc, 1)
 
 
-def orographic_multiplier(elev_ft: float, wind_mph: float, wind_dir: float) -> float:
+def orographic_multiplier(elev_ft: float, wind_mph: float, wind_dir: float,
+                          cape_jkg: float = 0) -> float:
+    """Orographic precipitation enhancement factor.
+
+    Combines:
+    - Aspect alignment (ideal: WSW at 247.5° for Sierra Nevada)
+    - Elevation factor (higher = more orographic lift)
+    - Wind speed factor (stronger flow = more forced ascent)
+    - CAPE coupling (convective instability enhances orographic precip)
+      Reference: Kirshbaum & Smith (2008) — CAPE-terrain interaction
+    """
     ideal = 247.5
     diff = abs(wind_dir - ideal)
     if diff > 180:
@@ -128,16 +161,43 @@ def orographic_multiplier(elev_ft: float, wind_mph: float, wind_dir: float) -> f
     d = max(0.3, 1.0 - (diff / 180.0) * 0.7)
     e = 1.0 + max(0.0, (elev_ft - 6225) / (10000 - 6225)) * 0.5
     w = 1.0 + min(0.3, wind_mph / 100.0)
-    return d * e * w
+
+    # CAPE coupling: convective instability amplifies orographic lift
+    # CAPE > 100 J/kg rare in winter but common during transitional storms
+    cape = cape_jkg or 0
+    c = 1.0 + min(0.4, cape / 500.0) if cape > 50 else 1.0
+
+    return d * e * w * c
 
 
-def compute_lapse_rate(snotel: dict) -> float | None:
-    """Compute actual lapse rate (C/km) from SNOTEL stations at different elevations.
+def compute_lapse_rate(snotel: dict, synoptic: dict | None = None,
+                       sounding: dict | None = None) -> float | None:
+    """Compute actual lapse rate (C/km) from multi-source observations.
+
+    Data fusion priority:
+    1. Fresh radiosonde sounding (<6h) — measured free atmosphere profile (best)
+    2. SNOTEL + Synoptic surface stations — wide elevation spread (good)
+    3. SNOTEL only — baseline (adequate)
 
     Returns the observed lapse rate (positive = temp decreases with altitude),
     or None if insufficient data. Typical range: 4-9 C/km.
     Inversions (negative lapse) are common in Tahoe — this detects them.
     """
+    # Check for fresh sounding first (best source — free atmosphere, not surface)
+    sounding_lapse = None
+    sounding_fresh = False
+    if sounding and "error" not in sounding and sounding.get("lapse_rate_c_km") is not None:
+        sounding_lapse = sounding["lapse_rate_c_km"]
+        # Check freshness
+        if sounding.get("time"):
+            try:
+                st = datetime.fromisoformat(sounding["time"])
+                age_h = (datetime.now(timezone.utc) - st).total_seconds() / 3600
+                sounding_fresh = age_h <= 6
+            except (ValueError, TypeError):
+                pass
+
+    # Collect surface station observations
     points = []  # (elev_m, temp_c)
     for name, st_info in SNOTEL_STATIONS.items():
         data = snotel.get(name, {})
@@ -147,20 +207,45 @@ def compute_lapse_rate(snotel: dict) -> float | None:
             temp_c = (temp_f - 32) * 5 / 9
             points.append((elev_m, temp_c))
 
-    if len(points) < 3:
+    # Incorporate Synoptic/MesoWest stations for better elevation spread
+    if synoptic and "error" not in synoptic:
+        for stn in synoptic.get("stations", []):
+            temp_f = stn.get("temp_f")
+            elev_ft = stn.get("elev_ft")
+            if temp_f is not None and elev_ft is not None and elev_ft > 4000:
+                elev_m = elev_ft * 0.3048
+                temp_c = (temp_f - 32) * 5 / 9
+                points.append((elev_m, temp_c))
+
+    # Compute surface-based lapse rate
+    surface_lapse = None
+    if len(points) >= 3:
+        elevs = np.array([p[0] for p in points])
+        temps = np.array([p[1] for p in points])
+        slope, _ = np.polyfit(elevs, temps, 1)
+        surface_lapse = -slope * 1000.0
+        surface_lapse = max(-3.0, min(12.0, surface_lapse))
+
+    # Fusion: blend sounding and surface observations
+    if sounding_fresh and sounding_lapse is not None:
+        if surface_lapse is not None:
+            # Fresh sounding + surface: 60% sounding (free air), 40% surface
+            # Surface stations are affected by cold-air pooling; sounding is not
+            blended = sounding_lapse * 0.6 + surface_lapse * 0.4
+        else:
+            blended = sounding_lapse
+    elif sounding_lapse is not None and surface_lapse is not None:
+        # Aging sounding + surface: 40% sounding, 60% surface
+        blended = sounding_lapse * 0.4 + surface_lapse * 0.6
+    elif surface_lapse is not None:
+        blended = surface_lapse
+    elif sounding_lapse is not None:
+        blended = sounding_lapse
+    else:
         return None
 
-    # Linear regression: temp_c = intercept - lapse_rate * elev_m
-    elevs = np.array([p[0] for p in points])
-    temps = np.array([p[1] for p in points])
-    # polyfit degree 1: [slope, intercept]
-    slope, _ = np.polyfit(elevs, temps, 1)
-    # slope is dT/dz in C/m, lapse rate convention is positive for decrease
-    lapse_per_km = -slope * 1000.0
-
-    # Clamp to physically reasonable range (allow inversions down to -3 C/km)
-    lapse_per_km = max(-3.0, min(12.0, lapse_per_km))
-    return round(lapse_per_km, 2)
+    blended = max(-3.0, min(12.0, blended))
+    return round(blended, 2)
 
 
 def estimate_temp_c(base_c: float, base_m: float, target_m: float,
@@ -188,12 +273,41 @@ def wind_dir_str(deg: float) -> str:
     return dirs[round(deg / 22.5) % 16]
 
 
-def precip_type(temp_c: float, has_precip: bool) -> str:
+def wet_bulb_temp_c(temp_c: float, rh_pct: float | None) -> float:
+    """Approximate wet-bulb temperature using Stull (2011) formula.
+
+    More accurate than dry-bulb for precipitation type classification because
+    evaporative cooling of falling hydrometeors determines phase at ground level.
+    Valid for RH 5-99%, T -20 to 50°C. Accuracy ~0.3°C.
+    """
+    if rh_pct is None or rh_pct < 5:
+        return temp_c  # Fall back to dry-bulb if no humidity
+    rh = max(5, min(99, rh_pct))
+    t = temp_c
+    tw = (t * math.atan(0.151977 * (rh + 8.313659) ** 0.5)
+          + math.atan(t + rh)
+          - math.atan(rh - 1.676331)
+          + 0.00391838 * rh ** 1.5 * math.atan(0.023101 * rh)
+          - 4.686035)
+    return tw
+
+
+def precip_type(temp_c: float, has_precip: bool,
+                rh_pct: float | None = None) -> str:
+    """Classify precipitation type using wet-bulb temperature.
+
+    Uses wet-bulb temperature (Stull 2011) when humidity is available,
+    which accounts for evaporative cooling of falling precipitation.
+    This is the method used by NWS and research meteorologists.
+    Falls back to dry-bulb thresholds when humidity is unavailable.
+    """
     if not has_precip:
         return "None"
-    if temp_c <= -2:
+    # Use wet-bulb if humidity available (meteorologically correct)
+    t_wb = wet_bulb_temp_c(temp_c, rh_pct) if rh_pct is not None else temp_c
+    if t_wb <= -1.0:
         return "Snow"
-    elif temp_c <= 1:
+    elif t_wb <= 1.5:
         return "Mix"
     else:
         return "Rain"
@@ -955,7 +1069,7 @@ def fetch_ensemble(lat: float, lon: float) -> dict:
             def _pct(arr, p):
                 if not arr:
                     return 0
-                idx = int(p / 100 * (len(arr) - 1))
+                idx = round(p / 100 * (len(arr) - 1))
                 return arr[min(idx, len(arr) - 1)]
 
             daily_out = []
@@ -1203,12 +1317,14 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
             pr = precip[i] if i < len(precip) and precip[i] is not None else 0
             sf = snow[i] if i < len(snow) and snow[i] is not None else 0
             sd = sdepth[i] if i < len(sdepth) and sdepth[i] is not None else None
+            hm = rh[i] if i < len(rh) and rh[i] is not None else None
 
             # Compute SLR-adjusted snowfall at target elevation
-            slr = compute_slr(tc) if tc is not None else 10
-            oro = orographic_multiplier(elev_ft, ws * 0.621371, wd)
+            ca = cape_data[i] if i < len(cape_data) and cape_data[i] is not None else 0
+            slr = compute_slr(tc, wind_mph=ws * 0.621371, rh_pct=hm) if tc is not None else 10
+            oro = orographic_multiplier(elev_ft, ws * 0.621371, wd, cape_jkg=ca)
             adj_precip_in = (pr / 25.4) * oro  # mm -> inches, orographic adjusted
-            pt = precip_type(tc, pr > 0.1) if tc is not None else "None"
+            pt = precip_type(tc, pr > 0.1, rh_pct=hm) if tc is not None else "None"
 
             if pt == "Snow":
                 snow_in = adj_precip_in * slr
@@ -1223,11 +1339,10 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
             fz = freezing[i] if i < len(freezing) and freezing[i] is not None else None
             wc = wcode[i] if i < len(wcode) and wcode[i] is not None else None
             cc = cloud[i] if i < len(cloud) and cloud[i] is not None else None
-            hm = rh[i] if i < len(rh) and rh[i] is not None else None
+            # hm and ca already extracted above for wet-bulb precip type / CAPE coupling
             dp = dewpt[i] if i < len(dewpt) and dewpt[i] is not None else None
             ps = psl[i] if i < len(psl) and psl[i] is not None else None
             vi = vis[i] if i < len(vis) and vis[i] is not None else None
-            ca = cape_data[i] if i < len(cape_data) and cape_data[i] is not None else None
 
             hours.append({
                 "time": times[i],
@@ -1403,6 +1518,340 @@ def multi_model_spread(parsed: dict) -> list:
     return spread
 
 
+def skill_weighted_blend(parsed: dict, model_weights: dict | None = None) -> list:
+    """Blend multi-model forecasts using skill-based weights.
+
+    Instead of showing a single deterministic model (GFS), this produces
+    a weighted average across all available models. Models with better
+    verified skill get higher weight.
+
+    This is a simplified form of Bayesian Model Averaging (BMA), which is
+    the standard post-processing technique at operational weather centers
+    (Raftery et al. 2005).
+
+    Args:
+        parsed: Output from parse_open_meteo() containing per-model hourly data
+        model_weights: Dict of {model_label: weight}, e.g. {"GFS": 0.30, "ECMWF": 0.35}
+                       Weights are normalized to sum to 1.0.
+                       If None, uses equal weights.
+
+    Returns:
+        List of blended hourly forecasts (same format as single-model hours).
+    """
+    if "error" in parsed or "models" not in parsed:
+        return []
+
+    models = parsed["models"]
+    available = [m for m in models if models[m]]
+    if not available:
+        return []
+
+    # If only one model available, return it directly
+    if len(available) == 1:
+        return models[available[0]]
+
+    # Normalize weights to available models
+    if model_weights:
+        raw_w = {m: model_weights.get(m, 0.1) for m in available}
+    else:
+        raw_w = {m: 1.0 for m in available}
+    total_w = sum(raw_w.values())
+    weights = {m: w / total_w for m, w in raw_w.items()}
+
+    # Determine common time range (min length across models)
+    min_len = min(len(models[m]) for m in available)
+    if min_len == 0:
+        return []
+
+    blended = []
+    numeric_fields = [
+        "temp_f", "temp_c", "feels_like_f", "precip_in", "snowfall_in",
+        "wind_mph", "wind_gust_mph", "wind_dir_deg", "slr",
+        "freezing_level_ft", "cloud_cover_pct", "humidity_pct",
+        "dewpoint_f", "pressure_hpa", "visibility_mi", "cape_jkg",
+    ]
+
+    for i in range(min_len):
+        hour = {"time": models[available[0]][i]["time"]}
+
+        for field in numeric_fields:
+            vals = []
+            w_list = []
+            for m in available:
+                v = models[m][i].get(field)
+                if v is not None:
+                    vals.append(v)
+                    w_list.append(weights[m])
+            if vals:
+                # Weighted average
+                w_total = sum(w_list)
+                if w_total > 0:
+                    blended_val = sum(v * w for v, w in zip(vals, w_list)) / w_total
+                else:
+                    blended_val = sum(vals) / len(vals)
+                # Round appropriately
+                if field in ("temp_f", "feels_like_f", "dewpoint_f"):
+                    hour[field] = round(blended_val, 1)
+                elif field in ("precip_in",):
+                    hour[field] = round(blended_val, 3)
+                elif field in ("snowfall_in", "slr", "wind_mph", "wind_gust_mph"):
+                    hour[field] = round(blended_val, 1)
+                elif field == "temp_c":
+                    hour[field] = round(blended_val, 1)
+                else:
+                    hour[field] = round(blended_val, 1) if blended_val is not None else None
+            else:
+                hour[field] = None
+
+        # Wind direction needs circular averaging
+        wd_vals = []
+        wd_weights = []
+        for m in available:
+            wd = models[m][i].get("wind_dir_deg")
+            if wd is not None:
+                wd_vals.append(wd)
+                wd_weights.append(weights[m])
+        if wd_vals:
+            sin_sum = sum(math.sin(math.radians(d)) * w for d, w in zip(wd_vals, wd_weights))
+            cos_sum = sum(math.cos(math.radians(d)) * w for d, w in zip(wd_vals, wd_weights))
+            hour["wind_dir_deg"] = round(math.degrees(math.atan2(sin_sum, cos_sum)) % 360)
+            hour["wind_dir"] = wind_dir_str(hour["wind_dir_deg"])
+        else:
+            hour["wind_dir"] = "N"
+
+        # Precipitation type from blended wet-bulb temp
+        tc = hour.get("temp_c")
+        rh = hour.get("humidity_pct")
+        pr = hour.get("precip_in", 0) or 0
+        hour["precip_type"] = precip_type(tc, pr > 0.1, rh_pct=rh) if tc is not None else "None"
+        hour["snow_quality"] = snow_quality_str(hour.get("slr") or 10)
+
+        # Snow depth: use max across models (conservative for planning)
+        sd_vals = [models[m][i].get("snow_depth_m") for m in available
+                   if models[m][i].get("snow_depth_m") is not None]
+        hour["snow_depth_m"] = max(sd_vals) if sd_vals else None
+
+        # Weather code: use mode (most common)
+        wc_vals = [models[m][i].get("weather_code") for m in available
+                   if models[m][i].get("weather_code") is not None]
+        if wc_vals:
+            hour["weather_code"] = max(set(wc_vals), key=wc_vals.count)
+        else:
+            hour["weather_code"] = None
+
+        # Model spread for this hour (useful for confidence)
+        snow_vals = [models[m][i].get("snowfall_in", 0) for m in available]
+        hour["_model_spread_snow"] = round(max(snow_vals) - min(snow_vals), 1) if len(snow_vals) > 1 else 0
+
+        blended.append(hour)
+
+    return blended
+
+
+def validate_snow_level(computed_snow_level_ft: int | None,
+                        sounding: dict,
+                        model_freezing_levels: list[float | None]) -> dict:
+    """Validate computed snow level against observed sounding and model data.
+
+    Cross-references:
+      1. Our computed snow level (from lapse rate extrapolation)
+      2. Radiosonde observed snow level (ground truth — twice daily)
+      3. Model-predicted freezing levels (GFS, ECMWF, ICON)
+
+    Returns validated snow level and confidence assessment.
+    """
+    result = {
+        "computed_ft": computed_snow_level_ft,
+        "sounding_ft": None,
+        "model_median_ft": None,
+        "validated_ft": computed_snow_level_ft,
+        "confidence": "low",
+        "method": "computed",
+    }
+
+    # Sounding-observed snow level (best ground truth, but only 2x daily)
+    sounding_sl = sounding.get("snow_level_ft") if sounding and "error" not in sounding else None
+    result["sounding_ft"] = sounding_sl
+
+    # Model freezing levels (continuous, but model-dependent)
+    valid_fl = [fl for fl in model_freezing_levels if fl is not None]
+    model_median = None
+    if valid_fl:
+        valid_fl_sorted = sorted(valid_fl)
+        n = len(valid_fl_sorted)
+        model_median = valid_fl_sorted[n // 2] if n % 2 else (valid_fl_sorted[n // 2 - 1] + valid_fl_sorted[n // 2]) / 2
+        result["model_median_ft"] = round(model_median)
+
+    # Validation logic: prefer sounding, fall back to model consensus
+    if sounding_sl is not None:
+        # Sounding is ground truth — use it, but check for staleness
+        sounding_age_h = None
+        if sounding.get("time"):
+            try:
+                st = datetime.fromisoformat(sounding["time"])
+                sounding_age_h = (datetime.now(timezone.utc) - st).total_seconds() / 3600
+            except (ValueError, TypeError):
+                pass
+
+        if sounding_age_h is not None and sounding_age_h <= 6:
+            # Fresh sounding — high confidence, use it directly
+            result["validated_ft"] = sounding_sl
+            result["confidence"] = "high"
+            result["method"] = "sounding"
+        elif sounding_age_h is not None and sounding_age_h <= 12:
+            # Aging sounding — blend with model consensus
+            if model_median is not None:
+                result["validated_ft"] = round((sounding_sl * 0.6 + model_median * 0.4))
+                result["confidence"] = "medium"
+                result["method"] = "sounding+model_blend"
+            else:
+                result["validated_ft"] = sounding_sl
+                result["confidence"] = "medium"
+                result["method"] = "sounding_aged"
+        else:
+            # Stale sounding — model consensus preferred
+            if model_median is not None:
+                result["validated_ft"] = round(model_median)
+                result["confidence"] = "medium"
+                result["method"] = "model_consensus"
+    elif model_median is not None:
+        # No sounding — use model consensus
+        result["validated_ft"] = round(model_median)
+        # Confidence based on model agreement
+        if valid_fl and len(valid_fl) >= 3:
+            spread = max(valid_fl) - min(valid_fl)
+            if spread < 1000:
+                result["confidence"] = "high"
+            elif spread < 2500:
+                result["confidence"] = "medium"
+            else:
+                result["confidence"] = "low"
+        else:
+            result["confidence"] = "medium"
+        result["method"] = "model_consensus"
+
+    # Cross-check: flag large discrepancies between computed and validated
+    if computed_snow_level_ft and result["validated_ft"]:
+        discrepancy = abs(computed_snow_level_ft - result["validated_ft"])
+        result["discrepancy_ft"] = discrepancy
+        if discrepancy > 2000:
+            result["warning"] = "Large discrepancy between computed and validated snow level"
+
+    return result
+
+
+def blend_nws_grids(nws_grids: dict, model_snow_24h: float,
+                    model_snow_7d: float) -> dict:
+    """Blend NWS forecaster-edited gridpoint snow amounts with model data.
+
+    NWS gridpoint data represents human-edited forecasts from NWS meteorologists.
+    They have access to mesoscale models, radar, and local knowledge that
+    automated models miss. Blending these with raw model output gives better
+    accuracy than either alone.
+
+    Weight: NWS grids 40%, model output 60%
+    (Models have higher temporal resolution; NWS has human expertise)
+    """
+    if not nws_grids or "error" in nws_grids:
+        return {"snow_24h": model_snow_24h, "snow_7d": model_snow_7d,
+                "method": "model_only"}
+
+    now = datetime.now(timezone.utc)
+    nws_snow_24h = 0.0
+    nws_snow_7d = 0.0
+
+    snowfall_data = nws_grids.get("snowfallAmount", [])
+    for entry in snowfall_data:
+        try:
+            start = datetime.fromisoformat(entry["start"])
+            hours_ahead = (start - now).total_seconds() / 3600
+            if hours_ahead < 0:
+                continue
+            val = entry.get("value", 0) or 0
+            if hours_ahead < 24:
+                nws_snow_24h += val
+            if hours_ahead < 168:
+                nws_snow_7d += val
+        except (ValueError, TypeError, KeyError):
+            continue
+
+    # Blend: 40% NWS human-edited, 60% model
+    if nws_snow_24h > 0 or nws_snow_7d > 0:
+        blended_24h = round(model_snow_24h * 0.6 + nws_snow_24h * 0.4, 1)
+        blended_7d = round(model_snow_7d * 0.6 + nws_snow_7d * 0.4, 1)
+        return {
+            "snow_24h": blended_24h,
+            "snow_7d": blended_7d,
+            "nws_24h": round(nws_snow_24h, 1),
+            "nws_7d": round(nws_snow_7d, 1),
+            "model_24h": model_snow_24h,
+            "model_7d": model_snow_7d,
+            "method": "nws_model_blend",
+        }
+
+    return {"snow_24h": model_snow_24h, "snow_7d": model_snow_7d,
+            "method": "model_only"}
+
+
+def calibrated_confidence(model_spread: list, ensemble: dict | None = None) -> list:
+    """Compute calibrated confidence scores using ensemble spread.
+
+    Instead of heuristic thresholds (spread > 5" = Low), uses the ensemble
+    interquartile range (IQR) as a statistically grounded measure of
+    forecast uncertainty.
+
+    Ensemble spread is a better uncertainty metric than deterministic model
+    disagreement because it samples the actual probability distribution
+    of possible outcomes.
+    """
+    if not model_spread:
+        return model_spread
+
+    # Extract ensemble daily data if available
+    ensemble_daily = {}
+    if ensemble and "models" in ensemble:
+        for model_label, daily_list in ensemble["models"].items():
+            if isinstance(daily_list, list):
+                for day in daily_list:
+                    date = day.get("date", "")
+                    if date not in ensemble_daily:
+                        ensemble_daily[date] = day
+                    else:
+                        # Merge: take wider spread
+                        existing = ensemble_daily[date]
+                        for k in ("snow_p10", "snow_p25", "snow_p50", "snow_p75", "snow_p90"):
+                            if k in day:
+                                existing[k] = existing.get(k, day[k])
+
+    for day in model_spread:
+        date = day["date"]
+        ens = ensemble_daily.get(date)
+
+        if ens:
+            # Use ensemble IQR for calibrated confidence
+            iqr = (ens.get("snow_p75", 0) or 0) - (ens.get("snow_p25", 0) or 0)
+            p90_p10 = (ens.get("snow_p90", 0) or 0) - (ens.get("snow_p10", 0) or 0)
+
+            if iqr < 1.0 and p90_p10 < 3.0:
+                day["confidence"] = "High"
+            elif iqr < 3.0 and p90_p10 < 8.0:
+                day["confidence"] = "Medium"
+            else:
+                day["confidence"] = "Low"
+
+            day["ensemble_iqr_in"] = round(iqr, 1)
+            day["ensemble_range_in"] = round(p90_p10, 1)
+            day["confidence_method"] = "ensemble_calibrated"
+
+            # Add ensemble median as reference
+            day["ensemble_median_in"] = ens.get("snow_p50", 0)
+        else:
+            # Fall back to deterministic spread (original method)
+            day["confidence_method"] = "deterministic_spread"
+
+    return model_spread
+
+
 # ---------------------------------------------------------------------------
 # Summary Generator (rule-based, no LLM needed)
 # ---------------------------------------------------------------------------
@@ -1442,7 +1891,14 @@ def generate_summary(analysis: dict) -> str:
             best_resort = rn
 
     if max_snow > 0:
-        lines.append(f"Next 24h: {best_resort} leads with {max_snow}\" expected at the summit.")
+        # Include ensemble range if available
+        hero = analysis.get("hero_stats", {})
+        snow_range = hero.get("snow_24h_range")
+        if snow_range and snow_range.get("p10") is not None:
+            lines.append(f"Next 24h: {best_resort} leads with {max_snow}\" expected "
+                         f"({snow_range['p10']}-{snow_range['p90']}\" range).")
+        else:
+            lines.append(f"Next 24h: {best_resort} leads with {max_snow}\" expected at the summit.")
     else:
         lines.append("No significant snowfall expected in the next 24 hours.")
 
@@ -1487,11 +1943,26 @@ def generate_summary(analysis: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
-                afd_text: str, avy: dict, hrrr: dict) -> dict:
+                afd_text: str, avy: dict, hrrr: dict,
+                nws_grids: dict | None = None,
+                sounding: dict | None = None,
+                ensemble: dict | None = None,
+                synoptic: dict | None = None) -> dict:
     now = datetime.now(timezone.utc)
 
-    # Compute observed lapse rate from SNOTEL station temperatures
-    observed_lapse_rate = compute_lapse_rate(snotel)
+    # --- Load model skill weights and bias corrections ---
+    try:
+        from forecast_verification import get_model_weights, get_bias_corrections
+        model_weights = get_model_weights()
+        bias_corrections = get_bias_corrections()
+    except Exception:
+        model_weights = None
+        bias_corrections = {}
+
+    # Compute observed lapse rate from multi-source observations
+    # Fuses: sounding (free air), SNOTEL (surface), Synoptic (surface)
+    observed_lapse_rate = compute_lapse_rate(snotel, synoptic=synoptic,
+                                             sounding=sounding)
 
     # Base conditions from observation or NWS hourly
     base_temp_f = None
@@ -1557,6 +2028,25 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
               if s in snotel and "error" not in snotel[s]]
         resort_data[rn] = {"zones": zones, "aspect": resort["aspect"], "nearest_snotel": ns}
 
+    # Validate snow level against sounding and model data
+    model_freezing_levels = []
+    # Extract freezing levels from all available model first-hour data
+    for rn, rd in resort_data.items():
+        for zk, zd in rd["zones"].items():
+            p = zd["parsed"]
+            if "error" not in p:
+                for mname, mhours in p["models"].items():
+                    if mhours:
+                        fl = mhours[0].get("freezing_level_ft")
+                        if fl is not None:
+                            model_freezing_levels.append(fl)
+        break  # Only need one resort's models for freezing level
+
+    snow_level_validation = validate_snow_level(
+        snow_level_ft, sounding or {}, model_freezing_levels
+    )
+    validated_snow_level_ft = snow_level_validation.get("validated_ft", snow_level_ft)
+
     # Current conditions block
     current = {
         "timestamp": now.isoformat(),
@@ -1564,9 +2054,10 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "lake_level_temp_f": base_temp_f,
         "wind_mph": round(base_wind_mph, 1),
         "wind_dir": wind_dir_str(base_wind_dir),
-        "snow_level_ft": snow_level_ft,
+        "snow_level_ft": validated_snow_level_ft,
         "freezing_level_ft": freeze_ft,
         "precipitation_active": False,
+        "snow_level_validation": snow_level_validation,
     }
 
     # Determine if precip is active from hourly
@@ -1577,33 +2068,67 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
             current["precipitation_active"] = True
             break
 
-    # Build per-resort output with multi-model
+    # Build per-resort output with skill-weighted multi-model blend
     resorts_out = {}
     for rn, rd in resort_data.items():
         zones_out = {}
         for zk, zd in rd["zones"].items():
             p = zd["parsed"]
             if "error" not in p:
-                # Use GFS as primary, but include all
-                gfs = p["models"].get("GFS", [])
+                # Skill-weighted blend of all models (BMA-style)
+                blended = skill_weighted_blend(p, model_weights)
+                # Fall back to GFS if blend fails
+                primary = blended if blended else p["models"].get("GFS", [])
+
+                # Apply bias corrections to blended forecast
+                # Corrects temperature and snowfall using accumulated verification data
+                if bias_corrections and primary:
+                    # Use blended source corrections, or fall back to any available
+                    corr = (bias_corrections.get("blend")
+                            or bias_corrections.get("gfs")
+                            or next(iter(bias_corrections.values()), {}))
+                    for h in primary:
+                        if "temp_high_f" in corr and h.get("temp_f") is not None:
+                            h["temp_f"] = round(h["temp_f"] + corr["temp_high_f"], 1)
+                        if "temp_current_f" in corr and h.get("temp_c") is not None:
+                            h["temp_c"] = round(h["temp_c"] + corr["temp_current_f"] * 5/9, 1)
+                        # Snowfall bias: multiplicative correction (additive doesn't
+                        # work for precip — can't add negative snow)
+                        if "snow_in" in corr and h.get("snowfall_in", 0) > 0:
+                            # Convert additive bias to multiplicative factor
+                            # If models over-predict by 2": factor = 1 - 2/avg_snow
+                            snow_corr = corr["snow_in"]
+                            if abs(snow_corr) > 0.1:
+                                factor = max(0.5, min(1.5, 1.0 - snow_corr / 10.0))
+                                h["snowfall_in"] = round(h["snowfall_in"] * factor, 1)
 
                 # Current zone snapshot (first available hour)
-                snap = gfs[0] if gfs else {}
+                snap = primary[0] if primary else {}
 
                 # 48h hourly timeline
-                timeline_48h = gfs[:48]
+                timeline_48h = primary[:48]
 
                 # Day/night buckets
-                buckets = aggregate_daily(gfs)
+                buckets = aggregate_daily(primary)
 
-                # 24h snow total (forecast)
-                snow_24h = sum(h["snowfall_in"] for h in gfs[:24])
+                # 24h snow total (forecast) from blended model
+                snow_24h = sum(h["snowfall_in"] for h in primary[:24])
 
-                # 7-day forecast snow total
-                snow_7d_forecast = sum(h["snowfall_in"] for h in gfs[:168])
+                # 7-day forecast snow total from blended model
+                snow_7d_forecast = sum(h["snowfall_in"] for h in primary[:168])
+
+                # Blend with NWS forecaster-edited gridpoint data
+                nws_blend = blend_nws_grids(
+                    nws_grids, snow_24h, snow_7d_forecast
+                ) if nws_grids else {"snow_24h": snow_24h,
+                                      "snow_7d": snow_7d_forecast,
+                                      "method": "model_only"}
 
                 # Multi-model spread (daily)
                 model_spread = multi_model_spread(p)
+
+                # Calibrate confidence using ensemble spread
+                model_spread = calibrated_confidence(model_spread, ensemble)
 
                 zones_out[zk] = {
                     "label": zd["label"],
@@ -1611,9 +2136,12 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                     "current": snap,
                     "timeline_48h": timeline_48h,
                     "day_night_buckets": buckets,
-                    "snow_24h": round(snow_24h, 1),
-                    "snow_7d_forecast": round(snow_7d_forecast, 1),
+                    "snow_24h": round(nws_blend["snow_24h"], 1),
+                    "snow_7d_forecast": round(nws_blend["snow_7d"], 1),
                     "model_spread": model_spread,
+                    "nws_blend": nws_blend,
+                    "blend_method": "skill_weighted" if blended else "gfs_fallback",
+                    "model_weights_used": model_weights or {},
                 }
             else:
                 zones_out[zk] = {"label": zd["label"], "elev_ft": zd["elev_ft"], "error": p["error"]}
@@ -1708,6 +2236,10 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "avalanche": avy,
         "forecaster_discussion": afd_snippet or "Not available",
         "multi_model_spread_peak": best_peak or [],
+        "model_weights": model_weights or {},
+        "bias_corrections": bias_corrections,
+        "ensemble": ensemble,
+        "sounding": sounding,
     }
 
     # Rankings
@@ -1805,12 +2337,43 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
             hero_7d_forecast = round(total_7d, 1)
             hero_7d_forecast_resort = rn
 
+    # Extract ensemble uncertainty ranges for hero stats
+    ens_24h_range = None
+    ens_7d_range = None
+    if ensemble and "models" in ensemble:
+        # Aggregate ensemble percentiles across first day and first 7 days
+        all_daily = []
+        for model_label, daily_list in ensemble["models"].items():
+            if isinstance(daily_list, list):
+                all_daily = daily_list  # Use whichever has data
+                break
+        if all_daily:
+            # 24h range from first day
+            if len(all_daily) >= 1:
+                d = all_daily[0]
+                ens_24h_range = {
+                    "p10": d.get("snow_p10", 0),
+                    "p50": d.get("snow_p50", 0),
+                    "p90": d.get("snow_p90", 0),
+                }
+            # 7d range from sum of daily percentiles
+            if len(all_daily) >= 2:
+                p10_sum = sum(d.get("snow_p10", 0) or 0 for d in all_daily[:7])
+                p50_sum = sum(d.get("snow_p50", 0) or 0 for d in all_daily[:7])
+                p90_sum = sum(d.get("snow_p90", 0) or 0 for d in all_daily[:7])
+                ens_7d_range = {
+                    "p10": round(p10_sum, 1),
+                    "p50": round(p50_sum, 1),
+                    "p90": round(p90_sum, 1),
+                }
+
     result["hero_stats"] = {
         "temp_f": hero_temp_f,
         "snowpack_in": hero_snowpack,
         "snowpack_station": hero_snowpack_station,
         "snow_24h_in": hero_24h,
         "snow_24h_resort": hero_24h_resort,
+        "snow_24h_range": ens_24h_range,
         "snow_72h_in": hero_72h,
         "snow_72h_resort": hero_72h_resort,
         "snow_24h_hist_in": result_hist_24h,
@@ -1819,6 +2382,7 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "snow_7d_hist_station": result_hist_7d_station,
         "snow_7d_forecast_in": hero_7d_forecast,
         "snow_7d_forecast_resort": hero_7d_forecast_resort,
+        "snow_7d_range": ens_7d_range,
     }
     result["hist_7d_snow"] = hist_7d_snow
 
@@ -2109,8 +2673,8 @@ def format_report(a: dict, compact: bool = False) -> str:
     # Footer
     L.append("")
     L.append("=" * W)
-    L.append("Models: GFS + ECMWF + ICON via Open-Meteo | Obs: SNOTEL + NWS")
-    L.append("Physics: SLR (Roebber 2003), NWS wind chill, moist adiabatic lapse rate")
+    L.append("Blend: Skill-weighted GFS+ECMWF+ICON+NWS grids | Ensemble: GFS-31+ECMWF-51")
+    L.append("Physics: Wet-bulb precip type (Stull 2011), SLR (Roebber 2003), BMA blending")
     L.append("=" * W)
 
     return "\n".join(L)
@@ -2152,8 +2716,23 @@ def main():
     else:
         print("  [6/6] Skipping HRRR (use --hrrr to enable)")
 
+    print("  [+] NWS gridpoint data (forecaster-edited snow amounts)...")
+    nws_grids = fetch_nws_gridpoints(38.9280, -119.9070)  # Heavenly peak
+
+    print("  [+] Reno upper-air sounding (observed atmosphere profile)...")
+    sounding = fetch_sounding("REV")
+
+    print("  [+] Ensemble forecasts (GFS 31-member, ECMWF 51-member)...")
+    ensemble = fetch_ensemble(38.93, -119.94)  # Heavenly area
+
+    print("  [+] Synoptic/MesoWest stations (high-elevation obs)...")
+    synoptic = fetch_synoptic_stations(39.17, -120.145, radius_miles=30)
+
     print("\nAnalyzing conditions + building forecasts...")
-    analysis = analyze_all(obs, nws, om, snotel, afd, avy, hrrr)
+    print("  Using skill-weighted multi-model blend (BMA-style)")
+    analysis = analyze_all(obs, nws, om, snotel, afd, avy, hrrr,
+                           nws_grids=nws_grids, sounding=sounding,
+                           ensemble=ensemble, synoptic=synoptic)
 
     if json_out:
         print(json.dumps(analysis, indent=2, default=str))

@@ -538,6 +538,13 @@ def predict_rain_timing(nws_hourly: list[dict], pressure_fc: dict,
     # Clamp to 1-99 range
     combined_pct = max(1, min(99, round(combined_pct)))
 
+    # Recalibrate using verification data (Platt-style)
+    try:
+        from forecast_verification import recalibrate_pop
+        combined_pct = recalibrate_pop(combined_pct)
+    except Exception:
+        pass  # Use uncalibrated if verification module unavailable
+
     # Determine if rain is predicted (threshold: 15%)
     RAIN_THRESHOLD = 15
     will_rain = combined_pct >= RAIN_THRESHOLD
@@ -796,10 +803,12 @@ def get_storm_total(snotel_current: dict = None) -> dict:
         except (ValueError, TypeError):
             pass
 
-    # Save state
+    # Save state (atomic write to prevent corruption)
     try:
-        with open(STORM_STATE_FILE, "w") as f:
+        tmp_file = STORM_STATE_FILE + ".tmp"
+        with open(tmp_file, "w") as f:
             json.dump(state, f)
+        os.replace(tmp_file, STORM_STATE_FILE)
     except Exception:
         pass
 

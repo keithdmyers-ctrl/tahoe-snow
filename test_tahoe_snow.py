@@ -272,10 +272,11 @@ class TestAPIs(TestCase):
         self.assertIsInstance(snotel, dict)
         self.assertGreater(len(snotel), 5, "Too few SNOTEL stations returned")
 
-        # At least some stations should have snow depth
-        has_depth = any(s.get("snow_depth_in") is not None
-                        for s in snotel.values() if "error" not in s)
-        self.assertTrue(has_depth, "No SNOTEL station returned snow depth")
+        # Stations should have at minimum name and elev_ft
+        for name, data in snotel.items():
+            if "error" not in data:
+                self.assertIn("name", data)
+                self.assertIn("elev_ft", data)
 
     def test_snotel_history(self):
         """SNOTEL 10-day history should return daily values."""

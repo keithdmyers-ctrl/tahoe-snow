@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Forecast verification and bias tracking.
+Forecast verification, bias tracking, and model skill scoring.
 
 Logs daily forecasts and compares them to actual observations to build
 location-specific bias corrections over time.
@@ -9,23 +9,30 @@ Tracks:
   - Temperature bias per source (NWS, Open-Meteo models, BME280)
   - Precipitation probability calibration (predicted % vs actual occurrence)
   - Timing accuracy (predicted rain start vs actual)
+  - Model skill scores (MAE, RMSE, Brier, CRPS) by source and lead time
+  - Per-model weights for skill-weighted blending
 
 After 14+ days of data, applies automatic bias corrections.
+After 7+ days, computes model skill weights for blending.
 
 Usage:
-  from forecast_verification import log_forecast, log_actual, get_bias_corrections
+  from forecast_verification import (log_forecast, log_actual,
+      get_bias_corrections, get_model_weights, get_verification_summary)
   log_forecast(source, metric, predicted_value, valid_time)
   log_actual(metric, actual_value, obs_time)
   corrections = get_bias_corrections()
+  weights = get_model_weights()   # {"GFS": 0.35, "ECMWF": 0.40, ...}
 """
 
 import json
+import math
 import os
 from datetime import datetime, timezone, timedelta
 
 VERIFY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             ".forecast_verification.json")
 MAX_DAYS = 90  # Keep 90 days of verification data
+MIN_DAYS_FOR_WEIGHTS = 7  # Minimum days before computing skill weights
 
 
 def _load_data() -> dict:
@@ -162,7 +169,10 @@ def get_bias_corrections() -> dict:
 
 
 def get_verification_summary() -> dict:
-    """Get a summary of forecast accuracy by source and metric."""
+    """Get a summary of forecast accuracy by source and metric.
+
+    Includes MAE, RMSE, mean bias, and Brier score (for precip_pct).
+    """
     data = _load_data()
     scores = data.get("daily_scores", [])
 
@@ -174,9 +184,13 @@ def get_verification_summary() -> dict:
     for s in scores:
         key = (s["source"], s["metric"])
         if key not in groups:
-            groups[key] = {"errors": [], "abs_errors": []}
+            groups[key] = {"errors": [], "abs_errors": [], "predicted": [],
+                           "actual": [], "lead_hours": []}
         groups[key]["errors"].append(s["error"])
         groups[key]["abs_errors"].append(s["abs_error"])
+        groups[key]["predicted"].append(s.get("predicted", 0))
+        groups[key]["actual"].append(s.get("actual", 0))
+        groups[key]["lead_hours"].append(s.get("lead_hours", 0))
 
     summary = {"days": len(dates), "sources": {}}
     for (source, metric), g in groups.items():
@@ -185,13 +199,209 @@ def get_verification_summary() -> dict:
         n = len(g["errors"])
         mean_error = sum(g["errors"]) / n
         mae = sum(g["abs_errors"]) / n
-        summary["sources"][source][metric] = {
+        rmse = math.sqrt(sum(e ** 2 for e in g["errors"]) / n)
+
+        entry = {
             "n": n,
             "mean_bias": round(mean_error, 2),
             "mae": round(mae, 2),
+            "rmse": round(rmse, 2),
         }
 
+        # Brier score for precipitation probability
+        if metric == "precip_pct":
+            brier = _brier_score(g["predicted"], g["actual"])
+            if brier is not None:
+                entry["brier_score"] = round(brier, 4)
+
+        # Skill by lead time buckets
+        lead_buckets = _group_by_lead_time(g["abs_errors"], g["lead_hours"])
+        if lead_buckets:
+            entry["mae_by_lead"] = lead_buckets
+
+        summary["sources"][source][metric] = entry
+
     return summary
+
+
+def _brier_score(predicted_pcts: list, actuals: list) -> float | None:
+    """Compute Brier score for probability forecasts.
+
+    Brier = (1/N) * sum((p_i - o_i)^2) where p_i is predicted probability
+    (0-1) and o_i is binary outcome (0 or 1).
+    Perfect score = 0, worst = 1.
+    """
+    pairs = [(p, a) for p, a in zip(predicted_pcts, actuals)
+             if p is not None and a is not None]
+    if len(pairs) < 5:
+        return None
+    total = 0.0
+    for p_pct, actual in pairs:
+        p = max(0, min(100, p_pct)) / 100.0  # Convert % to probability
+        o = 1.0 if actual > 0 else 0.0
+        total += (p - o) ** 2
+    return total / len(pairs)
+
+
+def _group_by_lead_time(abs_errors: list, lead_hours: list) -> dict:
+    """Group MAE by lead time buckets: 0-24h, 24-48h, 48-72h, 72h+."""
+    buckets = {"0-24h": [], "24-48h": [], "48-72h": [], "72h+": []}
+    for err, lead in zip(abs_errors, lead_hours):
+        if lead < 24:
+            buckets["0-24h"].append(err)
+        elif lead < 48:
+            buckets["24-48h"].append(err)
+        elif lead < 72:
+            buckets["48-72h"].append(err)
+        else:
+            buckets["72h+"].append(err)
+    result = {}
+    for k, v in buckets.items():
+        if v:
+            result[k] = round(sum(v) / len(v), 2)
+    return result
+
+
+def get_model_weights(metric: str = "temp_high_f") -> dict:
+    """Compute skill-based weights for multi-model blending.
+
+    Uses inverse MAE weighting with exponential recency decay:
+    recent verification days get more weight than older ones.
+    This allows the system to adapt to seasonal model skill changes
+    (e.g., ECMWF often gains skill in spring vs winter).
+
+    Half-life: 14 days (error from 14 days ago has half the weight
+    of today's error).
+
+    Returns dict like {"GFS": 0.30, "ECMWF": 0.35, "ICON": 0.20, "NBM": 0.15}
+    with weights summing to 1.0.
+    """
+    data = _load_data()
+    scores = data.get("daily_scores", [])
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    half_life_days = 14.0
+
+    # Group by source for the specified metric, with recency weighting
+    source_weighted_errors = {}  # src -> (weighted_sum_errors, weighted_count)
+    for s in scores:
+        if s["metric"] != metric:
+            continue
+        src = s["source"].upper()
+        if src not in source_weighted_errors:
+            source_weighted_errors[src] = [0.0, 0.0]
+
+        # Compute age-based weight
+        try:
+            age_days = (datetime.fromisoformat(today) -
+                        datetime.fromisoformat(s["date"])).days
+        except (ValueError, TypeError):
+            age_days = 30  # fallback
+        decay_weight = 2.0 ** (-age_days / half_life_days)
+
+        source_weighted_errors[src][0] += s["abs_error"] * decay_weight
+        source_weighted_errors[src][1] += decay_weight
+
+    # Need minimum effective samples for each source
+    valid_sources = {}
+    for src, (w_sum, w_count) in source_weighted_errors.items():
+        if w_count >= MIN_DAYS_FOR_WEIGHTS * 0.5:  # Effective sample count
+            valid_sources[src] = w_sum / w_count  # Weighted MAE
+
+    if len(valid_sources) < 2:
+        return _default_weights()
+
+    # Inverse MAE weighting: w_i = (1/MAE_i) / sum(1/MAE_j)
+    eps = 0.01
+    inv_mae = {src: 1.0 / (mae + eps) for src, mae in valid_sources.items()}
+    total = sum(inv_mae.values())
+    weights = {src: round(w / total, 3) for src, w in inv_mae.items()}
+
+    return weights
+
+
+def _default_weights() -> dict:
+    """Default model weights when verification data is insufficient.
+
+    Based on published model skill assessments:
+    - ECMWF: Generally highest skill globally
+    - NBM: NWS bias-corrected blend, strong for US locations
+    - GFS: Good general skill, US-optimized
+    - ICON: European model, good independent check
+    """
+    return {"ECMWF": 0.30, "GFS": 0.30, "NBM": 0.25, "ICON": 0.15}
+
+
+def get_pop_calibration() -> dict:
+    """Get precipitation probability calibration data.
+
+    Returns observed frequency of rain for each predicted probability bin.
+    Used for reliability assessment and Platt-style recalibration.
+    Bins: 0-10%, 10-20%, ..., 90-100%.
+    """
+    data = _load_data()
+    scores = data.get("daily_scores", [])
+
+    bins = {f"{i*10}-{(i+1)*10}%": {"count": 0, "rained": 0}
+            for i in range(10)}
+
+    for s in scores:
+        if s["metric"] != "precip_pct":
+            continue
+        # Find matching actual for this date
+        actual_rain = None
+        for a in data.get("actuals", []):
+            if a["metric"] == "did_rain" and a["date"] == s["date"]:
+                actual_rain = a["value"]
+                break
+        if actual_rain is None:
+            continue
+
+        predicted_pct = max(0, min(99, s["predicted"]))
+        bin_idx = min(int(predicted_pct / 10), 9)
+        bin_key = f"{bin_idx*10}-{(bin_idx+1)*10}%"
+        bins[bin_key]["count"] += 1
+        if actual_rain > 0:
+            bins[bin_key]["rained"] += 1
+
+    # Compute observed frequency per bin
+    result = {}
+    for k, v in bins.items():
+        if v["count"] >= 3:
+            result[k] = {
+                "n": v["count"],
+                "observed_freq": round(v["rained"] / v["count"], 3),
+            }
+
+    return result
+
+
+def recalibrate_pop(raw_pop_pct: float) -> float:
+    """Recalibrate precipitation probability using reliability data.
+
+    If sufficient verification data exists, adjusts raw model PoP
+    toward observed frequency (Platt-style isotonic recalibration).
+    Otherwise returns raw value unchanged.
+
+    Example: If models say "60%" but it only rained 45% of the time
+    when they said 60%, this adjusts toward 45%.
+    """
+    cal_data = get_pop_calibration()
+    if not cal_data or len(cal_data) < 3:
+        return raw_pop_pct  # Insufficient data for recalibration
+
+    # Find the bin for this prediction
+    bin_idx = min(int(max(0, raw_pop_pct) / 10), 9)
+    bin_key = f"{bin_idx*10}-{(bin_idx+1)*10}%"
+
+    if bin_key in cal_data and cal_data[bin_key]["n"] >= 5:
+        observed = cal_data[bin_key]["observed_freq"]
+        raw_frac = raw_pop_pct / 100.0
+        # Blend: 60% observed calibration, 40% raw (don't over-correct)
+        calibrated = observed * 0.6 + raw_frac * 0.4
+        return round(calibrated * 100, 1)
+
+    return raw_pop_pct
 
 
 def log_daily_verification(home_obs: dict, home_fc: dict, analysis: dict):
@@ -254,14 +464,35 @@ def log_daily_verification(home_obs: dict, home_fc: dict, analysis: dict):
     if tomorrow_pops:
         log_forecast("nws", "precip_pct", max(tomorrow_pops), tomorrow, lead_hours=24)
 
-    # Log Open-Meteo model forecasts for tomorrow
+    # Log Open-Meteo model forecasts for tomorrow from model spread data
     resorts = analysis.get("resorts", {})
     heavenly = resorts.get("Heavenly", {})
     peak = heavenly.get("zones", {}).get("peak", {})
+
+    # Log per-model temperature forecasts for skill tracking
+    model_spread = peak.get("model_spread", [])
+    for day_data in model_spread:
+        if day_data.get("date") != tomorrow:
+            continue
+        models = day_data.get("models", {})
+        for model_name, model_data in models.items():
+            temp = model_data.get("temp_high_f")
+            if temp is not None:
+                log_forecast(model_name.lower(), "temp_high_f", temp,
+                             tomorrow, lead_hours=24)
+            snow = model_data.get("snow_in")
+            if snow is not None:
+                log_forecast(model_name.lower(), "snow_in", snow,
+                             tomorrow, lead_hours=24)
+        break
+
+    # Also log blended forecast for tracking blend accuracy
     buckets = peak.get("day_night_buckets", [])
     for b in buckets:
         if b["date"] == tomorrow and b["period"] == "Day":
-            log_forecast("gfs", "temp_high_f", b["temp_high_f"], tomorrow, lead_hours=24)
+            if b.get("temp_high_f") is not None:
+                log_forecast("blend", "temp_high_f", b["temp_high_f"],
+                             tomorrow, lead_hours=24)
 
 
 def _trim(data: dict):

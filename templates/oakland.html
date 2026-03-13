@@ -6,30 +6,14 @@
 {% include "base.css" %}
 
 /* Oakland scene — Figma v2 */
-
-/* Override header for gradient style */
-.scene > .header {
-    height: 48px;
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    padding: 0 16px;
-}
-.scene > .header .location {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 1px;
-}
-.scene > .header .timestamp {
-    color: rgba(255,255,255,0.7);
-    font-size: 12px;
-    font-weight: 500;
-}
+/* Header and bottom bar use shared styles from base.css */
 
 /* Content area */
 .content {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+    background: #ffffff;
     min-height: 0;
     overflow: hidden;
 }
@@ -254,19 +238,7 @@
     line-height: 1.2;
 }
 
-/* Bottom bar */
-.bottom-bar {
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    padding: 0 16px;
-    font-size: 10px;
-    display: flex;
-    justify-content: space-between;
-    flex-shrink: 0;
-    height: 32px;
-    align-items: center;
-}
-.bottom-bar .legend { color: rgba(255,255,255,0.7); font-weight: 500; }
-.bottom-bar .active { color: rgba(255,255,255,0.9); font-weight: 600; }
+/* Bottom bar uses shared styles from base.css */
 </style>
 </head>
 <body>
@@ -281,10 +253,10 @@
     <div class="content">
         <!-- NWS Alerts -->
         {% if alerts %}
-        <div style="background:#fef3c7; padding:4px 16px; display:flex; align-items:center; gap:8px; font-size:11px; flex-shrink:0;">
-            <span style="color:#92400e; font-weight:700;">&#9888;</span>
-            <span style="color:#92400e; font-weight:600;">{{ alerts[0].event }}</span>
-            {% if alerts|length > 1 %}<span style="color:#b45309;">+{{ alerts|length - 1 }} more</span>{% endif %}
+        <div class="alert-banner">
+            <span class="alert-icon">&#9888;</span>
+            <span class="alert-text">{{ alerts[0].event }}</span>
+            {% if alerts|length > 1 %}<span class="alert-more">+{{ alerts|length - 1 }} more</span>{% endif %}
         </div>
         {% endif %}
 

@@ -61,8 +61,10 @@ def load_config() -> dict:
         with open(CONFIG_FILE) as f:
             return json.load(f)
     # Create default
-    with open(CONFIG_FILE, "w") as f:
+    tmp = str(CONFIG_FILE) + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(DEFAULT_CONFIG, f, indent=2)
+    os.replace(tmp, CONFIG_FILE)
     print(f"Created default config at {CONFIG_FILE}")
     return DEFAULT_CONFIG
 
@@ -78,8 +80,10 @@ def load_state() -> dict:
 
 
 def save_state(state: dict):
-    with open(STATE_FILE, "w") as f:
+    tmp = str(STATE_FILE) + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
+    os.replace(tmp, STATE_FILE)
 
 
 def log(msg: str):

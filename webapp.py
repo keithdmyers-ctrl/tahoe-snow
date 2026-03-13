@@ -77,16 +77,24 @@ def get_analysis(force: bool = False) -> dict:
         chains = fetch_caltrans_chains()
         lifts = fetch_all_lift_status()
 
-        analysis = analyze_all(obs, nws, om, snotel, afd, avy, {})
+        # Pass all data sources to analyze_all for full pipeline integration:
+        # NWS grids, sounding, ensemble, and Synoptic stations
+        analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
+                               nws_grids=nws_grids if "error" not in nws_grids else None,
+                               sounding=sounding if "error" not in sounding else None,
+                               ensemble=ensemble if ensemble.get("models") else None,
+                               synoptic=synoptic if "error" not in synoptic else None)
 
         # Attach extra data to analysis for the web UI
         analysis["nbm"] = tahoe_nbm if "error" not in tahoe_nbm else None
         analysis["nws_grids"] = nws_grids if "error" not in nws_grids else None
         analysis["cssl"] = cssl if "error" not in cssl else None
         analysis["alerts"] = tahoe_alerts or []
-        analysis["sounding"] = sounding if "error" not in sounding else None
+        if not analysis.get("sounding"):
+            analysis["sounding"] = sounding if "error" not in sounding else None
         analysis["normals"] = normals if "error" not in normals else None
-        analysis["ensemble"] = ensemble if ensemble.get("models") else None
+        if not analysis.get("ensemble"):
+            analysis["ensemble"] = ensemble if ensemble.get("models") else None
         analysis["synoptic"] = synoptic if "error" not in synoptic else None
         analysis["storm"] = storm
         analysis["chains"] = chains
@@ -98,10 +106,12 @@ def get_analysis(force: bool = False) -> dict:
             _cache["loading"] = False
         return analysis
     except Exception as e:
+        import logging
+        logging.exception("Error fetching weather data")
         with _lock:
             _cache["loading"] = False
             cached = _cache["data"]
-        return cached or {"error": str(e)}
+        return cached or {"error": "Weather data is temporarily unavailable. Please try refreshing in a few minutes."}
 
 
 # ---------------------------------------------------------------------------
