@@ -432,17 +432,12 @@ def log_daily_verification(home_obs: dict, home_fc: dict, analysis: dict):
                 else:
                     log_actual("temp_low_f", temp, today)
 
-    # Did it rain today? Check hourly for actuals
-    hourly = home_fc.get("hourly", []) if home_fc else []
+    # Did it rain today? Use current observations (actual), not forecast text
     rain_today = 0
-    for h in hourly:
-        start = h.get("startTime", "")[:10]
-        if start != today:
-            continue
-        short = h.get("shortForecast", "").lower()
-        if any(k in short for k in ("rain", "shower", "drizzle", "thunder")):
+    if home_obs:
+        conditions = (home_obs.get("conditions") or "").lower()
+        if any(k in conditions for k in ("rain", "shower", "drizzle", "thunder")):
             rain_today = 1
-            break
     log_actual("did_rain", rain_today, today)
 
     # --- Log forecasts for tomorrow ---

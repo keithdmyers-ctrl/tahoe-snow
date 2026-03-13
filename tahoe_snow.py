@@ -774,7 +774,7 @@ def fetch_synoptic_stations(lat: float, lon: float, radius_miles: int = 30) -> d
 
         return {"stations": stations, "count": len(stations)}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"Synoptic API error: {type(e).__name__}"}
 
 
 def fetch_cssl_snow() -> dict:
@@ -1817,11 +1817,17 @@ def calibrated_confidence(model_spread: list, ensemble: dict | None = None) -> l
                     if date not in ensemble_daily:
                         ensemble_daily[date] = day
                     else:
-                        # Merge: take wider spread
+                        # Merge: take wider spread (min for low percentiles, max for high)
                         existing = ensemble_daily[date]
-                        for k in ("snow_p10", "snow_p25", "snow_p50", "snow_p75", "snow_p90"):
+                        for k in ("snow_p10", "snow_p25"):
                             if k in day:
-                                existing[k] = existing.get(k, day[k])
+                                existing[k] = min(existing.get(k, day[k]), day[k])
+                        for k in ("snow_p50",):
+                            if k in day:
+                                existing[k] = (existing.get(k, day[k]) + day[k]) / 2
+                        for k in ("snow_p75", "snow_p90"):
+                            if k in day:
+                                existing[k] = max(existing.get(k, day[k]), day[k])
 
     for day in model_spread:
         date = day["date"]
@@ -2081,26 +2087,18 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 primary = blended if blended else p["models"].get("GFS", [])
 
                 # Apply bias corrections to blended forecast
-                # Corrects temperature and snowfall using accumulated verification data
+                # Only snowfall (multiplicative). Temp bias is daily-level, not per-hour.
                 if bias_corrections and primary:
-                    # Use blended source corrections, or fall back to any available
                     corr = (bias_corrections.get("blend")
                             or bias_corrections.get("gfs")
                             or next(iter(bias_corrections.values()), {}))
-                    for h in primary:
-                        if "temp_high_f" in corr and h.get("temp_f") is not None:
-                            h["temp_f"] = round(h["temp_f"] + corr["temp_high_f"], 1)
-                        if "temp_current_f" in corr and h.get("temp_c") is not None:
-                            h["temp_c"] = round(h["temp_c"] + corr["temp_current_f"] * 5/9, 1)
-                        # Snowfall bias: multiplicative correction (additive doesn't
-                        # work for precip — can't add negative snow)
-                        if "snow_in" in corr and h.get("snowfall_in", 0) > 0:
-                            # Convert additive bias to multiplicative factor
-                            # If models over-predict by 2": factor = 1 - 2/avg_snow
-                            snow_corr = corr["snow_in"]
-                            if abs(snow_corr) > 0.1:
-                                factor = max(0.5, min(1.5, 1.0 - snow_corr / 10.0))
-                                h["snowfall_in"] = round(h["snowfall_in"] * factor, 1)
+                    if "snow_in" in corr:
+                        snow_corr = corr["snow_in"]
+                        if abs(snow_corr) > 0.1:
+                            factor = max(0.5, min(1.5, 1.0 - snow_corr / 10.0))
+                            for h in primary:
+                                if h.get("snowfall_in", 0) > 0:
+                                    h["snowfall_in"] = round(h["snowfall_in"] * factor, 1)
 
                 # Current zone snapshot (first available hour)
                 snap = primary[0] if primary else {}

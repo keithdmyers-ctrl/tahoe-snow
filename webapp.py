@@ -131,6 +131,10 @@ def api_data():
 
 @app.route("/api/refresh")
 def api_refresh():
+    with _lock:
+        age = time.time() - _cache["timestamp"]
+    if age < 60:
+        return jsonify({"status": "throttled", "retry_after": round(60 - age)}), 429
     data = get_analysis(force=True)
     return jsonify({"status": "ok", "generated": data.get("generated", "")})
 
