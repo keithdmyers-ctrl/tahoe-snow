@@ -809,8 +809,8 @@ class TestAqiCategory(TestCase):
         self.assertEqual(aqi_category(100), "Moderate")
 
     def test_unhealthy_for_sensitive(self):
-        self.assertEqual(aqi_category(101), "Unhealthy for Sensitive")
-        self.assertEqual(aqi_category(150), "Unhealthy for Sensitive")
+        self.assertEqual(aqi_category(101), "Unhealthy for Sensitive Groups")
+        self.assertEqual(aqi_category(150), "Unhealthy for Sensitive Groups")
 
     def test_unhealthy(self):
         self.assertEqual(aqi_category(151), "Unhealthy")
@@ -831,8 +831,8 @@ class TestAqiCategory(TestCase):
         """Test exact boundary values."""
         boundaries = [
             (50, "Good"), (51, "Moderate"),
-            (100, "Moderate"), (101, "Unhealthy for Sensitive"),
-            (150, "Unhealthy for Sensitive"), (151, "Unhealthy"),
+            (100, "Moderate"), (101, "Unhealthy for Sensitive Groups"),
+            (150, "Unhealthy for Sensitive Groups"), (151, "Unhealthy"),
             (200, "Unhealthy"), (201, "Very Unhealthy"),
             (300, "Very Unhealthy"), (301, "Hazardous"),
         ]
@@ -925,7 +925,7 @@ class TestFetchAirQuality(TestCase):
             self.assertIn("hourly_aqi", result)
             self.assertIsInstance(result["aqi"], (int, float))
             self.assertIn(result["category"],
-                          ["Good", "Moderate", "Unhealthy for Sensitive",
+                          ["Good", "Moderate", "Unhealthy for Sensitive Groups",
                            "Unhealthy", "Very Unhealthy", "Hazardous"])
 
     def test_fetch_aqi_range(self):

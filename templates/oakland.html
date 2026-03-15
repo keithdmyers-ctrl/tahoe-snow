@@ -238,6 +238,19 @@
     line-height: 1.2;
 }
 
+/* AQI / UV compact row */
+.env-row {
+    padding-top: 0;
+    font-size: 12px;
+    gap: 16px;
+}
+.env-item {
+    font-weight: 600;
+}
+.env-good { color: #090; }
+.env-moderate { color: #c60; }
+.env-danger { color: #c00; }
+
 /* Bottom bar uses shared styles from base.css */
 </style>
 </head>
@@ -298,12 +311,12 @@
 
         <!-- AQI + UV compact indicator -->
         {% if aqi is not none or uv_index is not none %}
-        <div class="conditions-row" style="padding-top: 0; font-size: 12px; gap: 16px;">
+        <div class="conditions-row env-row">
             {% if aqi is not none %}
-            <span class="nws-ref" style="font-weight: 600; color: {% if aqi <= 50 %}#090{% elif aqi <= 100 %}#c60{% elif aqi <= 150 %}#c60{% else %}#c00{% endif %};">AQI {{ aqi }} {{ aqi_category }}</span>
+            <span class="env-item {% if aqi <= 50 %}env-good{% elif aqi <= 150 %}env-moderate{% else %}env-danger{% endif %}">AQI {{ aqi }} {{ aqi_category }}</span>
             {% endif %}
             {% if uv_index is not none %}
-            <span class="nws-ref" style="font-weight: 600; color: {% if uv_index <= 2 %}#090{% elif uv_index <= 5 %}#c60{% elif uv_index <= 7 %}#c60{% else %}#c00{% endif %};">UV {{ uv_index }} {{ uv_info.level }}</span>
+            <span class="env-item {% if uv_index <= 2 %}env-good{% elif uv_index <= 7 %}env-moderate{% else %}env-danger{% endif %}">UV {{ uv_index }} {{ uv_info.level }}</span>
             {% endif %}
         </div>
         {% endif %}

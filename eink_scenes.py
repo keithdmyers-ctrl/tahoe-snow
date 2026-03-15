@@ -416,8 +416,8 @@ def build_heavenly_context(cache) -> dict:
         if b.get("temp_low_f") is not None:
             if daily[d]["lo"] is None or b["temp_low_f"] < daily[d]["lo"]:
                 daily[d]["lo"] = b["temp_low_f"]
-        cond = b.get("conditions", "")
-        if cond and cond not in daily[d]["conditions"]:
+        cond = b.get("precip_type", "None")
+        if cond and cond != "None" and cond not in daily[d]["conditions"]:
             daily[d]["conditions"].append(cond)
 
     snow_days = []

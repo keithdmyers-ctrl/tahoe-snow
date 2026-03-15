@@ -694,7 +694,7 @@ def fetch_air_quality(lat: float, lon: float) -> dict:
             elif aqi <= 100:
                 category = "Moderate"
             elif aqi <= 150:
-                category = "Unhealthy for Sensitive"
+                category = "Unhealthy for Sensitive Groups"
             elif aqi <= 200:
                 category = "Unhealthy"
             elif aqi <= 300:
@@ -744,7 +744,7 @@ def aqi_category(aqi_val):
     elif aqi <= 100:
         return "Moderate"
     elif aqi <= 150:
-        return "Unhealthy for Sensitive"
+        return "Unhealthy for Sensitive Groups"
     elif aqi <= 200:
         return "Unhealthy"
     elif aqi <= 300:

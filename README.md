@@ -18,7 +18,7 @@ Multi-source weather forecasting for Oakland local weather and Lake Tahoe ski re
 - **Multi-model comparison**: Side-by-side GFS, ECMWF, ICON forecasts with confidence ratings
 - **Local weather**: Barometric pressure rain prediction, indoor/outdoor sensors via ESP32
 - **Forecast verification**: Automatic bias tracking and correction
-- **Ski conditions**: Heavenly, Northstar, Kirkwood — per-zone forecasts (base/mid/peak)
+- **Ski conditions**: Heavenly, Northstar, Kirkwood, Palisades Tahoe, Sugar Bowl — per-zone forecasts (base/mid/peak)
 
 ## Quick Start
 

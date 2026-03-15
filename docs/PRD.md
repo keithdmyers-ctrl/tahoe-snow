@@ -188,8 +188,11 @@ Each user segment must rate the tool **4.5/5 or higher** on their core use case.
 | Northstar | Base (6330'), Mid (7600'), Peak (8610') | 2280 ft vertical | North shore, protected terrain |
 | Kirkwood | Base (7800'), Mid (8800'), Peak (9800') | 2000 ft vertical | Highest base in Tahoe, best storm snow |
 
+| Palisades Tahoe | Base (6200'), Mid (7800'), Peak (9050') | 2850 ft vertical | Largest skiable terrain in Tahoe |
+| Sugar Bowl | Base (6883'), Mid (7500'), Peak (8383') | 1500 ft vertical | I-80 corridor, excellent storm snow |
+
 ### Planned (Tier 6 provisions, enabled=False)
-Palisades Tahoe, Sugar Bowl, Sierra-at-Tahoe, Boreal, Mt. Rose
+Sierra-at-Tahoe, Boreal, Mt. Rose
 
 ---
 

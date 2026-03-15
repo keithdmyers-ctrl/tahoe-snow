@@ -1115,10 +1115,13 @@ table.data-table tr:hover td { background: var(--card-hover); }
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   color: var(--text-dim);
   font-size: 10px;
-  padding: 6px 12px;
+  padding: 8px 12px;
+  min-height: 50px;
+  min-width: 48px;
   cursor: pointer;
   text-decoration: none;
   border: none;
@@ -1128,6 +1131,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 }
 .bottom-nav-item.active,
 .bottom-nav-item:hover { color: var(--accent); }
+.bottom-nav-item:active { opacity: 0.7; }
 .bottom-nav-icon { font-size: 20px; }
 
 /* -- Pull-to-refresh indicator -- */
@@ -1140,9 +1144,22 @@ table.data-table tr:hover td { background: var(--card-hover); }
   background: var(--accent);
   transform: scaleX(0);
   transform-origin: left;
-  transition: transform 0.2s;
+  transition: transform 0.15s ease-out;
   z-index: 2000;
   pointer-events: none;
+}
+.pull-indicator.pulling {
+  transition: none;
+}
+.pull-indicator.refreshing {
+  transform: scaleX(1) !important;
+  animation: pull-progress 1.5s ease-in-out infinite;
+}
+@keyframes pull-progress {
+  0% { transform: scaleX(0.3); transform-origin: left; }
+  50% { transform: scaleX(1); transform-origin: left; }
+  51% { transform-origin: right; }
+  100% { transform: scaleX(0.3); transform-origin: right; }
 }
 
 /* -- Leaflet map overrides (dark theme) -- */
@@ -1175,6 +1192,67 @@ table.data-table tr:hover td { background: var(--card-hover); }
 #tahoe-map .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
 #tahoe-map .leaflet-popup-content b { color: var(--snow); }
 .resort-marker, .snotel-marker, .chain-marker { background: transparent !important; border: none !important; }
+
+/* -- Map container -- */
+.map-container {
+  height: 350px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+@media (max-width: 500px) { .map-container { height: 260px; } }
+@media (max-width: 360px) { .map-container { height: 220px; } }
+
+/* -- Map marker labels (avoid inline styles in JS) -- */
+.marker-resort {
+  background: #1e3a5f;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 2px solid var(--accent);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+.marker-resort.snow-active { border-color: var(--snow); }
+.marker-resort.snow-hot { border-color: var(--safe); }
+.marker-snotel {
+  background: #0a1929;
+  color: var(--snow);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  border: 1px solid rgba(126,200,227,0.27);
+  white-space: nowrap;
+}
+.marker-chain {
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+.marker-chain.chain-warn { background: var(--moderate); }
+.marker-chain.chain-danger { background: #c00; }
+.marker-chain.chain-info { background: #555; }
+
+/* -- Toggle arrow state classes -- */
+.toggle--open { transform: rotate(180deg); }
+
+/* -- Footer bottom-nav clearance -- */
+@media (max-width: 768px) {
+  .footer { padding-bottom: calc(70px + env(safe-area-inset-bottom, 8px)); }
+}
+@media (display-mode: standalone) {
+  .footer { padding-bottom: calc(70px + env(safe-area-inset-bottom, 8px)); }
+}
+
+/* -- AQI/UV accessible badges -- */
+.env-badge[role="status"] { position: relative; }
 </style>
 </head>
 <body>
@@ -1221,8 +1299,8 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div id="narrative-section"></div>
   <div class="summary-banner" id="summary"></div>
 
-  <div id="map-section" class="section" style="margin-bottom:16px">
-    <div id="tahoe-map" style="height:350px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border)"></div>
+  <div id="map-section" class="section mb-4">
+    <div id="tahoe-map" class="map-container"></div>
   </div>
 
   <div id="storm-section"></div>
@@ -1305,8 +1383,8 @@ table.data-table tr:hover td { background: var(--card-hover); }
 <script>
 let DATA = null;
 let charts = {};
-const RESORT_NAMES = ['Heavenly', 'Northstar', 'Kirkwood'];
-const RESORT_COLORS = { Heavenly: '#ff4757', Northstar: '#2ed573', Kirkwood: '#4a9eff' };
+let RESORT_NAMES = ['Heavenly', 'Northstar', 'Kirkwood']; // updated dynamically from API data
+const RESORT_COLORS = { Heavenly: '#ff4757', Northstar: '#2ed573', Kirkwood: '#4a9eff', 'Palisades Tahoe': '#a55eea', 'Sugar Bowl': '#ffa502', 'Sierra-at-Tahoe': '#ff6b81', Boreal: '#45aaf2', 'Mt. Rose': '#26de81' };
 
 // Shared chart config
 const CHART_TOOLTIP = { backgroundColor: '#1a2634ee', titleColor: '#e0e8f0', bodyColor: '#e0e8f0', borderColor: '#2a3a4a', borderWidth: 1 };
@@ -1342,6 +1420,10 @@ async function loadData() {
       return;
     }
     _loadRetries = 0;
+    // Dynamically update resort list from API data
+    if (DATA.resorts) {
+      RESORT_NAMES = Object.keys(DATA.resorts);
+    }
     render();
     const overlay = document.getElementById('loading');
     overlay.classList.add('hidden');
@@ -1403,7 +1485,7 @@ function toggleSection(el) {
     const clearMax = (e) => { if (e.propertyName === 'max-height') { body.style.maxHeight = ''; body.removeEventListener('transitionend', clearMax); } };
     body.addEventListener('transitionend', clearMax);
   }
-  tog.style.transform = collapsing ? 'rotate(0deg)' : 'rotate(180deg)';
+  tog.classList.toggle('toggle--open', !collapsing);
   el.setAttribute('aria-expanded', collapsing ? 'false' : 'true');
 }
 
@@ -1468,10 +1550,11 @@ function renderMap() {
     const snow24 = data.zones?.peak?.snow_24h || 0;
     const lifts = DATA.lifts?.[name.toLowerCase().replace(/[^a-z]/g, '-')] || DATA.lifts?.[name.toLowerCase()] || {};
 
-    const snowColor = snow24 > 6 ? '#2ed573' : snow24 > 0 ? '#7ec8e3' : '#4a9eff';
+    const snowCls = snow24 > 6 ? 'snow-hot' : snow24 > 0 ? 'snow-active' : '';
+    const displayName = snow24 > 0 ? snow24.toFixed(0) + '"' : (name.length > 8 ? name.slice(0, 7) + '\u2026' : name);
     const icon = L.divIcon({
       className: 'resort-marker',
-      html: `<div style="background:#1e3a5f;color:white;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;border:2px solid ${snowColor};box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer">${snow24 > 0 ? snow24.toFixed(0) + '"' : name.length > 8 ? name.slice(0,6) + '..' : name}</div>`,
+      html: `<div class="marker-resort ${snowCls}">${displayName}</div>`,
       iconSize: null,
     });
 
@@ -1493,7 +1576,7 @@ function renderMap() {
       const depth = stn.snow_depth_in || 0;
       const icon = L.divIcon({
         className: 'snotel-marker',
-        html: `<div style="background:#0a1929;color:#7ec8e3;padding:2px 5px;border-radius:4px;font-size:9px;border:1px solid rgba(126,200,227,0.27);white-space:nowrap">${depth > 0 ? depth + '"' : '--'}</div>`,
+        html: `<div class="marker-snotel">${depth > 0 ? depth + '"' : '--'}</div>`,
         iconSize: null,
       });
       L.marker([stn.lat, stn.lon], {icon}).addTo(map)
@@ -1508,12 +1591,12 @@ function renderMap() {
       const isI80 = routeName.includes('80');
       const chainCoords = isI80 ? [39.32, -120.33] : [38.81, -120.03];
       const level = chain.level || chain.status || 'R?';
-      const bgColor = (level.includes('R2') || level.includes('R3') || level.includes('closed')) ? '#c00' :
-                       (level.includes('R1') || level.includes('chain')) ? '#c60' : '#555';
+      const chainCls = (level.includes('R2') || level.includes('R3') || level.includes('closed')) ? 'chain-danger' :
+                       (level.includes('R1') || level.includes('chain')) ? 'chain-warn' : 'chain-info';
       L.marker(chainCoords, {
         icon: L.divIcon({
           className: 'chain-marker',
-          html: `<div style="background:${bgColor};color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.4)">${esc(level)}</div>`,
+          html: `<div class="marker-chain ${chainCls}">${esc(level)}</div>`,
           iconSize: null,
         })
       }).addTo(map).bindPopup(`<b>${esc(routeName || 'Chain Control')}</b><br>${esc(chain.status || chain.details || '')}`);
@@ -1595,7 +1678,7 @@ function aqiBadgeClass(aqi) {
 function aqiCategoryName(aqi) {
   if (aqi <= 50) return 'Good';
   if (aqi <= 100) return 'Moderate';
-  if (aqi <= 150) return 'Unhealthy for Sensitive';
+  if (aqi <= 150) return 'Unhealthy for Sensitive Groups';
   if (aqi <= 200) return 'Unhealthy';
   if (aqi <= 300) return 'Very Unhealthy';
   return 'Hazardous';
@@ -1638,7 +1721,7 @@ function renderAqiUv() {
     const cls = aqiBadgeClass(aqi);
     const cat = esc(aq.category || aqiCategoryName(aqi));
     const pm = aq.pm2_5 != null ? ` \u00B7 PM2.5: ${aq.pm2_5}` : '';
-    html += `<div class="env-badge ${cls}">
+    html += `<div class="env-badge ${cls}" role="status" aria-label="Air Quality Index ${aqi}, ${cat}">
       <span class="env-label">AQI</span>
       <span class="env-val">${aqi}</span>
       <span>${cat}${pm}</span>
@@ -1649,7 +1732,7 @@ function renderAqiUv() {
     const cls = uvBadgeClass(uvMax);
     const level = uvLevelName(uvMax);
     const prot = uvProtection(uvMax);
-    html += `<div class="env-badge ${cls}">
+    html += `<div class="env-badge ${cls}" role="status" aria-label="UV Index ${uvMax}, ${level}. ${prot}">
       <span class="env-label">UV</span>
       <span class="env-val">${uvMax}</span>
       <span>${level} \u2014 ${prot}</span>
@@ -1914,16 +1997,13 @@ function renderRWIS() {
 function renderLifts() {
   const lifts = DATA.lifts;
   if (!lifts) { document.getElementById('lifts-section').innerHTML = ''; return; }
-  const resorts = ['heavenly', 'northstar', 'kirkwood'];
-  const names = { heavenly: 'Heavenly', northstar: 'Northstar', kirkwood: 'Kirkwood' };
   let items = [];
-  for (const r of resorts) {
-    const d = lifts[r];
+  for (const [r, d] of Object.entries(lifts)) {
     if (!d || d.error) continue;
     const pct = d.total > 0 ? Math.round(d.open / d.total * 100) : 0;
     const colorCls = pct > 75 ? 'safe' : pct > 25 ? 'moderate' : 'danger';
     items.push(`<div class="lift-item">
-      <span class="lift-resort">${names[r]}</span>
+      <span class="lift-resort">${esc(r.charAt(0).toUpperCase() + r.slice(1))}</span>
       <span class="lift-count color-${colorCls}">${d.open}/${d.total}</span>
       <span class="lift-label">lifts open</span>
       ${d.hold > 0 ? `<span class="lift-hold">(${d.hold} on hold)</span>` : ''}
@@ -2065,7 +2145,7 @@ function buildResortPanel(rn) {
   html += `
   <div class="section">
     <button class="section-header" aria-expanded="true">
-      48-Hour Forecast &mdash; ${rn} Peak <span class="toggle" style="transform:rotate(180deg)">&#9662;</span>
+      48-Hour Forecast &mdash; ${rn} Peak <span class="toggle toggle--open">&#9662;</span>
     </button>
     <div class="section-body">
       <div class="chart-container"><canvas id="chart-hourly-${rn}"></canvas></div>
@@ -2314,7 +2394,7 @@ function renderComparison() {
 
   html += `<div class="section mt-4">
     <button class="section-header" aria-expanded="true">
-      7-Day Forecast &mdash; All Resorts (Peak) <span class="toggle" style="transform:rotate(180deg)">&#9662;</span>
+      7-Day Forecast &mdash; All Resorts (Peak) <span class="toggle toggle--open">&#9662;</span>
     </button>
     <div class="section-body"><div class="chart-container chart-container--extra"><canvas id="chart-compare-all"></canvas></div></div>
   </div>`;
@@ -3222,6 +3302,13 @@ document.addEventListener('click', function(e) {
     return;
   }
 
+  // Bottom nav scroll-to-section
+  const navItem = e.target.closest('.bottom-nav-item[data-scroll-target]');
+  if (navItem) {
+    scrollToSection(navItem.dataset.scrollTarget);
+    return;
+  }
+
   // Retry buttons (dynamically generated in error states)
   const actionBtn = e.target.closest('[data-action]');
   if (actionBtn) {
@@ -3253,35 +3340,67 @@ function scrollToSection(id) {
   });
 }
 
-// --- PWA: Pull-to-refresh for standalone mode ---
-let _touchStartY = 0;
-document.addEventListener('touchstart', e => { _touchStartY = e.touches[0].clientY; }, {passive: true});
-document.addEventListener('touchend', e => {
-  const touchEndY = e.changedTouches[0].clientY;
-  if (window.scrollY === 0 && touchEndY - _touchStartY > 100) {
-    refreshData();
-  }
-}, {passive: true});
+// --- PWA: Pull-to-refresh for standalone mode only ---
+if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+  let _touchStartY = 0;
+  let _pulling = false;
+  const pullEl = document.getElementById('pull-indicator');
+
+  document.addEventListener('touchstart', e => {
+    if (window.scrollY === 0) {
+      _touchStartY = e.touches[0].clientY;
+      _pulling = true;
+    }
+  }, {passive: true});
+
+  document.addEventListener('touchmove', e => {
+    if (!_pulling || window.scrollY > 0) { _pulling = false; return; }
+    const dy = e.touches[0].clientY - _touchStartY;
+    if (dy > 0 && dy < 200) {
+      const progress = Math.min(dy / 150, 1);
+      pullEl.classList.add('pulling');
+      pullEl.style.transform = `scaleX(${progress})`;
+    }
+  }, {passive: true});
+
+  document.addEventListener('touchend', e => {
+    if (!_pulling) return;
+    _pulling = false;
+    const touchEndY = e.changedTouches[0].clientY;
+    const dy = touchEndY - _touchStartY;
+    pullEl.classList.remove('pulling');
+    if (window.scrollY === 0 && dy > 150) {
+      pullEl.classList.add('refreshing');
+      pullEl.style.transform = '';
+      refreshData().finally(() => {
+        pullEl.classList.remove('refreshing');
+        pullEl.style.transform = 'scaleX(0)';
+      });
+    } else {
+      pullEl.style.transform = 'scaleX(0)';
+    }
+  }, {passive: true});
+}
 </script>
 
-<nav class="bottom-nav" id="bottom-nav">
-  <button class="bottom-nav-item active" data-section="top" onclick="scrollToSection('top')">
+<nav class="bottom-nav" id="bottom-nav" role="navigation" aria-label="Quick navigation">
+  <button class="bottom-nav-item active" data-section="top" data-scroll-target="top">
     <span class="bottom-nav-icon">&#9729;</span>
     <span>Decision</span>
   </button>
-  <button class="bottom-nav-item" data-section="resort" onclick="scrollToSection('resort-tabs')">
+  <button class="bottom-nav-item" data-section="resort" data-scroll-target="resort-tabs">
     <span class="bottom-nav-icon">&#9968;</span>
     <span>Resorts</span>
   </button>
-  <button class="bottom-nav-item" data-section="snotel" onclick="scrollToSection('snotel-body')">
+  <button class="bottom-nav-item" data-section="snotel" data-scroll-target="snotel-body">
     <span class="bottom-nav-icon">&#10052;</span>
-    <span>Snow</span>
+    <span>Snowpack</span>
   </button>
-  <button class="bottom-nav-item" data-section="model-comparison" onclick="scrollToSection('model-comparison-body')">
+  <button class="bottom-nav-item" data-section="model-comparison" data-scroll-target="model-comparison-body">
     <span class="bottom-nav-icon">&#128202;</span>
     <span>Models</span>
   </button>
-  <button class="bottom-nav-item" data-section="verify" onclick="scrollToSection('verify-body')">
+  <button class="bottom-nav-item" data-section="verify" data-scroll-target="verify-body">
     <span class="bottom-nav-icon">&#9881;</span>
     <span>Verify</span>
   </button>

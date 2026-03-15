@@ -80,7 +80,7 @@ Top ~60% is local conditions. Bottom ~40% is Tahoe.
 
 ```
 tahoe-snow/
-├── tahoe_snow.py          # Core analyzer — 7 data sources, 3 resorts, physics engine
+├── tahoe_snow.py          # Core analyzer — 14+ data sources, 5 resorts, physics engine
 ├── eink_scenes.py        # E-ink renderer — fetches all data, renders to Inky Impression
 ├── sensors.py             # Reads indoor/outdoor sensor data from sensor_data.json
 ├── sensor_server.py       # HTTP server receiving ESP32 POSTs (port 8081)
@@ -251,7 +251,7 @@ Add:
 
 ```
 # Update e-ink display every 30 minutes
-*/30 * * * * cd /home/keith/projects/tahoe-snow && .venv/bin/python3 eink_scenes.py >> /tmp/eink.log 2>&1
+*/30 * * * * cd /home/keith/projects/tahoe-snow && .venv/bin/python3 eink_scenes.py --refresh >> /tmp/eink.log 2>&1
 ```
 
 ### Step 8: Mount the outdoor sensor
