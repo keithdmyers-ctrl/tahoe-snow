@@ -461,26 +461,21 @@ button.section-header {
 .chart-container { position: relative; height: 250px; margin: 8px 0; }
 .chart-container--tall { height: 280px; }
 .chart-container--extra { height: 300px; }
-@media (max-width: 800px) { .chart-container { height: 220px; } .chart-container--extra { height: 260px; } }
-@media (max-width: 500px) { .chart-container { height: 200px; } .chart-container--extra { height: 220px; } }
+@media (max-width: 800px) { .chart-container { height: 220px; } .chart-container--extra { height: 280px; } }
+@media (max-width: 500px) { .chart-container { height: 200px; } .chart-container--extra { height: 260px; } }
 
-/* -- Accumulation cards (replaces giant table) -- */
-.accum-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
+/* -- Accumulation bar chart (compact per-period rows) -- */
+.accum-bars { display: flex; flex-direction: column; gap: 2px; }
+.accum-bar-row {
+  display: grid; grid-template-columns: 50px 1fr 36px 52px;
+  align-items: center; gap: 6px; font-size: 11px; padding: 3px 0;
 }
-.accum-card {
-  background: rgba(15,25,35,0.6);
-  border: 1px solid rgba(255,255,255,0.04);
-  border-radius: var(--radius-sm);
-  padding: 10px;
-}
-.accum-night { background: rgba(10,18,28,0.8); }
-.accum-header { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
-.accum-snow { font-size: 22px; font-weight: 800; margin: 2px 0 4px; font-variant-numeric: tabular-nums; }
-.accum-snow:not(.snow-val) { color: var(--text-dim); font-size: 14px; }
-.accum-details { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-dim); align-items: center; }
+.abr-label { color: var(--text-dim); font-size: 10px; text-align: right; white-space: nowrap; }
+.abr-bar { height: 14px; background: rgba(255,255,255,0.04); border-radius: 3px; overflow: hidden; }
+.abr-fill { display: block; height: 100%; background: var(--snow); opacity: 0.3; border-radius: 3px; transition: width 0.3s; }
+.abr-fill.snow-active { opacity: 0.7; }
+.abr-val { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.abr-temp { color: var(--text-dim); font-size: 10px; text-align: right; }
 
 /* -- Compare chart resort pills -- */
 .compare-chart-header {
@@ -2209,19 +2204,19 @@ function buildResortPanel(rn) {
       <button class="section-header" aria-expanded="false">
         Day/Night Accumulation &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
       </button>
-      <div class="section-body collapsed"><div class="accum-grid">`;
+      <div class="section-body collapsed"><div class="accum-bars">`;
+    const maxSnow = Math.max(...buckets.slice(0, 14).map(b => b.snow_in || 0), 1);
     for (const b of buckets.slice(0, 14)) {
-      const sc = b.snow_in > 0 ? 'snow-val' : '';
       const isNight = (b.period || '').toLowerCase().includes('night');
-      const periodIcon = isNight ? '\u{1F319}' : '\u2600\uFE0F';
-      html += `<div class="accum-card ${isNight ? 'accum-night' : ''}">
-        <div class="accum-header">${periodIcon} ${formatDateLabel(b.date)} ${esc(b.period || '')}</div>
-        <div class="accum-snow ${sc}">${b.snow_in > 0 ? b.snow_in + '"' : '\u2014'}</div>
-        <div class="accum-details">
-          <span class="${tempClass(b.temp_high_f)}">${f(b.temp_high_f, '\u00B0')}/${f(b.temp_low_f, '\u00B0')}</span>
-          <span>${f(b.wind_avg_mph, '')}${b.wind_max_gust_mph > 0 ? 'g' + f(b.wind_max_gust_mph, '') : ''} mph</span>
-          ${precipBadge(b.precip_type)}
-        </div>
+      const pct = Math.round((b.snow_in || 0) / maxSnow * 100);
+      const label = isNight ? '\u{1F319}' : '\u2600\uFE0F';
+      try { var dayName = new Date(b.date).toLocaleDateString('en-US',{weekday:'short'}); } catch(e) { var dayName = b.date; }
+      const showDay = !isNight;
+      html += `<div class="accum-bar-row">
+        <span class="abr-label">${showDay ? dayName : ''} ${label}</span>
+        <span class="abr-bar"><span class="abr-fill ${b.snow_in > 0 ? 'snow-active' : ''}" style="width:${pct}%"></span></span>
+        <span class="abr-val ${b.snow_in > 0 ? 'snow-val' : ''}">${b.snow_in > 0 ? b.snow_in + '"' : '\u2014'}</span>
+        <span class="abr-temp ${tempClass(b.temp_high_f)}">${f(b.temp_high_f,'\u00B0')}/${f(b.temp_low_f,'\u00B0')}</span>
       </div>`;
     }
     html += '</div></div></div>';
@@ -2638,15 +2633,26 @@ function renderHistory() {
     };
   });
 
+  // On mobile, limit to top 4 stations by max depth to keep legend manageable
+  const isMobile = window.innerWidth < 600;
+  let finalDatasets = datasets;
+  if (isMobile && datasets.length > 4) {
+    finalDatasets = datasets
+      .map(ds => ({ ds, max: Math.max(...ds.data.filter(v => v != null)) }))
+      .sort((a, b) => b.max - a.max)
+      .slice(0, 4)
+      .map(x => x.ds);
+  }
+
   charts['snotel-history'] = new Chart(canvas, {
     type: 'line',
-    data: { labels, datasets },
+    data: { labels, datasets: finalDatasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { ...CHART_LEGEND, position: 'bottom' },
+        legend: { ...CHART_LEGEND, position: 'bottom', labels: { ...CHART_LEGEND.labels, boxWidth: 10, padding: 6, font: { size: 10 } } },
         tooltip: {
           ...CHART_TOOLTIP,
           callbacks: {
@@ -2655,7 +2661,7 @@ function renderHistory() {
         },
       },
       scales: {
-        x: { ...SCALE_X },
+        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 0 } },
         y: {
           ...SCALE_SNOW,
           grid: { color: '#1a263488' },
