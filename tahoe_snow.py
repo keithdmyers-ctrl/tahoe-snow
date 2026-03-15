@@ -60,16 +60,16 @@ logger = logging.getLogger(__name__)
 RESORTS = get_active_resorts_legacy()
 
 SNOTEL_STATIONS = {
-    "Tahoe City Cross":  {"id": "809", "state": "CA", "elev_ft": 6230},
-    "Fallen Leaf":       {"id": "473", "state": "CA", "elev_ft": 6250},
-    "Hagan's Meadow":    {"id": "518", "state": "CA", "elev_ft": 8200},
-    "Independence Lake": {"id": "539", "state": "CA", "elev_ft": 7000},
-    "Independence Camp": {"id": "540", "state": "CA", "elev_ft": 6900},
-    "Rubicon #2":        {"id": "724", "state": "CA", "elev_ft": 6700},
-    "Squaw Valley GC":   {"id": "784", "state": "CA", "elev_ft": 6200},
-    "Ward Creek #3":     {"id": "848", "state": "NV", "elev_ft": 6600},
-    "Mt Rose Ski Area":  {"id": "652", "state": "NV", "elev_ft": 8790},
-    "CSS Lab":           {"id": "428", "state": "CA", "elev_ft": 6890},
+    "Tahoe City Cross":  {"id": "809", "state": "CA", "elev_ft": 6230, "lat": 39.1742, "lon": -120.1517},
+    "Fallen Leaf":       {"id": "473", "state": "CA", "elev_ft": 6250, "lat": 38.8878, "lon": -120.0572},
+    "Hagan's Meadow":    {"id": "518", "state": "CA", "elev_ft": 8200, "lat": 39.0703, "lon": -119.8781},
+    "Independence Lake": {"id": "539", "state": "CA", "elev_ft": 7000, "lat": 39.4281, "lon": -120.3003},
+    "Independence Camp": {"id": "540", "state": "CA", "elev_ft": 6900, "lat": 39.4333, "lon": -120.3000},
+    "Rubicon #2":        {"id": "724", "state": "CA", "elev_ft": 6700, "lat": 39.0000, "lon": -120.1500},
+    "Squaw Valley GC":   {"id": "784", "state": "CA", "elev_ft": 6200, "lat": 39.1972, "lon": -120.2500},
+    "Ward Creek #3":     {"id": "848", "state": "NV", "elev_ft": 6600, "lat": 39.1333, "lon": -120.2333},
+    "Mt Rose Ski Area":  {"id": "652", "state": "NV", "elev_ft": 8790, "lat": 39.3208, "lon": -119.8833},
+    "CSS Lab":           {"id": "428", "state": "CA", "elev_ft": 6890, "lat": 39.3258, "lon": -120.3672},
 }
 
 DIR_MAP = {
@@ -680,7 +680,8 @@ def fetch_snotel_current() -> dict:
                          "endDate": today, "duration": "DAILY"}, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
-                sd = {"name": name, "elev_ft": st["elev_ft"]}
+                sd = {"name": name, "elev_ft": st["elev_ft"],
+                      "lat": st.get("lat"), "lon": st.get("lon")}
                 if data:
                     elements = data[0].get("data", data) if isinstance(data[0], dict) and "data" in data[0] else data
                     for el in elements:
