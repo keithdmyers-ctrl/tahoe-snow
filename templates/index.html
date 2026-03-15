@@ -606,6 +606,46 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .avy-info .avy-label { font-size: 14px; }
 }
 
+/* -- AQI / UV badges -- */
+.aqi-uv-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.env-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.env-badge .env-val {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.env-badge .env-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.7;
+}
+.env-badge.aqi-good { background: var(--safe-bg); color: var(--safe); border-color: var(--safe-bg-strong); }
+.env-badge.aqi-moderate { background: var(--moderate-bg); color: var(--moderate); border-color: var(--moderate-bg-strong); }
+.env-badge.aqi-usg { background: rgba(255, 140, 66, 0.12); color: #ff8c42; border-color: rgba(255, 140, 66, 0.3); }
+.env-badge.aqi-unhealthy { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-bg-strong); }
+.env-badge.aqi-very-unhealthy { background: rgba(165, 94, 234, 0.12); color: #a55eea; border-color: rgba(165, 94, 234, 0.3); }
+.env-badge.aqi-hazardous { background: rgba(128, 0, 0, 0.15); color: #b00020; border-color: rgba(128, 0, 0, 0.3); }
+.env-badge.uv-low { background: var(--safe-bg); color: var(--safe); border-color: var(--safe-bg-strong); }
+.env-badge.uv-moderate { background: rgba(255, 165, 2, 0.12); color: var(--moderate); border-color: var(--moderate-bg-strong); }
+.env-badge.uv-high { background: rgba(255, 140, 66, 0.12); color: #ff8c42; border-color: rgba(255, 140, 66, 0.3); }
+.env-badge.uv-very-high { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-bg-strong); }
+.env-badge.uv-extreme { background: rgba(165, 94, 234, 0.12); color: #a55eea; border-color: rgba(165, 94, 234, 0.3); }
+
 /* -- Skeleton loading -- */
 @keyframes shimmer {
   0% { background-position: -400px 0; }
@@ -1086,6 +1126,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div id="decision-section"></div>
   <div id="chains-compact-section"></div>
   <div class="hero-row" id="hero-row"></div>
+  <div class="aqi-uv-row" id="aqi-uv-row"></div>
   <div id="alerts-section"></div>
   <div id="narrative-section"></div>
   <div class="summary-banner" id="summary"></div>
@@ -1277,6 +1318,7 @@ function render() {
   renderDecision();
   renderChainsCompact();
   renderHero();
+  renderAqiUv();
   renderHeader();
   renderAlerts();
   renderNarrative();
@@ -1357,6 +1399,82 @@ function renderHero() {
   document.getElementById('hero-row').innerHTML = html;
 }
 
+function aqiBadgeClass(aqi) {
+  if (aqi <= 50) return 'aqi-good';
+  if (aqi <= 100) return 'aqi-moderate';
+  if (aqi <= 150) return 'aqi-usg';
+  if (aqi <= 200) return 'aqi-unhealthy';
+  if (aqi <= 300) return 'aqi-very-unhealthy';
+  return 'aqi-hazardous';
+}
+
+function aqiCategoryName(aqi) {
+  if (aqi <= 50) return 'Good';
+  if (aqi <= 100) return 'Moderate';
+  if (aqi <= 150) return 'Unhealthy for Sensitive';
+  if (aqi <= 200) return 'Unhealthy';
+  if (aqi <= 300) return 'Very Unhealthy';
+  return 'Hazardous';
+}
+
+function uvBadgeClass(uv) {
+  if (uv <= 2) return 'uv-low';
+  if (uv <= 5) return 'uv-moderate';
+  if (uv <= 7) return 'uv-high';
+  if (uv <= 10) return 'uv-very-high';
+  return 'uv-extreme';
+}
+
+function uvLevelName(uv) {
+  if (uv <= 2) return 'Low';
+  if (uv <= 5) return 'Moderate';
+  if (uv <= 7) return 'High';
+  if (uv <= 10) return 'Very High';
+  return 'Extreme';
+}
+
+function uvProtection(uv) {
+  if (uv <= 2) return 'No protection needed';
+  if (uv <= 5) return 'Wear sunscreen';
+  if (uv <= 7) return 'Wear sunscreen, hat';
+  if (uv <= 10) return 'Avoid midday sun';
+  return 'Stay indoors midday';
+}
+
+function renderAqiUv() {
+  const el = document.getElementById('aqi-uv-row');
+  if (!el) return;
+  const aq = DATA.air_quality || {};
+  const solar = DATA.solar || {};
+  const uvMax = solar.uv_index_max;
+  let html = '';
+
+  if (aq.aqi != null) {
+    const aqi = aq.aqi;
+    const cls = aqiBadgeClass(aqi);
+    const cat = esc(aq.category || aqiCategoryName(aqi));
+    const pm = aq.pm2_5 != null ? ` \u00B7 PM2.5: ${aq.pm2_5}` : '';
+    html += `<div class="env-badge ${cls}">
+      <span class="env-label">AQI</span>
+      <span class="env-val">${aqi}</span>
+      <span>${cat}${pm}</span>
+    </div>`;
+  }
+
+  if (uvMax != null) {
+    const cls = uvBadgeClass(uvMax);
+    const level = uvLevelName(uvMax);
+    const prot = uvProtection(uvMax);
+    html += `<div class="env-badge ${cls}">
+      <span class="env-label">UV</span>
+      <span class="env-val">${uvMax}</span>
+      <span>${level} \u2014 ${prot}</span>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
 function renderHeader() {
   try {
     const d = new Date(DATA.generated);
@@ -1434,6 +1552,20 @@ function renderCurrent() {
     const lr = c.observed_lapse_rate_c_km;
     const lrSub = lr < 0 ? 'Inversion detected' : lr < 4 ? 'Weak lapse' : lr > 8 ? 'Strong lapse' : 'Normal';
     html += statCard('<abbr class="jargon" title="Temperature change per km altitude: steeper = more unstable">Lapse Rate</abbr>', lr.toFixed(1) + ' \u00B0C/km', lrSub, '');
+  }
+  // UV index in current observation detail
+  const uvMax = (DATA.solar || {}).uv_index_max;
+  if (uvMax != null) {
+    const uvLvl = uvLevelName(uvMax);
+    const uvProt = uvProtection(uvMax);
+    html += statCard('UV Index (Daily Max)', uvMax.toString(), uvLvl + ' \u2014 ' + uvProt, '');
+  }
+  // Air Quality in current observation detail
+  const aq = DATA.air_quality || {};
+  if (aq.aqi != null) {
+    const cat = esc(aq.category || aqiCategoryName(aq.aqi));
+    const pm25Sub = aq.pm2_5 != null ? 'PM2.5: ' + aq.pm2_5 + ' \u00B5g/m\u00B3' : '';
+    html += statCard('Air Quality (AQI)', aq.aqi.toString(), cat + (pm25Sub ? ' \u00B7 ' + pm25Sub : ''), '');
   }
   document.getElementById('current-row').innerHTML = html;
 }

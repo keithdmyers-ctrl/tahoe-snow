@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(__file__))
 
 from data_pipeline import fetch_tahoe_analysis, fetch_oakland_data
-from tahoe_snow import aggregate_pws
+from tahoe_snow import aggregate_pws, uv_level
 from sensors import read_all as read_sensors
 from pressure_forecast import get_forecast as get_pressure_forecast, predict_rain_timing
 from forecast_verification import log_daily_verification, get_bias_corrections
@@ -132,6 +132,7 @@ def fetch_all(force=False):
         "tahoe_alerts": analysis.get("alerts", []),
         "sounding": analysis.get("sounding"),
         "home_normals": oakland.get("home_normals"),
+        "home_aqi": oakland.get("home_aqi"),
         "storm": analysis.get("storm"),
         "chains": analysis.get("chains"),
         "lifts": analysis.get("lifts"),
@@ -302,6 +303,20 @@ def build_oakland_context(cache) -> dict:
     # Visibility from NWS observations
     visibility_mi = home_obs.get("visibility_mi")
 
+    # UV index from Open-Meteo daily
+    uv_index_val = None
+    uv_info = None
+    if "daily" in home_om_data:
+        uv_max_list = home_om_data["daily"].get("uv_index_max", [])
+        if uv_max_list and uv_max_list[0] is not None:
+            uv_index_val = round(uv_max_list[0], 1)
+            uv_info = uv_level(uv_index_val)
+
+    # Air quality from Open-Meteo AQI API
+    aqi_data = cache.get("home_aqi") or {}
+    aqi_val = aqi_data.get("aqi")
+    aqi_cat = aqi_data.get("category")
+
     return {
         "location": HOME["label"].upper(),
         "timestamp": ts,
@@ -325,6 +340,10 @@ def build_oakland_context(cache) -> dict:
         "normals": normals,
         "solar": solar,
         "visibility_mi": visibility_mi,
+        "uv_index": uv_index_val,
+        "uv_info": uv_info,
+        "aqi": aqi_val,
+        "aqi_category": aqi_cat,
         "scene_hint": "Active: Oakland",
     }
 
