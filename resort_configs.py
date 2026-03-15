@@ -40,6 +40,7 @@ class ResortConfig:
     timezone: str = "America/Los_Angeles"
     enabled: bool = True       # Set False to exclude from active analysis
     aspect: str = "N"          # Dominant aspect shorthand (N, NE, SW, etc.)
+    east_shore: bool = False   # True if resort is on Tahoe's east shore (lake effect)
 
     def get_zone(self, zone_name: str) -> Optional[ZoneConfig]:
         """Get a zone by name (base/mid/peak)."""
@@ -87,6 +88,7 @@ RESORT_REGISTRY: dict[str, ResortConfig] = {
             "https://www.skiheavenly.com/the-mountain/mountain-conditions/web-cams.aspx",
         ],
         aspect="NE",
+        east_shore=True,
     ),
 
     "Northstar": ResortConfig(
@@ -297,7 +299,7 @@ def to_legacy_format(resort_cfg: ResortConfig) -> dict:
     Returns:
         Dict in the legacy format.
     """
-    result = {"aspect": resort_cfg.aspect}
+    result = {"aspect": resort_cfg.aspect, "east_shore": resort_cfg.east_shore}
     snotel_names_by_id = {
         "473": "Fallen Leaf",
         "518": "Hagan's Meadow",
@@ -319,6 +321,7 @@ def to_legacy_format(resort_cfg: ResortConfig) -> dict:
             "lat": zone.lat,
             "lon": zone.lon,
             "elev_ft": zone.elevation_ft,
+            "aspect_deg": zone.aspect_deg,
         }
     return result
 
