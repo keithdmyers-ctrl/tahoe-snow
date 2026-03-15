@@ -4,6 +4,8 @@ __pycache__/
 *.png
 .alerts_state.json
 .forecast_verification.json
+.snow_verification.json
+.elevation_verification.json
 .scene_state.json
 .pressure_history.json
 .storm_state.json

@@ -31,8 +31,20 @@ from datetime import datetime, timezone, timedelta
 
 VERIFY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             ".forecast_verification.json")
+SNOW_VERIFY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 ".snow_verification.json")
+ELEV_VERIFY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 ".elevation_verification.json")
 MAX_DAYS = 90  # Keep 90 days of verification data
 MIN_DAYS_FOR_WEIGHTS = 7  # Minimum days before computing skill weights
+
+# Elevation band boundaries for per-elevation verification
+ELEV_BANDS = [
+    ("below_7000", 0, 7000),
+    ("7000_8000", 7000, 8000),
+    ("8000_9000", 8000, 9000),
+    ("above_9000", 9000, 99999),
+]
 
 
 def _load_data() -> dict:
@@ -168,60 +180,9 @@ def get_bias_corrections() -> dict:
     return corrections
 
 
-def get_verification_summary() -> dict:
-    """Get a summary of forecast accuracy by source and metric.
-
-    Includes MAE, RMSE, mean bias, and Brier score (for precip_pct).
-    """
-    data = _load_data()
-    scores = data.get("daily_scores", [])
-
-    if not scores:
-        return {"message": "No verification data yet", "days": 0}
-
-    dates = set(s["date"] for s in scores)
-    groups = {}
-    for s in scores:
-        key = (s["source"], s["metric"])
-        if key not in groups:
-            groups[key] = {"errors": [], "abs_errors": [], "predicted": [],
-                           "actual": [], "lead_hours": []}
-        groups[key]["errors"].append(s["error"])
-        groups[key]["abs_errors"].append(s["abs_error"])
-        groups[key]["predicted"].append(s.get("predicted", 0))
-        groups[key]["actual"].append(s.get("actual", 0))
-        groups[key]["lead_hours"].append(s.get("lead_hours", 0))
-
-    summary = {"days": len(dates), "sources": {}}
-    for (source, metric), g in groups.items():
-        if source not in summary["sources"]:
-            summary["sources"][source] = {}
-        n = len(g["errors"])
-        mean_error = sum(g["errors"]) / n
-        mae = sum(g["abs_errors"]) / n
-        rmse = math.sqrt(sum(e ** 2 for e in g["errors"]) / n)
-
-        entry = {
-            "n": n,
-            "mean_bias": round(mean_error, 2),
-            "mae": round(mae, 2),
-            "rmse": round(rmse, 2),
-        }
-
-        # Brier score for precipitation probability
-        if metric == "precip_pct":
-            brier = _brier_score(g["predicted"], g["actual"])
-            if brier is not None:
-                entry["brier_score"] = round(brier, 4)
-
-        # Skill by lead time buckets
-        lead_buckets = _group_by_lead_time(g["abs_errors"], g["lead_hours"])
-        if lead_buckets:
-            entry["mae_by_lead"] = lead_buckets
-
-        summary["sources"][source][metric] = entry
-
-    return summary
+def _get_verification_summary_basic() -> dict:
+    """Internal: basic summary for backward compat (unused, kept for reference)."""
+    pass  # Superseded by get_verification_summary() below
 
 
 def _brier_score(predicted_pcts: list, actuals: list) -> float | None:
@@ -497,6 +458,493 @@ def _trim(data: dict):
     data["actuals"] = [a for a in data["actuals"] if a["t"] > cutoff]
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=MAX_DAYS)).strftime("%Y-%m-%d")
     data["daily_scores"] = [s for s in data["daily_scores"] if s["date"] > cutoff_date]
+
+
+# ---------------------------------------------------------------------------
+# Snow Verification (SNOTEL)
+# ---------------------------------------------------------------------------
+
+def _load_snow_data() -> dict:
+    try:
+        with open(SNOW_VERIFY_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"entries": []}
+
+
+def _save_snow_data(data: dict):
+    tmp = SNOW_VERIFY_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    os.replace(tmp, SNOW_VERIFY_FILE)
+
+
+def _settling_factor(temp_f: float) -> float:
+    """Snow settling correction: colder temps preserve more fresh depth.
+
+    Fresh snow compresses ~15-25% in 24h.  The correction yields the
+    fraction of the original depth that remains after settling.
+    At very cold temps (~10F) almost no settling; at ~32F maximum settling.
+
+    settled_depth = fresh_depth * factor
+    """
+    return 0.75 + 0.25 * min(1.0, max(0.0, (temp_f - 10.0) / 22.0))
+
+
+def log_snow_verification(analysis: dict) -> dict:
+    """Compare SNOTEL-observed snow depth changes against 24h forecasts.
+
+    For each SNOTEL station, computes the depth change over the last 24h
+    and compares it to the forecast snow accumulation logged yesterday.
+    Applies a settling correction since fresh snow compresses 15-25% in
+    the first 24 hours, depending on temperature.
+
+    Args:
+        analysis: dict from analyze_all()
+
+    Returns:
+        dict with summary of what was logged
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    snotel = analysis.get("snotel_current", {})
+    snotel_history = analysis.get("snotel_history", {})
+
+    if not snotel:
+        return {"status": "no_snotel_data"}
+
+    # Load previous forecast data for comparison
+    verify_data = _load_data()
+    forecasts = verify_data.get("forecasts", [])
+
+    # Build a map of yesterday's snow forecasts by source
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    snow_forecasts = {}
+    for fc in forecasts:
+        if fc.get("metric") == "snow_in" and fc.get("valid_date") == today:
+            src = fc["source"]
+            if src not in snow_forecasts:
+                snow_forecasts[src] = fc["value"]
+
+    # Use the blended forecast if available, else average of models
+    forecast_snow_24h = snow_forecasts.get("blend")
+    if forecast_snow_24h is None and snow_forecasts:
+        forecast_snow_24h = sum(snow_forecasts.values()) / len(snow_forecasts)
+
+    snow_data = _load_snow_data()
+    entries_logged = []
+
+    for station_name, station_data in snotel.items():
+        if "error" in station_data:
+            continue
+
+        current_depth = station_data.get("snow_depth_in")
+        current_swe = station_data.get("swe_in")
+        temp_f = station_data.get("temp_f")
+
+        if current_depth is None:
+            continue
+
+        # Get previous depth from history
+        hist = snotel_history.get(station_name, {})
+        snwd_hist = hist.get("SNWD", [])
+        wteq_hist = hist.get("WTEQ", [])
+
+        prev_depth = None
+        prev_swe = None
+        if len(snwd_hist) >= 2:
+            prev_depth = snwd_hist[-2][1]
+        if len(wteq_hist) >= 2:
+            prev_swe = wteq_hist[-2][1]
+
+        if prev_depth is None:
+            continue
+
+        observed_depth_change = current_depth - prev_depth
+        swe_change = (current_swe - prev_swe) if (current_swe is not None and prev_swe is not None) else None
+
+        # Apply settling correction to forecast
+        settling = _settling_factor(temp_f) if temp_f is not None else 0.80
+        settled_forecast = (forecast_snow_24h or 0) * settling
+
+        settling_adjusted_error = observed_depth_change - settled_forecast
+
+        entry = {
+            "date": today,
+            "station_id": station_name,
+            "elev_ft": station_data.get("elev_ft", 0),
+            "forecast_snow_24h": round(forecast_snow_24h, 1) if forecast_snow_24h is not None else None,
+            "observed_depth_change": round(observed_depth_change, 1),
+            "swe_change": round(swe_change, 2) if swe_change is not None else None,
+            "settling_factor": round(settling, 3),
+            "settling_adjusted_error": round(settling_adjusted_error, 2),
+            "temp_f": temp_f,
+        }
+
+        # Deduplicate: one entry per station per date
+        snow_data["entries"] = [
+            e for e in snow_data["entries"]
+            if not (e["station_id"] == station_name and e["date"] == today)
+        ]
+        snow_data["entries"].append(entry)
+        entries_logged.append(entry)
+
+    # Trim old entries
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=MAX_DAYS)).strftime("%Y-%m-%d")
+    snow_data["entries"] = [e for e in snow_data["entries"] if e["date"] > cutoff]
+
+    _save_snow_data(snow_data)
+
+    return {
+        "status": "ok",
+        "stations_logged": len(entries_logged),
+        "date": today,
+        "entries": entries_logged,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Elevation-Band Verification
+# ---------------------------------------------------------------------------
+
+def _load_elev_data() -> dict:
+    try:
+        with open(ELEV_VERIFY_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"bands": {}}
+
+
+def _save_elev_data(data: dict):
+    tmp = ELEV_VERIFY_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    os.replace(tmp, ELEV_VERIFY_FILE)
+
+
+def _elev_band_key(elev_ft: float) -> str:
+    """Map an elevation to its band key."""
+    for key, lo, hi in ELEV_BANDS:
+        if lo <= elev_ft < hi:
+            return key
+    return "above_9000"
+
+
+def log_elevation_verification(analysis: dict) -> dict:
+    """Group SNOTEL verification by elevation band and compute per-band metrics.
+
+    Elevation bands:
+        below 7000', 7000-8000', 8000-9000', above 9000'
+
+    This allows the system to calibrate lapse rate and orographic multiplier
+    per elevation.
+
+    Args:
+        analysis: dict from analyze_all()
+
+    Returns:
+        dict summarizing what was logged
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    snotel = analysis.get("snotel_current", {})
+    snotel_history = analysis.get("snotel_history", {})
+
+    if not snotel:
+        return {"status": "no_snotel_data"}
+
+    elev_data = _load_elev_data()
+
+    band_entries = {}  # band_key -> list of entries for today
+    for station_name, station_data in snotel.items():
+        if "error" in station_data:
+            continue
+
+        elev_ft = station_data.get("elev_ft", 0)
+        current_depth = station_data.get("snow_depth_in")
+        current_swe = station_data.get("swe_in")
+        temp_f = station_data.get("temp_f")
+
+        if current_depth is None:
+            continue
+
+        hist = snotel_history.get(station_name, {})
+        snwd_hist = hist.get("SNWD", [])
+        wteq_hist = hist.get("WTEQ", [])
+
+        prev_depth = snwd_hist[-2][1] if len(snwd_hist) >= 2 else None
+        prev_swe = wteq_hist[-2][1] if len(wteq_hist) >= 2 else None
+
+        if prev_depth is None:
+            continue
+
+        depth_change = current_depth - prev_depth
+        swe_change = (current_swe - prev_swe) if (current_swe is not None and prev_swe is not None) else None
+
+        band_key = _elev_band_key(elev_ft)
+        if band_key not in band_entries:
+            band_entries[band_key] = []
+
+        band_entries[band_key].append({
+            "station": station_name,
+            "elev_ft": elev_ft,
+            "depth_change_in": round(depth_change, 1),
+            "swe_change_in": round(swe_change, 2) if swe_change is not None else None,
+            "temp_f": temp_f,
+        })
+
+    # Update stored elevation data
+    for band_key, entries in band_entries.items():
+        if band_key not in elev_data["bands"]:
+            elev_data["bands"][band_key] = {"daily": []}
+
+        # Remove old entry for today (deduplicate)
+        elev_data["bands"][band_key]["daily"] = [
+            d for d in elev_data["bands"][band_key]["daily"]
+            if d.get("date") != today
+        ]
+
+        # Compute band-level stats for today
+        depth_changes = [e["depth_change_in"] for e in entries]
+        swe_changes = [e["swe_change_in"] for e in entries if e["swe_change_in"] is not None]
+        temps = [e["temp_f"] for e in entries if e["temp_f"] is not None]
+
+        daily_summary = {
+            "date": today,
+            "n_stations": len(entries),
+            "mean_depth_change": round(sum(depth_changes) / len(depth_changes), 2),
+            "max_depth_change": round(max(depth_changes), 1),
+            "mean_swe_change": round(sum(swe_changes) / len(swe_changes), 3) if swe_changes else None,
+            "mean_temp_f": round(sum(temps) / len(temps), 1) if temps else None,
+            "stations": [e["station"] for e in entries],
+        }
+        elev_data["bands"][band_key]["daily"].append(daily_summary)
+
+    # Trim old entries
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=MAX_DAYS)).strftime("%Y-%m-%d")
+    for band_key in elev_data["bands"]:
+        elev_data["bands"][band_key]["daily"] = [
+            d for d in elev_data["bands"][band_key]["daily"]
+            if d["date"] > cutoff
+        ]
+
+    # Compute rolling metrics per band
+    for band_key in elev_data["bands"]:
+        daily = elev_data["bands"][band_key]["daily"]
+        if daily:
+            all_changes = [d["mean_depth_change"] for d in daily]
+            elev_data["bands"][band_key]["metrics"] = {
+                "days": len(daily),
+                "mean_daily_change": round(sum(all_changes) / len(all_changes), 2),
+                "total_accumulation": round(sum(max(0, c) for c in all_changes), 1),
+                "max_single_day": round(max(all_changes), 1) if all_changes else 0,
+            }
+
+    _save_elev_data(elev_data)
+
+    return {
+        "status": "ok",
+        "date": today,
+        "bands_updated": list(band_entries.keys()),
+        "stations_per_band": {k: len(v) for k, v in band_entries.items()},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Enhanced Verification Summary
+# ---------------------------------------------------------------------------
+
+def get_verification_summary() -> dict:
+    """Get a comprehensive summary of forecast accuracy.
+
+    Includes:
+      - Per-model MAE/RMSE/bias for temperature and snow (7-day and 30-day)
+      - Current model weights
+      - Lead-time accuracy breakdown
+      - PoP calibration curve data
+      - Snow verification stats per elevation band
+      - Overall forecast skill score (composite)
+      - Days of data collected
+      - Best/worst performing model
+    """
+    data = _load_data()
+    scores = data.get("daily_scores", [])
+
+    if not scores:
+        return {"message": "No verification data yet", "days": 0}
+
+    today_dt = datetime.now(timezone.utc)
+    today = today_dt.strftime("%Y-%m-%d")
+    cutoff_7d = (today_dt - timedelta(days=7)).strftime("%Y-%m-%d")
+    cutoff_30d = (today_dt - timedelta(days=30)).strftime("%Y-%m-%d")
+
+    all_dates = set(s["date"] for s in scores)
+
+    # --- Per-model stats for all time, 7d, and 30d ---
+    def compute_stats(score_list):
+        """Compute MAE, RMSE, bias from a list of score dicts."""
+        groups = {}
+        for s in score_list:
+            key = (s["source"], s["metric"])
+            if key not in groups:
+                groups[key] = {"errors": [], "abs_errors": [], "predicted": [],
+                               "actual": [], "lead_hours": []}
+            groups[key]["errors"].append(s["error"])
+            groups[key]["abs_errors"].append(s["abs_error"])
+            groups[key]["predicted"].append(s.get("predicted", 0))
+            groups[key]["actual"].append(s.get("actual", 0))
+            groups[key]["lead_hours"].append(s.get("lead_hours", 0))
+
+        result = {}
+        for (source, metric), g in groups.items():
+            if source not in result:
+                result[source] = {}
+            n = len(g["errors"])
+            mean_error = sum(g["errors"]) / n
+            mae = sum(g["abs_errors"]) / n
+            rmse = math.sqrt(sum(e ** 2 for e in g["errors"]) / n)
+
+            entry = {
+                "n": n,
+                "mean_bias": round(mean_error, 2),
+                "mae": round(mae, 2),
+                "rmse": round(rmse, 2),
+            }
+
+            # Brier score for PoP
+            if metric == "precip_pct":
+                brier = _brier_score(g["predicted"], g["actual"])
+                if brier is not None:
+                    entry["brier_score"] = round(brier, 4)
+
+            # MAE by lead time
+            lead_buckets = _group_by_lead_time(g["abs_errors"], g["lead_hours"])
+            if lead_buckets:
+                entry["mae_by_lead"] = lead_buckets
+
+            result[source][metric] = entry
+        return result
+
+    sources_all = compute_stats(scores)
+    sources_7d = compute_stats([s for s in scores if s["date"] >= cutoff_7d])
+    sources_30d = compute_stats([s for s in scores if s["date"] >= cutoff_30d])
+
+    # --- Model weights ---
+    weights = get_model_weights()
+
+    # --- PoP calibration curve ---
+    pop_cal = get_pop_calibration()
+
+    # --- Snow verification by elevation band ---
+    snow_elev = _get_snow_elev_stats()
+
+    # --- Snow verification overall ---
+    snow_stats = _get_snow_stats()
+
+    # --- Best/worst model ---
+    model_maes = {}
+    for source, metrics in sources_all.items():
+        if source.lower() in ("blend",):
+            continue
+        temp_entry = metrics.get("temp_high_f", {})
+        if temp_entry.get("mae") is not None and temp_entry.get("n", 0) >= 3:
+            model_maes[source] = temp_entry["mae"]
+
+    best_model = min(model_maes, key=model_maes.get) if model_maes else None
+    worst_model = max(model_maes, key=model_maes.get) if model_maes else None
+
+    # --- Composite skill score ---
+    # 0-100 scale: 100 = perfect, lower = worse
+    # Based on temp MAE (ideal < 2F) and snow MAE (ideal < 1")
+    skill_components = []
+    for source, metrics in sources_all.items():
+        temp_mae = metrics.get("temp_high_f", {}).get("mae")
+        if temp_mae is not None:
+            # Temp skill: MAE of 0 = 100, MAE of 10 = 0
+            skill_components.append(max(0, 100 - temp_mae * 10))
+        snow_mae = metrics.get("snow_in", {}).get("mae")
+        if snow_mae is not None:
+            skill_components.append(max(0, 100 - snow_mae * 20))
+
+    skill_score = round(sum(skill_components) / len(skill_components), 1) if skill_components else None
+
+    return {
+        "days": len(all_dates),
+        "sources_all": sources_all,
+        "sources_7d": sources_7d,
+        "sources_30d": sources_30d,
+        "model_weights": weights,
+        "pop_calibration": pop_cal,
+        "snow_by_elevation": snow_elev,
+        "snow_stats": snow_stats,
+        "best_model": best_model,
+        "worst_model": worst_model,
+        "skill_score": skill_score,
+        "lead_time_breakdown": _get_lead_time_breakdown(scores),
+    }
+
+
+def _get_snow_stats() -> dict:
+    """Get overall snow verification statistics."""
+    snow_data = _load_snow_data()
+    entries = snow_data.get("entries", [])
+    if not entries:
+        return {}
+
+    errors = [e["settling_adjusted_error"] for e in entries
+              if e.get("settling_adjusted_error") is not None]
+    if not errors:
+        return {}
+
+    abs_errors = [abs(e) for e in errors]
+    return {
+        "n": len(errors),
+        "mae": round(sum(abs_errors) / len(abs_errors), 2),
+        "mean_bias": round(sum(errors) / len(errors), 2),
+        "rmse": round(math.sqrt(sum(e ** 2 for e in errors) / len(errors)), 2),
+        "days": len(set(e["date"] for e in entries)),
+        "stations": len(set(e["station_id"] for e in entries)),
+    }
+
+
+def _get_snow_elev_stats() -> dict:
+    """Get snow verification statistics per elevation band."""
+    elev_data = _load_elev_data()
+    bands = elev_data.get("bands", {})
+    result = {}
+    for band_key, band_data in bands.items():
+        metrics = band_data.get("metrics", {})
+        daily = band_data.get("daily", [])
+        if metrics or daily:
+            result[band_key] = {
+                "days": metrics.get("days", len(daily)),
+                "mean_daily_change": metrics.get("mean_daily_change", 0),
+                "total_accumulation": metrics.get("total_accumulation", 0),
+                "max_single_day": metrics.get("max_single_day", 0),
+                "n_stations": len(set(
+                    s for d in daily for s in d.get("stations", [])
+                )),
+            }
+    return result
+
+
+def _get_lead_time_breakdown(scores: list) -> dict:
+    """Overall MAE by lead time across all sources and metrics."""
+    buckets = {"0-24h": [], "24-48h": [], "48-72h": [], "72h+": []}
+    for s in scores:
+        lead = s.get("lead_hours", 0)
+        ae = s.get("abs_error", abs(s.get("error", 0)))
+        if lead < 24:
+            buckets["0-24h"].append(ae)
+        elif lead < 48:
+            buckets["24-48h"].append(ae)
+        elif lead < 72:
+            buckets["48-72h"].append(ae)
+        else:
+            buckets["72h+"].append(ae)
+    result = {}
+    for k, v in buckets.items():
+        if v:
+            result[k] = {"mae": round(sum(v) / len(v), 2), "n": len(v)}
+    return result
 
 
 if __name__ == "__main__":

@@ -693,6 +693,60 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .season-stats-row .station-stat { min-width: 160px; }
 }
 
+/* -- Verification dashboard -- */
+.verify-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 700px) { .verify-grid { grid-template-columns: 1fr; } }
+.verify-chart-container { position: relative; height: 220px; }
+.verify-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.verify-table th {
+  text-align: left; padding: 6px 8px; color: var(--text-dim);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.verify-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.verify-table tr:hover td { background: var(--card-hover); }
+.verify-days {
+  text-align: center; padding: 12px;
+  font-size: 14px; color: var(--text-dim);
+  background: rgba(15,25,35,0.6);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+.verify-days .days-count {
+  font-size: 32px; font-weight: 800; color: var(--accent);
+  display: block; margin-bottom: 2px;
+}
+.verify-days .skill-score {
+  font-size: 24px; font-weight: 700; color: var(--safe);
+  display: block; margin-top: 8px;
+}
+.verify-best-worst {
+  display: flex; gap: 16px; justify-content: center;
+  font-size: 13px; margin-top: 8px;
+}
+.verify-elev-band {
+  background: rgba(15,25,35,0.6);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.verify-elev-band .band-label {
+  font-weight: 600; font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 4px;
+}
+.verify-elev-band .band-stats {
+  display: flex; gap: 16px; font-size: 13px; flex-wrap: wrap;
+}
+.verify-elev-band .band-stat-val { font-weight: 600; color: var(--snow); }
+
 .footer {
   text-align: center; padding: 32px 20px; color: var(--text-dim);
   font-size: 11px; letter-spacing: 0.3px;
@@ -782,6 +836,15 @@ table.data-table tr:hover td { background: var(--card-hover); }
       <span>Snowpack &mdash; All SNOTEL Stations <span class="section-preview" id="preview-snotel"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="snotel-body"></div>
+  </div>
+
+  <div class="section">
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>Forecast Verification <span class="section-preview" id="preview-verify"></span></span> <span class="toggle">&#9662;</span>
+    </button>
+    <div class="section-body collapsed" id="verify-body">
+      <div id="verify-content" style="color:var(--text-dim);font-size:13px;">Loading verification data&hellip;</div>
+    </div>
   </div>
 
   <div class="footer">
@@ -914,6 +977,7 @@ function render() {
   renderHistory();
   renderAFD();
   renderPreviews();
+  renderVerification();
   requestAnimationFrame(initScrollWraps);
 }
 
@@ -1750,6 +1814,245 @@ function renderHistory() {
 function renderAFD() {
   const afd = esc(DATA.forecaster_discussion || 'Not available');
   document.getElementById('afd-body').innerHTML = `<div class="afd-text">${afd}</div>`;
+}
+
+// -- Forecast Verification --
+let VERIFY_DATA = null;
+
+async function renderVerification() {
+  const container = document.getElementById('verify-content');
+  if (!container) return;
+
+  try {
+    const r = await fetch('/api/verification');
+    VERIFY_DATA = await r.json();
+  } catch(e) {
+    container.innerHTML = '<div style="color:var(--text-dim)">Verification data unavailable</div>';
+    return;
+  }
+
+  if (!VERIFY_DATA || VERIFY_DATA.message || VERIFY_DATA.error) {
+    const msg = VERIFY_DATA?.message || VERIFY_DATA?.error || 'No verification data yet';
+    container.innerHTML = `<div style="color:var(--text-dim)">${esc(msg)}</div>`;
+    // Update preview
+    const preview = document.getElementById('preview-verify');
+    if (preview) preview.textContent = '\u2014 collecting data';
+    return;
+  }
+
+  const v = VERIFY_DATA;
+  let html = '';
+
+  // Days counter + skill score
+  html += `<div class="verify-days">
+    <span class="days-count">${v.days || 0}</span>
+    Days of Learning
+    ${v.skill_score != null ? `<span class="skill-score" style="color:${v.skill_score >= 70 ? 'var(--safe)' : v.skill_score >= 40 ? 'var(--moderate)' : 'var(--danger)'}">${v.skill_score}</span><span style="font-size:12px">Skill Score (0-100)</span>` : ''}
+    <div class="verify-best-worst">
+      ${v.best_model ? `<span>Best: <span style="color:var(--safe);font-weight:600">${esc(v.best_model)}</span></span>` : ''}
+      ${v.worst_model ? `<span>Worst: <span style="color:var(--danger);font-weight:600">${esc(v.worst_model)}</span></span>` : ''}
+    </div>
+  </div>`;
+
+  html += '<div class="verify-grid">';
+
+  // Model performance table
+  html += '<div>';
+  html += '<div class="panel-label">Model Performance</div>';
+  html += '<div class="scroll-wrap"><table class="verify-table"><thead><tr><th>Model</th><th>Metric</th><th>MAE</th><th>Bias</th><th>RMSE</th><th>N</th></tr></thead><tbody>';
+  const sources = v.sources_all || {};
+  for (const [src, metrics] of Object.entries(sources)) {
+    for (const [metric, stats] of Object.entries(metrics)) {
+      const metricLabel = metric.replace(/_/g, ' ').replace('temp high f', 'Temp Hi').replace('temp low f', 'Temp Lo').replace('snow in', 'Snow').replace('precip pct', 'PoP');
+      const biasColor = stats.mean_bias > 0 ? 'var(--warm)' : stats.mean_bias < 0 ? 'var(--cold)' : 'var(--text)';
+      html += `<tr>
+        <td style="font-weight:600">${esc(src)}</td>
+        <td>${metricLabel}</td>
+        <td style="font-weight:600">${stats.mae}</td>
+        <td style="color:${biasColor}">${stats.mean_bias > 0 ? '+' : ''}${stats.mean_bias}</td>
+        <td>${stats.rmse}</td>
+        <td style="color:var(--text-dim)">${stats.n}</td>
+      </tr>`;
+    }
+  }
+  html += '</tbody></table></div></div>';
+
+  // Model weights chart
+  html += '<div>';
+  html += '<div class="panel-label">Current Model Weights</div>';
+  html += '<div class="verify-chart-container"><canvas id="chart-verify-weights"></canvas></div>';
+  html += '</div>';
+
+  html += '</div>';  // end verify-grid
+
+  // Second row: PoP calibration + elevation bands
+  html += '<div class="verify-grid">';
+
+  // PoP calibration chart
+  html += '<div>';
+  html += '<div class="panel-label">PoP Calibration Curve</div>';
+  html += '<div class="verify-chart-container"><canvas id="chart-verify-pop"></canvas></div>';
+  html += '</div>';
+
+  // Snow accuracy by elevation band
+  html += '<div>';
+  html += '<div class="panel-label">Snow Accuracy by Elevation</div>';
+  const elevBands = v.snow_by_elevation || {};
+  const bandLabels = { below_7000: 'Below 7,000\'', '7000_8000': '7,000-8,000\'', '8000_9000': '8,000-9,000\'', above_9000: 'Above 9,000\'' };
+  if (Object.keys(elevBands).length > 0) {
+    for (const [bandKey, stats] of Object.entries(elevBands)) {
+      html += `<div class="verify-elev-band">
+        <div class="band-label">${bandLabels[bandKey] || bandKey}</div>
+        <div class="band-stats">
+          <span>Days: <span class="band-stat-val">${stats.days}</span></span>
+          <span>Mean: <span class="band-stat-val">${stats.mean_daily_change}"</span></span>
+          <span>Total: <span class="band-stat-val">${stats.total_accumulation}"</span></span>
+          <span>Max: <span class="band-stat-val">${stats.max_single_day}"</span></span>
+          <span>Stations: <span class="band-stat-val">${stats.n_stations}</span></span>
+        </div>
+      </div>`;
+    }
+  } else {
+    html += '<div style="color:var(--text-dim);padding:12px">No elevation data yet</div>';
+  }
+
+  // Lead time breakdown
+  const leadBreakdown = v.lead_time_breakdown || {};
+  if (Object.keys(leadBreakdown).length > 0) {
+    html += '<div style="margin-top:12px"><div class="panel-label">Lead Time Accuracy</div>';
+    html += '<div class="scroll-wrap"><table class="verify-table"><thead><tr><th>Lead Time</th><th>MAE</th><th>N</th></tr></thead><tbody>';
+    for (const [bucket, stats] of Object.entries(leadBreakdown)) {
+      html += `<tr><td>${bucket}</td><td style="font-weight:600">${stats.mae}</td><td style="color:var(--text-dim)">${stats.n}</td></tr>`;
+    }
+    html += '</tbody></table></div></div>';
+  }
+
+  html += '</div>';  // end second column
+  html += '</div>';  // end verify-grid
+
+  container.innerHTML = html;
+
+  // Build charts after DOM update
+  requestAnimationFrame(() => {
+    buildWeightsChart(v.model_weights || {});
+    buildPopChart(v.pop_calibration || {});
+  });
+
+  // Update preview
+  const preview = document.getElementById('preview-verify');
+  if (preview) {
+    const dayStr = v.days ? `${v.days} days` : '';
+    const skillStr = v.skill_score != null ? `, skill ${v.skill_score}` : '';
+    preview.textContent = dayStr || skillStr ? `\u2014 ${dayStr}${skillStr}` : '';
+  }
+}
+
+function buildWeightsChart(weights) {
+  const canvas = document.getElementById('chart-verify-weights');
+  if (!canvas) return;
+  destroyChart('verify-weights');
+
+  const labels = Object.keys(weights);
+  const values = Object.values(weights);
+  if (!labels.length) {
+    canvas.parentElement.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px">No weight data yet</div>';
+    return;
+  }
+
+  const colors = ['#4a9eff', '#2ed573', '#ff8c42', '#a55eea', '#ff4757', '#ffa502', '#45aaf2', '#7ec8e3'];
+
+  charts['verify-weights'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values.map(v => Math.round(v * 100)),
+        backgroundColor: labels.map((_, i) => colors[i % colors.length] + '88'),
+        borderColor: labels.map((_, i) => colors[i % colors.length]),
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...CHART_TOOLTIP,
+          callbacks: { label: ctx => `${ctx.raw}%` }
+        },
+      },
+      scales: {
+        x: { ...SCALE_X, min: 0, max: 100, ticks: { ...SCALE_X.ticks, callback: v => v + '%' } },
+        y: { ...SCALE_X },
+      },
+    },
+  });
+}
+
+function buildPopChart(popCal) {
+  const canvas = document.getElementById('chart-verify-pop');
+  if (!canvas) return;
+  destroyChart('verify-pop');
+
+  const bins = Object.keys(popCal).sort();
+  if (!bins.length) {
+    canvas.parentElement.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px">No PoP calibration data yet</div>';
+    return;
+  }
+
+  const predicted = bins.map(b => {
+    const parts = b.replace('%', '').split('-');
+    return (parseInt(parts[0]) + parseInt(parts[1])) / 2;
+  });
+  const observed = bins.map(b => Math.round((popCal[b].observed_freq || 0) * 100));
+
+  charts['verify-pop'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: bins,
+      datasets: [
+        {
+          label: 'Observed Frequency',
+          data: observed,
+          borderColor: '#4a9eff',
+          backgroundColor: '#4a9eff22',
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#4a9eff',
+          fill: true,
+          tension: 0.3,
+        },
+        {
+          label: 'Perfect Calibration',
+          data: predicted,
+          borderColor: '#99aabb44',
+          borderWidth: 1,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: CHART_LEGEND,
+        tooltip: {
+          ...CHART_TOOLTIP,
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.raw}%`,
+          },
+        },
+      },
+      scales: {
+        x: { ...SCALE_X, title: { display: true, text: 'Predicted PoP Bin', color: '#99aabb', font: { size: 11 } } },
+        y: { min: 0, max: 100, ticks: { color: '#99aabb', callback: v => v + '%' }, grid: { color: '#1a263488' }, title: { display: true, text: 'Observed %', color: '#99aabb', font: { size: 11 } } },
+      },
+    },
+  });
 }
 
 // -- Init --
