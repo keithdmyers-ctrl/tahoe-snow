@@ -32,6 +32,7 @@ from tahoe_snow import (
     analyze_all, RESORTS, SNOTEL_STATIONS,
 )
 from pressure_forecast import get_storm_total
+from forecast_verification import log_daily_verification
 
 app = Flask(__name__)
 
@@ -99,6 +100,14 @@ def get_analysis(force: bool = False) -> dict:
         analysis["storm"] = storm
         analysis["chains"] = chains
         analysis["lifts"] = lifts
+
+        # Daily forecast verification logging (best-effort)
+        try:
+            home_obs = fetch_nws_observations(37.8024, -122.1828)
+            home_fc = fetch_nws_forecast(37.8024, -122.1828)
+            log_daily_verification(home_obs, home_fc, analysis)
+        except Exception:
+            pass  # verification is best-effort, never break main flow
 
         with _lock:
             _cache["data"] = analysis

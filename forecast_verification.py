@@ -451,7 +451,7 @@ def log_daily_verification(home_obs: dict, home_fc: dict, analysis: dict):
 
     # Log rain probability for tomorrow from NWS hourly
     tomorrow_pops = []
-    for h in hourly:
+    for h in home_fc.get("hourly", []):
         start = h.get("startTime", "")[:10]
         if start == tomorrow:
             pop = h.get("probabilityOfPrecipitation", {}).get("value", 0) or 0
