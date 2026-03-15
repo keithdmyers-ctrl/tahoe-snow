@@ -47,18 +47,18 @@
 .zp-feels { font-size: 10px; color: #94a3b8; font-weight: 500; }
 .zp-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 4px; }
 .zp-precip { font-size: 11px; font-weight: 700; }
-.zp-precip.snow-type { color: #3b82f6; }
-.zp-precip.mix-type { color: #f97316; }
+.zp-precip.snow-type { color: #00c; }
+.zp-precip.mix-type { color: #c60; }
 .zp-precip.rain-type { color: #64748b; }
 .zp-precip.none-type { color: #cbd5e1; }
 .zp-wind { font-size: 11px; color: #64748b; font-weight: 500; }
-.zp-wind.warn { color: #f97316; }
-.zp-wind.danger { color: #ef4444; font-weight: 700; }
+.zp-wind.warn { color: #c60; }
+.zp-wind.danger { color: #c00; font-weight: 700; }
 .zp-snow { font-size: 14px; font-weight: 700; }
-.zp-snow.hot { color: #ef4444; }
-.zp-snow.active { color: #3b82f6; }
+.zp-snow.hot { color: #c00; }
+.zp-snow.active { color: #00c; }
 .zp-snow.none { color: #cbd5e1; }
-.zp-quality { font-size: 9px; color: #3b82f6; font-weight: 600; }
+.zp-quality { font-size: 9px; color: #00c; font-weight: 600; }
 
 /* Conditions sub-row (last zone only) */
 .zp-conditions {
@@ -73,7 +73,7 @@
 
 .zp-conditions .zc-item { color: #64748b; font-weight: 500; }
 .zp-conditions .zc-val { font-weight: 700; color: #1e293b; }
-.zp-conditions .zc-val.blue { color: #3b82f6; }
+.zp-conditions .zc-val.blue { color: #00c; }
 .zp-conditions .avy {
     border: 2px solid #e2e8f0;
     border-radius: 6px;
@@ -82,11 +82,11 @@
     font-size: 9px;
     color: #64748b;
 }
-.zp-conditions .avy.avy-low { border-color: #22c55e; color: #16a34a; }
-.zp-conditions .avy.avy-mod { border-color: #eab308; color: #ca8a04; }
-.zp-conditions .avy.avy-con { border-color: #f97316; color: #ea580c; }
-.zp-conditions .avy.avy-high { border-color: #ef4444; color: #dc2626; }
-.zp-conditions .avy.avy-ext { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+.zp-conditions .avy.avy-low { border-color: #090; color: #090; }
+.zp-conditions .avy.avy-mod { border-color: #cc0; color: #cc0; }
+.zp-conditions .avy.avy-con { border-color: #c60; color: #c60; }
+.zp-conditions .avy.avy-high { border-color: #c00; color: #c00; }
+.zp-conditions .avy.avy-ext { border-color: #c00; background: #fff; color: #c00; }
 
 /* Timeline strip */
 .zp-timeline {
@@ -107,14 +107,14 @@
     gap: 1px;
 }
 
-.tl-cell .t-time { font-size: 8px; color: #94a3b8; font-weight: 600; line-height: 1; }
+.tl-cell .t-time { font-size: 9px; color: #94a3b8; font-weight: 600; line-height: 1; }
 .tl-cell .t-temp { font-size: 10px; font-weight: 700; color: #1e293b; line-height: 1.2; }
 .tl-cell .t-barwrap { width: 100%; height: 16px; display: flex; align-items: flex-end; justify-content: center; }
 .tl-cell .t-bar { width: 60%; border-radius: 2px 2px 0 0; }
-.t-bar.sn { background: #3b82f6; }
-.t-bar.mx { background: #f97316; }
+.t-bar.sn { background: #00c; }
+.t-bar.mx { background: #c60; }
 .t-bar.rn { background: #94a3b8; }
-.tl-cell .t-snow { font-size: 8px; color: #3b82f6; font-weight: 600; line-height: 1; height: 9px; }
+.tl-cell .t-snow { font-size: 9px; color: #00c; font-weight: 600; line-height: 1; height: 10px; }
 
 /* Bottom bar uses shared styles from base.css */
 </style>

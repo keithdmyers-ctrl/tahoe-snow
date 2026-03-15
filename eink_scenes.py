@@ -36,6 +36,7 @@ from tahoe_snow import (
     fetch_nws_alerts, fetch_sounding, fetch_climate_normals,
     fetch_caltrans_chains, fetch_all_lift_status,
     fetch_snotel_current, fetch_avalanche, fetch_forecast_discussion,
+    fetch_rwis_stations,
     analyze_all, RESORTS,
 )
 from sensors import read_all as read_sensors
@@ -91,6 +92,8 @@ def _t(val):
 
 
 def _snow_str(val):
+    if val is None:
+        return '--'
     if val >= 0.5:
         return f'{val:.0f}"'
     elif val > 0:
@@ -105,7 +108,7 @@ _cache = {"data": None, "home_obs": None, "home_fc": None, "home_om": None,
           "home_nbm": None, "home_pws": None, "cssl": None,
           "home_alerts": None, "tahoe_alerts": None, "sounding": None,
           "home_normals": None, "storm": None,
-          "chains": None, "lifts": None,
+          "chains": None, "lifts": None, "rwis": None,
           "sensors": None, "timestamp": 0}
 CACHE_TTL = 900  # 15 min
 
@@ -147,6 +150,10 @@ def fetch_all(force=False):
         synoptic = fetch_synoptic_stations(TAHOE["lat"], TAHOE["lon"], radius_miles=30)
     except Exception:
         synoptic = {}
+    try:
+        rwis = fetch_rwis_stations(TAHOE["lat"], TAHOE["lon"])
+    except Exception:
+        rwis = []
 
     print("Fetching Tahoe data...")
     obs = fetch_nws_observations(TAHOE["lat"], TAHOE["lon"])
@@ -165,14 +172,16 @@ def fetch_all(force=False):
                            nws_grids=nws_grids if "error" not in nws_grids else None,
                            sounding=sounding if "error" not in sounding else None,
                            ensemble=ensemble if ensemble.get("models") else None,
-                           synoptic=synoptic if "error" not in synoptic else None)
+                           synoptic=synoptic if "error" not in synoptic else None,
+                           rwis=rwis if rwis else None,
+                           cssl=cssl if cssl and "error" not in cssl else None)
 
     _cache.update({
         "data": analysis, "home_obs": home_obs, "home_fc": home_fc,
         "home_om": home_om, "home_nbm": home_nbm, "home_pws": home_pws,
         "cssl": cssl, "home_alerts": home_alerts, "tahoe_alerts": tahoe_alerts,
         "sounding": sounding, "home_normals": home_normals, "storm": storm,
-        "chains": chains, "lifts": lifts,
+        "chains": chains, "lifts": lifts, "rwis": rwis,
         "sensors": sensors, "timestamp": time.time(),
     })
 
@@ -312,6 +321,29 @@ def build_oakland_context(cache) -> dict:
         except (ValueError, TypeError):
             pass
 
+    # Solar data (sunrise/sunset from Open-Meteo daily)
+    solar = {}
+    home_om_data = cache.get("home_om") or {}
+    if "daily" in home_om_data:
+        daily = home_om_data["daily"]
+        sr_list = daily.get("sunrise", [])
+        ss_list = daily.get("sunset", [])
+        if sr_list and ss_list:
+            try:
+                sr_dt = datetime.fromisoformat(sr_list[0])
+                ss_dt = datetime.fromisoformat(ss_list[0])
+                daylight_sec = (ss_dt - sr_dt).total_seconds()
+                solar = {
+                    "sunrise": sr_dt.strftime("%-I:%M %p"),
+                    "sunset": ss_dt.strftime("%-I:%M %p"),
+                    "daylight_hours": round(daylight_sec / 3600, 1),
+                }
+            except (ValueError, TypeError, IndexError):
+                pass
+
+    # Visibility from NWS observations
+    visibility_mi = home_obs.get("visibility_mi")
+
     return {
         "location": HOME["label"].upper(),
         "timestamp": ts,
@@ -333,6 +365,8 @@ def build_oakland_context(cache) -> dict:
         "alerts": alerts,
         "temp_anomaly": temp_anomaly,
         "normals": normals,
+        "solar": solar,
+        "visibility_mi": visibility_mi,
         "scene_hint": "Active: Oakland",
     }
 
@@ -466,6 +500,14 @@ def build_heavenly_context(cache) -> dict:
     lifts_open = lifts_data.get("open", 0) if "error" not in lifts_data else None
     lifts_total = lifts_data.get("total", 0) if "error" not in lifts_data else None
 
+    # RWIS road temp — pick the first station with pavement data for compact display
+    rwis = cache.get("rwis") or []
+    road_temp_f = None
+    for r in rwis:
+        if r.get("pavement_temp_f") is not None:
+            road_temp_f = round(r["pavement_temp_f"])
+            break
+
     return {
         "timestamp": ts,
         "tahoe_temp": tahoe_temp,
@@ -485,6 +527,7 @@ def build_heavenly_context(cache) -> dict:
         "lifts_open": lifts_open,
         "lifts_total": lifts_total,
         "sounding_lapse": sounding_lapse,
+        "road_temp_f": road_temp_f,
         "scene_hint": "Active: Heavenly",
     }
 
@@ -676,7 +719,10 @@ def start_button_listener():
         print("Run with --scene oakland or --scene heavenly instead.")
         return
 
-    chip = gpiod.Chip("/dev/gpiochip4")
+    # Pi 5 uses gpiochip4, Pi 3/4 use gpiochip0
+    chip_path = "/dev/gpiochip4" if os.path.exists("/dev/gpiochip4") else "/dev/gpiochip0"
+    chip = gpiod.Chip(chip_path)
+    print(f"Using GPIO chip: {chip_path}")
     line_config = {
         BTN_A: gpiod.LineSettings(direction=Direction.INPUT, bias=Bias.PULL_UP,
                                   edge_detection=Edge.FALLING, debounce_period=None),
@@ -727,6 +773,10 @@ def main():
     if "--refresh" in sys.argv:
         scene = load_state()
         render_scene(scene, preview=preview, force_refresh=True)
+        return
+
+    if "--listen" in sys.argv:
+        start_button_listener()
         return
 
     # Default: start button listener daemon

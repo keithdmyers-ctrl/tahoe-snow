@@ -29,6 +29,7 @@ from tahoe_snow import (
     fetch_ensemble, fetch_caltrans_chains, fetch_all_lift_status,
     fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
     fetch_avalanche, fetch_forecast_discussion,
+    fetch_rwis_stations,
     analyze_all, compute_ski_decision, log_storm_event,
     get_storm_history, RESORTS, SNOTEL_STATIONS,
 )
@@ -82,13 +83,21 @@ def get_analysis(force: bool = False) -> dict:
         chains = fetch_caltrans_chains()
         lifts = fetch_all_lift_status()
 
+        # RWIS road weather stations (best-effort)
+        try:
+            rwis = fetch_rwis_stations(39.17, -120.145)
+        except Exception:
+            rwis = []
+
         # Pass all data sources to analyze_all for full pipeline integration:
         # NWS grids, sounding, ensemble, and Synoptic stations
         analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
                                nws_grids=nws_grids if "error" not in nws_grids else None,
                                sounding=sounding if "error" not in sounding else None,
                                ensemble=ensemble if ensemble.get("models") else None,
-                               synoptic=synoptic if "error" not in synoptic else None)
+                               synoptic=synoptic if "error" not in synoptic else None,
+                               rwis=rwis if rwis else None,
+                               cssl=cssl if cssl and "error" not in cssl else None)
 
         # Attach extra data to analysis for the web UI
         analysis["nbm"] = tahoe_nbm if "error" not in tahoe_nbm else None
@@ -104,6 +113,7 @@ def get_analysis(force: bool = False) -> dict:
         analysis["storm"] = storm
         analysis["chains"] = chains
         analysis["lifts"] = lifts
+        analysis["rwis"] = rwis
 
         # Daily forecast verification logging (best-effort)
         try:

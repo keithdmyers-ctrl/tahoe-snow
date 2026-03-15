@@ -291,7 +291,9 @@
         <div class="conditions-row">
             <span class="cond">{{ conditions }}</span>
             {% if wind %}<span class="wind">{{ wind }}</span>{% endif %}
+            {% if visibility_mi is not none and visibility_mi > 0 %}<span class="nws-ref">Vis: {{ "%.0f"|format(visibility_mi) }}mi</span>{% endif %}
             {% if nws_temp %}<span class="nws-ref">NWS: {{ nws_temp }}°F</span>{% endif %}
+            {% if solar and solar.sunrise %}<span class="nws-ref">&#9728; {{ solar.sunrise }}  &#9790; {{ solar.sunset }}</span>{% endif %}
         </div>
 
         <!-- Barometer / Rain Prediction -->

@@ -1,0 +1,16 @@
+[Unit]
+Description=Tahoe Snow E-Ink Display (button listener + scene renderer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=keith
+WorkingDirectory=/home/keith/projects/tahoe-snow
+ExecStart=/home/keith/projects/tahoe-snow/.venv/bin/python3 eink_scenes.py --listen
+Restart=on-failure
+RestartSec=10
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=multi-user.target

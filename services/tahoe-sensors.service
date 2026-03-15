@@ -1,0 +1,15 @@
+[Unit]
+Description=Tahoe Snow Sensor Server (ESP32 data receiver)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=keith
+WorkingDirectory=/home/keith/projects/tahoe-snow
+ExecStart=/home/keith/projects/tahoe-snow/.venv/bin/python3 sensor_server.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

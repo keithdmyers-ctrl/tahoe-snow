@@ -6,10 +6,10 @@ A Raspberry Pi-powered e-ink dashboard showing local Oakland weather (indoor/out
 
 | Part | Model | ~Price | Notes |
 |------|-------|--------|-------|
-| Single-board computer | Raspberry Pi 5 (2GB) | $60 | Runs display, sensor server, data fetching |
+| Single-board computer | Raspberry Pi 3 Model B (1GB) | $35 | Runs display, sensor server, data fetching |
 | E-ink display | Pimoroni Inky Impression 7.3" (2025 Edition) | $85 | 800x480, 7-color Spectra 6, plugs onto Pi GPIO |
 | MicroSD card | Any 32GB+ Class 10 | $8 | For Raspberry Pi OS |
-| Pi power supply | USB-C 27W (Pi 5 official) | $12 | Must be 5V/5A for Pi 5 |
+| Pi power supply | Micro-USB 5V/2.5A | $10 | Official Pi 3 PSU or any good 2.5A micro-USB adapter |
 | Indoor sensor board | ESP32 dev board (any) | $8 | Reads indoor BME280, POSTs to Pi over WiFi |
 | Outdoor sensor board | ESP32 dev board (any) | $8 | Reads outdoor BME280, POSTs to Pi over WiFi |
 | Indoor temp sensor | BME280 breakout (I2C) | $8 | Temp + humidity + pressure |
@@ -17,22 +17,22 @@ A Raspberry Pi-powered e-ink dashboard showing local Oakland weather (indoor/out
 | Outdoor power | Wyze Outdoor Power Adapter (IP67) | $15 | Weatherproof USB, long cable run |
 | Outdoor enclosure | IP65 junction box / weatherproof case | $5 | Houses outdoor ESP32 + BME280 |
 | Wiring | Dupont jumper wires (F-F) | $3 | ESP32 to BME280 connections |
-| **Total** | | **~$220** | |
+| **Total** | | **~$195** | |
 
 ### Where to buy
 
 - **Inky Impression 7.3"**: [Pimoroni](https://shop.pimoroni.com/en-us/products/inky-impression-7-3), [PiShop.us](https://www.pishop.us/product/inky-impression-7-3-2025-edition/), [The Pi Hut](https://thepihut.com/products/inky-impression-7-3-2025-edition)
-- **Pi 5**: [raspberrypi.com](https://www.raspberrypi.com/products/raspberry-pi-5/), Amazon, Micro Center
+- **Pi 3**: [raspberrypi.com](https://www.raspberrypi.com/products/raspberry-pi-3-model-b/), Amazon, Micro Center — also check used/refurbished
 - **ESP32 + BME280**: Amazon, AliExpress, Adafruit, SparkFun
 - **Wyze Outdoor Power Adapter**: [wyze.com](https://www.wyze.com/products/wyze-outdoor-power-adapter)
 
 ## Architecture
 
 ```
-ESP32 #1 (indoor)                  Raspberry Pi 5
+ESP32 #1 (indoor)                  Raspberry Pi 3
   BME280 sensor                      Inky Impression 7.3" (SPI/GPIO)
   USB powered                        |
-       |                             eink_display.py (cron, every 30min)
+       |                             eink_scenes.py (cron, every 30min)
   WiFi POST ────────────────>          ├── reads sensor_data.json
                                        ├── fetches NWS Oakland forecast
 ESP32 #2 (outdoor)                     ├── fetches Tahoe snow analysis
@@ -81,7 +81,7 @@ Top ~60% is local conditions. Bottom ~40% is Tahoe.
 ```
 tahoe-snow/
 ├── tahoe_snow.py          # Core analyzer — 7 data sources, 3 resorts, physics engine
-├── eink_display.py        # E-ink renderer — fetches all data, renders to Inky Impression
+├── eink_scenes.py        # E-ink renderer — fetches all data, renders to Inky Impression
 ├── sensors.py             # Reads indoor/outdoor sensor data from sensor_data.json
 ├── sensor_server.py       # HTTP server receiving ESP32 POSTs (port 8081)
 ├── sensor_data.json       # Latest sensor readings (written by sensor_server.py)
@@ -99,16 +99,24 @@ tahoe-snow/
 
 ### Step 1: Raspberry Pi
 
-1. Flash **Raspberry Pi OS Lite (64-bit)** to the MicroSD card using Raspberry Pi Imager
-2. Enable SSH and set WiFi credentials during flashing
-3. Boot the Pi, SSH in
+1. Flash **Raspberry Pi OS Lite (32-bit)** to the MicroSD card using Raspberry Pi Imager
+   - In Imager, choose device **Raspberry Pi 3** → OS **Raspberry Pi OS (other)** → **Raspberry Pi OS Lite (32-bit)**
+   - 32-bit is recommended for Pi 3's 1GB RAM
+2. In the OS customisation settings, enable SSH, set WiFi credentials, set username to `keith`
+3. Boot the Pi, SSH in: `ssh keith@raspberrypi.local`
 
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
 
 # Install dependencies
-sudo apt install -y python3-pip python3-venv git fonts-dejavu
+sudo apt install -y python3-pip python3-venv git fonts-dejavu chromium-browser
+
+# IMPORTANT: Pi 3 has only 1GB RAM — add a swap file so Chromium doesn't crash
+sudo dphys-swapfile swapoff
+sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=512/' /etc/dphys-swapfile
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
 
 # Clone the project
 git clone <your-repo-url> ~/tahoe-snow
@@ -119,8 +127,12 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install Python dependencies
-pip install requests numpy pillow inky[rpi] smbus2 flask
+pip install requests numpy pillow jinja2 inky[rpi] smbus2 flask gpiod
 ```
+
+> **Pi 3 performance note:** The Pi 3 is slower than Pi 5 but fully capable of running
+> this project. Display rendering takes ~45-60 seconds (vs ~30 on Pi 5). Data fetching
+> may take a bit longer. The 30-minute cron interval gives plenty of headroom.
 
 ### Step 2: Attach the Inky Impression
 
@@ -217,10 +229,10 @@ sudo systemctl start sensor-server
 cd ~/tahoe-snow
 
 # Generate a preview image (saves eink_preview.png)
-.venv/bin/python3 eink_display.py --preview
+.venv/bin/python3 eink_scenes.py --preview
 
 # Render to the actual display
-.venv/bin/python3 eink_display.py
+.venv/bin/python3 eink_scenes.py
 ```
 
 The display takes ~30-40 seconds to refresh (normal for 7-color e-ink).
@@ -235,7 +247,7 @@ Add:
 
 ```
 # Update e-ink display every 30 minutes
-*/30 * * * * cd /home/keith/tahoe-snow && .venv/bin/python3 eink_display.py >> /tmp/eink.log 2>&1
+*/30 * * * * cd /home/keith/tahoe-snow && .venv/bin/python3 eink_scenes.py >> /tmp/eink.log 2>&1
 ```
 
 ### Step 8: Mount the outdoor sensor
@@ -283,7 +295,7 @@ Supports desktop notifications (notify-send) and webhooks (Discord, Slack, ntfy.
 
 ## Troubleshooting
 
-**Display shows nothing after running eink_display.py:**
+**Display shows nothing after running eink_scenes.py:**
 - Check SPI is enabled: `ls /dev/spidev*` should show devices
 - Check the display is seated firmly on the GPIO header
 - Try: `python3 -c "from inky.auto import auto; print(auto())"`
@@ -304,3 +316,9 @@ Supports desktop notifications (notify-send) and webhooks (Discord, Slack, ntfy.
 **Display shows "stale" (grayed out) sensor data:**
 - ESP32 hasn't reported in >15 minutes
 - Check WiFi connectivity, power supply, sensor wiring
+
+**Chromium crashes or rendering hangs (Pi 3):**
+- Check swap is enabled: `free -h` should show 512M swap
+- If swap is missing, re-run the swap setup commands from Step 1
+- Check available memory: `free -h` — rendering needs ~300MB free
+- Reduce other running processes if needed

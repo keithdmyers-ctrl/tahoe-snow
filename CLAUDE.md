@@ -4,8 +4,8 @@
 Multi-source weather forecasting app for Oakland local weather and Tahoe ski resort conditions. Deployed as a web app on Hugging Face Spaces and designed for a Raspberry Pi + Inky Impression 7.3" e-ink display.
 
 ## Deployment
-- **Hugging Face**: Push to `keithdmyers` HF account after changes to app.py or weather logic
-- **E-ink display**: Raspberry Pi 5 with Inky Impression 7.3", ESP32 for outdoor temp sensor
+- **Hugging Face**: Push to `keithdmyers` HF account after changes to webapp.py or weather logic
+- **E-ink display**: Raspberry Pi 3/5 with Inky Impression 7.3", ESP32 for outdoor temp sensor
 
 ## Key Components
 - Weather data aggregation from NOAA/NWS, Open-Meteo, SNOTEL, CDEC, Synoptic/MesoWest

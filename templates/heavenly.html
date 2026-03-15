@@ -53,7 +53,7 @@
 .summary-metric .val-sm {
     font-size: 14px;
     font-weight: 600;
-    color: #3b82f6;
+    color: #00c;
 }
 
 .summary-metric .sub {
@@ -96,7 +96,7 @@
     font-size: 12px;
 }
 
-.conditions-strip .metric-val.blue { color: #3b82f6; }
+.conditions-strip .metric-val.blue { color: #00c; }
 
 .conditions-strip .avy-badge {
     border: 2px solid #e2e8f0;
@@ -107,11 +107,11 @@
     color: #64748b;
 }
 
-.avy-badge.avy-low { border-color: #22c55e; color: #16a34a; }
-.avy-badge.avy-mod { border-color: #eab308; color: #ca8a04; }
-.avy-badge.avy-con { border-color: #f97316; color: #ea580c; }
-.avy-badge.avy-high { border-color: #ef4444; color: #dc2626; }
-.avy-badge.avy-ext { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+.avy-badge.avy-low { border-color: #090; color: #090; }
+.avy-badge.avy-mod { border-color: #cc0; color: #cc0; }
+.avy-badge.avy-con { border-color: #c60; color: #c60; }
+.avy-badge.avy-high { border-color: #c00; color: #c00; }
+.avy-badge.avy-ext { border-color: #c00; background: #fff; color: #c00; }
 
 /* Zone cards row */
 .zone-row {
@@ -183,25 +183,25 @@
     font-weight: 700;
     font-size: 12px;
 }
-.zone-card .zone-snow.hot { color: #ef4444; }
-.zone-card .zone-snow.active { color: #3b82f6; }
+.zone-card .zone-snow.hot { color: #c00; }
+.zone-card .zone-snow.active { color: #00c; }
 .zone-card .zone-snow.none { color: #cbd5e1; }
 
 .zone-card .zone-wind { color: #64748b; font-weight: 500; }
-.zone-card .zone-wind.warn { color: #f97316; }
-.zone-card .zone-wind.danger { color: #ef4444; }
+.zone-card .zone-wind.warn { color: #c60; }
+.zone-card .zone-wind.danger { color: #c00; }
 
 .zone-card .zone-precip {
     font-size: 10px;
     font-weight: 700;
 }
-.zone-card .zone-precip.snow-type { color: #3b82f6; }
-.zone-card .zone-precip.mix-type { color: #f97316; }
+.zone-card .zone-precip.snow-type { color: #00c; }
+.zone-card .zone-precip.mix-type { color: #c60; }
 .zone-card .zone-precip.rain-type { color: #64748b; }
 
 .zone-card .zone-quality {
     font-size: 10px;
-    color: #3b82f6;
+    color: #00c;
     font-weight: 600;
 }
 
@@ -242,8 +242,8 @@
     font-weight: 700;
     line-height: 1;
 }
-.forecast-day .fc-snow.hot { color: #ef4444; }
-.forecast-day .fc-snow.active { color: #3b82f6; }
+.forecast-day .fc-snow.hot { color: #c00; }
+.forecast-day .fc-snow.active { color: #00c; }
 .forecast-day .fc-snow.none { color: #cbd5e1; }
 
 .forecast-day .fc-temps {
@@ -267,8 +267,8 @@
 }
 
 .forecast-day .fc-bar-fill { height: 100%; border-radius: 2px; }
-.fc-bar-fill.hot { background: #ef4444; }
-.fc-bar-fill.active { background: #3b82f6; }
+.fc-bar-fill.hot { background: #c00; }
+.fc-bar-fill.active { background: #00c; }
 
 .forecast-day .fc-icon {
     font-size: 22px;
@@ -370,6 +370,12 @@
                 <span class="metric-val">{{ lifts_open }}/{{ lifts_total }}</span>
             </div>
             {% endif %}
+            {% if road_temp_f is not none %}
+            <div class="metric">
+                <span class="metric-label">Road</span>
+                <span class="metric-val{{ ' blue' if road_temp_f <= 32 else '' }}">{{ road_temp_f }}&deg;F</span>
+            </div>
+            {% endif %}
         </div>
 
         <!-- Chain controls -->
@@ -377,7 +383,7 @@
         <div class="alert-banner">
             <span class="alert-icon">&#9888; Chains:</span>
             {% for c in chains[:2] %}
-            <span class="alert-text" style="font-weight:500;">{{ c.route }} — {{ c.status[:40] }}</span>
+            <span class="alert-text">{{ c.route }} -- {{ c.status[:40] }}</span>
             {% endfor %}
         </div>
         {% endif %}

@@ -633,6 +633,7 @@ def fetch_open_meteo(lat: float, lon: float) -> dict:
                 "relative_humidity_2m", "dew_point_2m",
                 "apparent_temperature", "pressure_msl", "visibility", "cape",
             ]),
+            "daily": "sunrise,sunset",
             "models": ",".join(MODELS),
             "forecast_days": 16,
             "timezone": "America/Los_Angeles",
@@ -665,6 +666,7 @@ def fetch_open_meteo_multi(locations: dict) -> dict:
                 "relative_humidity_2m", "dew_point_2m",
                 "apparent_temperature", "pressure_msl", "visibility", "cape",
             ]),
+            "daily": "sunrise,sunset",
             "models": ",".join(MODELS),
             "forecast_days": 16,
             "timezone": "America/Los_Angeles",
@@ -675,7 +677,7 @@ def fetch_open_meteo_multi(locations: dict) -> dict:
             data = resp.json()
             # Multi-point returns a list; single point returns a dict
             if isinstance(data, list):
-                return {names[i]: data[i] for i in range(len(names))}
+                return {names[i]: data[i] for i in range(min(len(names), len(data)))}
             else:
                 return {names[0]: data}
         return {n: {"error": f"HTTP {resp.status_code}"} for n in names}
@@ -3320,8 +3322,11 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
             if "error" not in p:
                 # Skill-weighted blend of all models (BMA-style)
                 blended = skill_weighted_blend(p, model_weights)
-                # Fall back to GFS if blend fails
-                primary = blended if blended else p["models"].get("GFS", [])
+                # Fall back to GFS if blend fails (copy to avoid mutating model data)
+                if blended:
+                    primary = blended
+                else:
+                    primary = [dict(h) for h in p["models"].get("GFS", [])]
 
                 # Apply bias corrections to blended forecast
                 # Only snowfall (multiplicative). Temp bias is daily-level, not per-hour.
@@ -3341,7 +3346,8 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 snap = primary[0] if primary else {}
 
                 # Apply terrain-adjusted temperature to snapshot
-                aspect_deg = loc.get("aspect_deg")
+                zone_cfg = RESORTS[rn][zk]
+                aspect_deg = zone_cfg.get("aspect_deg")
                 if snap and aspect_deg is not None:
                     snap_temp_c = snap.get("temp_c")
                     snap_cc = snap.get("cloud_cover_pct", 50) or 50
@@ -3352,7 +3358,7 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                         except (ValueError, TypeError):
                             hour_of_day = now.hour
                         adj_temp_c = terrain_adjusted_temperature(
-                            snap_temp_c, loc["elev_ft"] * 0.3048,
+                            snap_temp_c, zone_cfg["elev_ft"] * 0.3048,
                             aspect_deg, hour_of_day, snap_cc
                         )
                         snap["temp_c_terrain_adj"] = round(adj_temp_c, 1)
@@ -3366,7 +3372,7 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                     )
                     fl_m = (snap.get("freezing_level_ft") or 0) * 0.3048 if snap.get("freezing_level_ft") else None
                     snap["precip_phase"] = precip_phase_probability(
-                        wb, loc["elev_ft"] * 0.3048, fl_m
+                        wb, zone_cfg["elev_ft"] * 0.3048, fl_m
                     )
 
                 # Apply lake effect enhancement for east-shore resorts
@@ -3514,6 +3520,35 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
     if observed_lapse_rate is not None:
         current["observed_lapse_rate_c_km"] = observed_lapse_rate
 
+    # Extract sunrise/sunset from Open-Meteo daily data
+    solar = {}
+    # om may be a dict keyed by resort name (from fetch_open_meteo_multi) or a
+    # plain Open-Meteo response dict. Try to find daily sunrise/sunset from any
+    # available source.
+    _om_sources = list(om.values()) if isinstance(om, dict) and all(isinstance(v, dict) for v in om.values()) else [om]
+    for _om_src in _om_sources:
+        if not isinstance(_om_src, dict) or "error" in _om_src:
+            continue
+        daily = _om_src.get("daily", {})
+        sr_list = daily.get("sunrise", [])
+        ss_list = daily.get("sunset", [])
+        if sr_list and ss_list:
+            try:
+                sr_dt = datetime.fromisoformat(sr_list[0])
+                ss_dt = datetime.fromisoformat(ss_list[0])
+                daylight_sec = (ss_dt - sr_dt).total_seconds()
+                daylight_hours = round(daylight_sec / 3600, 2)
+                solar = {
+                    "sunrise": sr_dt.strftime("%-I:%M %p"),
+                    "sunset": ss_dt.strftime("%-I:%M %p"),
+                    "sunrise_iso": sr_list[0],
+                    "sunset_iso": ss_list[0],
+                    "daylight_hours": daylight_hours,
+                }
+            except (ValueError, TypeError, IndexError):
+                pass
+            break
+
     result = {
         "generated": now.isoformat(),
         "current_conditions": current,
@@ -3533,6 +3568,7 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "radar_nowcast": radar_nowcast or {},
         "cssl": cssl or {},
         "hrrr": hrrr or {},
+        "solar": solar,
     }
 
     # Rankings
