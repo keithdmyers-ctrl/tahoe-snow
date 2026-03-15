@@ -8,4 +8,7 @@ __pycache__/
 .pressure_history.json
 .storm_state.json
 sensor_data.json
+.observations.json
+.snow_verification.json
+.ml_models/
 alerts.log
