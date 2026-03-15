@@ -518,7 +518,11 @@ button.section-header {
   -webkit-mask-image: none;
   mask-image: none;
 }
-table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
+@media (max-width: 500px) {
+  table.data-table { font-size: 11px; }
+  table.data-table th, table.data-table td { padding: 6px 6px; }
+}
 table.data-table th {
   text-align: left; padding: 8px 10px; color: var(--text-dim);
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
@@ -972,6 +976,8 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .decision-score.green { color: var(--safe); border-color: var(--safe); }
 .decision-score.yellow { color: var(--moderate); border-color: var(--moderate); }
 .decision-score.red { color: var(--danger); border-color: var(--danger); }
+.score-max { font-size: 18px; font-weight: 400; opacity: 0.4; }
+@media (max-width: 600px) { .score-max { font-size: 14px; } }
 .decision-info { flex: 1; min-width: 0; }
 .decision-label { font-size: 20px; font-weight: 700; }
 .decision-best { font-size: 14px; color: var(--accent); margin-top: 4px; }
@@ -1592,7 +1598,8 @@ function renderMap() {
     const lifts = DATA.lifts?.[name.toLowerCase().replace(/[^a-z]/g, '-')] || DATA.lifts?.[name.toLowerCase()] || {};
 
     const snowCls = snow24 > 6 ? 'snow-hot' : snow24 > 0 ? 'snow-active' : '';
-    const displayName = snow24 > 0 ? snow24.toFixed(0) + '"' : (name.length > 8 ? name.slice(0, 7) + '\u2026' : name);
+    const abbrevs = {'Heavenly':'HVY','Northstar':'NSR','Kirkwood':'KRK','Palisades Tahoe':'PAL','Sugar Bowl':'SB','Sierra-at-Tahoe':'SAT','Boreal':'BRL','Mt. Rose':'MR'};
+    const displayName = snow24 > 0 ? snow24.toFixed(0) + '"' : (abbrevs[name] || name.slice(0, 3));
     const icon = L.divIcon({
       className: 'resort-marker',
       html: `<div class="marker-resort ${snowCls}">${displayName}</div>`,
@@ -2288,9 +2295,15 @@ function buildHourlyChart(rn) {
   if (!canvas || !canvas.offsetParent) return;
   destroyChart(`hourly-${rn}`);
 
-  const labels = timeline.map(h => {
-    try { const d = new Date(h.time); return d.toLocaleString('en-US', { weekday: 'short', hour: 'numeric' }); }
-    catch(e) { return ''; }
+  const labels = timeline.map((h, i) => {
+    try {
+      const d = new Date(h.time);
+      const hr = d.getHours();
+      // Show day name at midnight/noon, just hour otherwise
+      if (hr === 0) return d.toLocaleDateString('en-US', {weekday: 'short'});
+      if (hr === 12) return '12PM';
+      return hr < 12 ? hr + 'a' : (hr - 12 || 12) + 'p';
+    } catch(e) { return ''; }
   });
 
   charts[`hourly-${rn}`] = new Chart(canvas, {
@@ -2338,10 +2351,10 @@ function buildHourlyChart(rn) {
         },
       },
       scales: {
-        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 45 } },
+        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 0, autoSkip: true, maxTicksLimit: 12, font: { size: 10 } } },
         temp: { position: 'left', ...SCALE_TEMP },
         snow: { position: 'right', ...SCALE_SNOW },
-        wind: { position: 'right', min: 0, ticks: { color: '#99aabb', callback: v => v + ' mph', font: { size: 10 } }, grid: { display: false } },
+        wind: { display: false },
       },
     },
   });
@@ -2705,7 +2718,7 @@ function renderDecision() {
 
   document.getElementById('decision-section').innerHTML = `
     <div class="decision-banner">
-      <div class="decision-score ${colorCls}">${d.score}</div>
+      <div class="decision-score ${colorCls}">${d.score}<span class="score-max">/100</span></div>
       <div class="decision-info">
         <div class="decision-label">${esc(d.label || '')}</div>
         ${bestLine ? `<div class="decision-best">${bestLine}</div>` : ''}
