@@ -488,7 +488,7 @@ def _settling_factor(temp_f: float) -> float:
 
     settled_depth = fresh_depth * factor
     """
-    return 0.75 + 0.25 * min(1.0, max(0.0, (temp_f - 10.0) / 22.0))
+    return 1.0 - 0.25 * min(1.0, max(0.0, (temp_f - 10.0) / 22.0))
 
 
 def log_snow_verification(analysis: dict) -> dict:

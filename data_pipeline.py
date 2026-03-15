@@ -163,6 +163,7 @@ def fetch_oakland_data():
     home_nbm = _safe_fetch(fetch_nbm, OAKLAND["lat"], OAKLAND["lon"])
     home_pws = _safe_fetch(fetch_pws_nearby, OAKLAND["lat"], OAKLAND["lon"], default=[])
     home_alerts = _safe_fetch(fetch_nws_alerts, OAKLAND["lat"], OAKLAND["lon"], default=[])
+    home_normals = _safe_fetch(fetch_climate_normals, OAKLAND["lat"], OAKLAND["lon"])
 
     logger.info("Oakland data fetch complete")
     return {
@@ -172,4 +173,5 @@ def fetch_oakland_data():
         "home_nbm": home_nbm,
         "home_pws": home_pws,
         "home_alerts": home_alerts,
+        "home_normals": _check_error(home_normals),
     }

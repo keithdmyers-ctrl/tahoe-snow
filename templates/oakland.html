@@ -5,15 +5,16 @@
 <style>
 {% include "base.css" %}
 
-/* Oakland scene — Figma v2 */
-/* Header and bottom bar use shared styles from base.css */
+/* Oakland scene -- e-ink 7-color palette only
+ * Allowed: #111, #fff, #c00, #090, #00c, #cc0, #c60
+ * No rgba(), no box-shadow, no gradients, no opacity */
 
 /* Content area */
 .content {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: #ffffff;
+    background: #fff;
     min-height: 0;
     overflow: hidden;
 }
@@ -36,7 +37,7 @@
 
 .temp-block .label {
     font-size: 9px;
-    color: #94a3b8;
+    color: #999;
     letter-spacing: 1.2px;
     font-weight: 600;
     margin-bottom: 4px;
@@ -46,16 +47,16 @@
 .temp-block .value {
     font-size: 48px;
     font-weight: 700;
-    color: #1e293b;
+    color: #111;
     line-height: 1;
     margin-bottom: 2px;
 }
 
-.temp-block .value.stale { color: #94a3b8; }
+.temp-block .value.stale { color: #999; }
 
 .temp-block .sub {
     font-size: 11px;
-    color: #94a3b8;
+    color: #999;
     font-weight: 500;
     min-height: 14px;
 }
@@ -71,9 +72,9 @@
     flex-shrink: 0;
 }
 
-.conditions-row .cond { color: #3b82f6; font-weight: 600; }
-.conditions-row .wind { color: #64748b; font-weight: 500; }
-.conditions-row .nws-ref { color: #94a3b8; font-size: 11px; font-weight: 500; }
+.conditions-row .cond { color: #00c; font-weight: 600; }
+.conditions-row .wind { color: #888; font-weight: 500; }
+.conditions-row .nws-ref { color: #999; font-size: 11px; font-weight: 500; }
 
 /* Barometer strip */
 .baro-strip {
@@ -82,8 +83,8 @@
     height: 40px;
     margin: 4px 16px 0;
     padding: 0 16px;
-    background: #f1f5f9;
-    border-radius: 8px;
+    background: #eee;
+    border-radius: 0;
     gap: 16px;
     font-size: 12px;
     flex-shrink: 0;
@@ -92,7 +93,7 @@
 .baro-pressure {
     font-weight: 700;
     font-size: 12px;
-    color: #1e293b;
+    color: #111;
 }
 
 .baro-trend {
@@ -104,11 +105,11 @@
 .baro-arrow {
     font-size: 12px;
 }
-.baro-arrow.rising { color: #22c55e; }
-.baro-arrow.falling { color: #ef4444; }
-.baro-arrow.steady { color: #94a3b8; }
+.baro-arrow.rising { color: #090; }
+.baro-arrow.falling { color: #c00; }
+.baro-arrow.steady { color: #999; }
 
-.baro-label { color: #64748b; font-weight: 500; }
+.baro-label { color: #888; font-weight: 500; }
 
 .baro-forecast-wrap {
     flex: 1;
@@ -119,21 +120,21 @@
 }
 
 .baro-forecast {
-    color: #475569;
+    color: #111;
     font-weight: 500;
 }
 
 .baro-rain {
     font-weight: 700;
     padding: 4px 10px;
-    border-radius: 6px;
+    border-radius: 0;
     font-size: 11px;
     min-width: 48px;
     text-align: center;
 }
-.rain-low { background: #e8f5e9; color: #2e7d32; }
-.rain-med { background: #fff3e0; color: #e65100; }
-.rain-high { background: #ffebee; color: #c62828; }
+.rain-low { background: #fff; color: #090; border: 1px solid #090; }
+.rain-med { background: #fff; color: #c60; border: 1px solid #c60; }
+.rain-high { background: #c00; color: #fff; }
 
 /* Hourly forecast strip */
 .hourly-strip {
@@ -141,9 +142,9 @@
     margin-top: 8px;
     height: 76px;
     min-height: 76px;
-    border-top: 1px solid #e2e8f0;
-    border-bottom: 1px solid #e2e8f0;
-    background: #ffffff;
+    border-top: 2px solid #111;
+    border-bottom: 2px solid #111;
+    background: #fff;
     flex-shrink: 0;
 }
 
@@ -157,12 +158,12 @@
     gap: 3px;
 }
 
-.hour-cell .time { font-size: 9px; color: #94a3b8; font-weight: 600; }
+.hour-cell .time { font-size: 9px; color: #888; font-weight: 600; }
 .hour-cell .icon { font-size: 18px; line-height: 1; height: 20px; display: flex; align-items: center; justify-content: center; }
-.hour-cell .htemp { font-size: 13px; font-weight: 700; color: #1e293b; }
-.hour-cell .precip { font-size: 9px; color: #3b82f6; font-weight: 600; height: 12px; }
+.hour-cell .htemp { font-size: 13px; font-weight: 700; color: #111; }
+.hour-cell .precip { font-size: 9px; color: #00c; font-weight: 600; height: 12px; }
 
-/* Precip probability background bar */
+/* Precip probability background bar -- solid color for e-ink */
 .hour-cell {
     position: relative;
     overflow: hidden;
@@ -172,11 +173,11 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(59, 130, 246, 0.08);
+    background: #eee;
     pointer-events: none;
 }
-.hour-cell .precip-bg.med { background: rgba(59, 130, 246, 0.15); }
-.hour-cell .precip-bg.high { background: rgba(59, 130, 246, 0.25); }
+.hour-cell .precip-bg.med { background: #ccc; }
+.hour-cell .precip-bg.high { background: #00c; }
 
 /* 5-day forecast */
 .forecast-row {
@@ -190,22 +191,21 @@
 
 .forecast-day {
     flex: 1;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 0;
     padding: 6px 8px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 2px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .forecast-day .day-name {
     font-size: 12px;
     font-weight: 700;
-    color: #64748b;
+    color: #888;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -218,21 +218,21 @@
 .forecast-day .fc-temps {
     font-size: 18px;
     font-weight: 700;
-    color: #1e293b;
+    color: #111;
     display: flex;
     align-items: baseline;
     gap: 4px;
 }
 
 .forecast-day .fc-temps .lo {
-    color: #94a3b8;
+    color: #999;
     font-weight: 600;
     font-size: 13px;
 }
 
 .forecast-day .fc-cond {
     font-size: 9px;
-    color: #3b82f6;
+    color: #00c;
     font-weight: 600;
     text-align: center;
     line-height: 1.2;

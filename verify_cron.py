@@ -81,14 +81,8 @@ def main():
     # --- Log verifications ---
     print("\n  Logging daily verification...")
     try:
-        # Handle the known bug: log_daily_verification may reference
-        # undefined 'hourly' variable. Wrap defensively.
         log_daily_verification(home_obs, home_fc, analysis)
         print("  Daily verification logged OK")
-    except NameError as e:
-        # Known bug: 'hourly' variable not defined in log_daily_verification
-        print(f"  WARNING: Daily verification partial failure: {e}")
-        print("  (This is a known bug with the 'hourly' variable)")
     except Exception as e:
         print(f"  ERROR logging daily verification: {e}")
 

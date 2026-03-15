@@ -131,7 +131,7 @@ def fetch_all(force=False):
         "cssl": analysis.get("cssl"),
         "tahoe_alerts": analysis.get("alerts", []),
         "sounding": analysis.get("sounding"),
-        "home_normals": None,  # Oakland normals not fetched here; use pipeline if needed
+        "home_normals": oakland.get("home_normals"),
         "storm": analysis.get("storm"),
         "chains": analysis.get("chains"),
         "lifts": analysis.get("lifts"),

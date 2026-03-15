@@ -337,10 +337,10 @@ def precip_phase_probability(wet_bulb_c: float, elevation_m: float,
     logistic = 1.0 / (1.0 + math.exp(k * (wet_bulb_c - center)))
 
     # Base probabilities from logistic
-    if wet_bulb_c < -2.0:
+    if wet_bulb_c < -4.0:
         p_snow = 0.95
         p_rain = 0.01
-    elif wet_bulb_c > 3.0:
+    elif wet_bulb_c > 5.0:
         p_snow = 0.01
         p_rain = 0.95
     else:
@@ -2125,7 +2125,7 @@ def multi_model_spread(parsed: dict) -> list:
         snows = [day_data["models"][m]["snow_in"] for m in model_names if m in day_data["models"]]
         temps = [day_data["models"][m]["temp_high_f"] for m in model_names
                  if m in day_data["models"] and day_data["models"][m]["temp_high_f"] is not None]
-        day_data["snow_range"] = (min(snows), max(snows)) if snows else (0, 0)
+        day_data["snow_range"] = [min(snows), max(snows)] if snows else [0, 0]
         day_data["snow_spread"] = round(max(snows) - min(snows), 1) if snows else 0
         day_data["temp_spread_f"] = round(max(temps) - min(temps), 1) if len(temps) >= 2 else None
         n_models_with_data = len([m for m in model_names if m in day_data["models"]])
@@ -3105,7 +3105,7 @@ def generate_summary(analysis: dict) -> str:
     # Current snapshot
     if obs:
         lines.append(f"Currently {obs.get('conditions', 'clear').lower()} at lake level with "
-                      f"temperatures at {obs['temp_f']}F (feels like {obs['feels_like_f']}F).")
+                      f"temperatures at {obs.get('temp_f', '?')}F (feels like {obs.get('feels_like_f', '?')}F).")
     elif cur.get("lake_level_temp_f"):
         lines.append(f"Lake level temperature is {cur['lake_level_temp_f']}F.")
 
@@ -3784,7 +3784,7 @@ def format_report(a: dict, compact: bool = False) -> str:
     L.append("-" * W)
     if obs:
         L.append(f"  Station:      {obs.get('station', '?')} | {obs.get('conditions', '')}")
-        L.append(f"  Temperature:  {obs['temp_f']}F  (feels like {obs['feels_like_f']}F)")
+        L.append(f"  Temperature:  {obs.get('temp_f', '?')}F  (feels like {obs.get('feels_like_f', '?')}F)")
         L.append(f"  Humidity:     {obs.get('humidity_pct', 'N/A')}%")
         gust = f"  gusting {obs['wind_gust_mph']} mph" if obs.get('wind_gust_mph', 0) > 0 else ""
         L.append(f"  Wind:         {obs['wind_dir']} at {obs['wind_mph']} mph{gust}")

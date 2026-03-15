@@ -1,4 +1,13 @@
 flask>=3.0
 requests>=2.31
 numpy>=1.26
-herbie-data>=2024.1  # optional: HRRR model data via Herbie
+pillow>=10.0
+jinja2>=3.1
+
+# Optional: HRRR model data via Herbie
+# herbie-data>=2024.1
+
+# Raspberry Pi only (e-ink display + sensors):
+# inky[rpi]>=2.0
+# smbus2>=0.4
+# gpiod>=2.0

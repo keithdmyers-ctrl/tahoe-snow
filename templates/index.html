@@ -93,6 +93,8 @@ body {
 .header h1 .icon { font-size: 24px; opacity: 0.9; }
 .header .meta { text-align: right; font-size: 13px; color: var(--text-dim); }
 .header .meta .time { color: var(--accent); font-weight: 600; }
+.header .meta .time.stale-warn { color: var(--moderate); }
+.header .meta .time.stale-danger { color: var(--danger); }
 .header .header-solar { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 @media (max-width: 420px) {
   .header { padding: 10px 14px; flex-wrap: wrap; gap: 6px; }
@@ -115,6 +117,8 @@ body {
 }
 .refresh-btn:hover { background: rgba(255,255,255,0.15); }
 .refresh-btn.loading { opacity: 0.6; pointer-events: none; }
+.refresh-btn.refresh-error { border-color: var(--danger); color: var(--danger); }
+.refresh-btn.refresh-success { border-color: var(--safe); color: var(--safe); }
 .refresh-btn.loading::before {
   content: '';
   width: 14px; height: 14px;
@@ -394,7 +398,7 @@ button.section-header {
   transition: border-color 0.2s, box-shadow 0.2s;
   box-shadow: var(--shadow-card);
 }
-.zone-card:hover { border-color: rgba(74, 158, 255, 0.3); box-shadow: var(--shadow), 0 0 0 1px rgba(74, 158, 255, 0.15); }
+/* Zone cards are informational, not interactive -- no hover lift */
 .zone-card .zone-header {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -892,10 +896,11 @@ table.data-table tr:hover td { background: var(--card-hover); }
   display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
 }
 .decision-factor {
-  font-size: 11px; padding: 3px 8px; border-radius: 4px;
-  background: rgba(255,255,255,0.06); color: var(--text-dim);
+  font-size: 11px; padding: 4px 10px; border-radius: 4px;
+  background: rgba(255,255,255,0.10); color: var(--text-dim);
+  border: 1px solid rgba(255,255,255,0.08);
 }
-.decision-factor .df-val { color: var(--text); font-weight: 600; }
+.decision-factor .df-val { color: var(--accent); font-weight: 700; }
 @media (max-width: 600px) {
   .decision-banner { flex-direction: column; text-align: center; padding: 18px 14px; gap: 14px; }
   .decision-score { width: 80px; height: 80px; font-size: 48px; }
@@ -905,15 +910,15 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
 /* -- Storm narrative -- */
 .narrative-block {
-  background: var(--card);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(135deg, rgba(74,158,255,0.06), rgba(126,200,227,0.04));
+  border: 1px solid rgba(74,158,255,0.15);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
-  padding: 14px 18px;
+  padding: 16px 20px;
   margin-bottom: 16px;
   font-size: 14px;
   line-height: 1.7;
-  color: var(--text-dim);
+  color: var(--text);
   box-shadow: var(--shadow);
 }
 .narrative-block .narrative-title {
@@ -1030,6 +1035,9 @@ table.data-table tr:hover td { background: var(--card-hover); }
   font-size: 13px;
   margin-bottom: var(--sp-4);
 }
+.state-message--fullpage {
+  padding-top: 60px;
+}
 
 /* -- Jargon tooltips -- */
 .jargon {
@@ -1113,7 +1121,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
   <div class="section">
     <button class="section-header" aria-expanded="false">
-      <span>NWS Forecaster Discussion (<abbr class="jargon" title="Area Forecast Discussion: NWS forecaster notes">AFD</abbr>, Reno WFO)</span> <span class="toggle">&#9662;</span>
+      <span><abbr class="jargon" title="National Weather Service">NWS</abbr> Forecaster Discussion (<abbr class="jargon" title="Area Forecast Discussion: NWS forecaster notes">AFD</abbr>, Reno <abbr class="jargon" title="Weather Forecast Office: regional NWS station">WFO</abbr>)</span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="afd-body"></div>
   </div>
@@ -1195,7 +1203,7 @@ async function loadData() {
         return;
       }
       document.getElementById('loading').innerHTML =
-        '<div class="container" style="padding-top:60px"><div class="state-message--error text-center">Data loading timed out</div><div class="state-message--sub text-center">The server is still fetching weather data. This can take a few minutes on first load.</div><div class="text-center"><button class="refresh-btn" data-action="retry-load">Retry</button></div></div>';
+        '<div class="container state-message--fullpage"><div class="state-message--error text-center">Data loading timed out</div><div class="state-message--sub text-center">The server is still fetching weather data. This can take a few minutes on first load.</div><div class="text-center"><button class="refresh-btn" data-action="retry-load">Retry</button></div></div>';
       return;
     }
     _loadRetries = 0;
@@ -1210,14 +1218,15 @@ async function loadData() {
   } catch (e) {
     console.error('loadData error:', e);
     document.getElementById('loading').innerHTML =
-      '<div class="container" style="padding-top:60px"><div class="state-message--error text-center">Unable to connect to weather server</div><div class="state-message--sub text-center">Check your connection and try again.</div><div class="text-center"><button class="refresh-btn" data-action="reload">Retry</button></div></div>';
+      '<div class="container state-message--fullpage"><div class="state-message--error text-center">Unable to connect to weather server</div><div class="state-message--sub text-center">Check your connection and try again.</div><div class="text-center"><button class="refresh-btn" data-action="reload">Retry</button></div></div>';
   }
 }
 
 async function refreshData() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('loading');
-  btn.innerHTML = '<span style="opacity:0">Refresh</span>';
+  btn.classList.remove('refresh-error', 'refresh-success');
+  btn.textContent = '';
   try {
     await fetch('/api/refresh');
     const r = await fetch('/api/data');
@@ -1226,17 +1235,15 @@ async function refreshData() {
   } catch(e) {
     console.error(e);
     btn.classList.remove('loading');
-    btn.innerHTML = 'Retry';
-    btn.style.borderColor = 'var(--danger)';
-    btn.style.color = 'var(--danger)';
-    // Error state persists until next click — do not auto-revert
+    btn.textContent = 'Retry';
+    btn.classList.add('refresh-error');
+    // Error state persists until next click
     return;
   }
   btn.classList.remove('loading');
-  btn.innerHTML = '\u2713 Updated';
-  btn.style.borderColor = 'var(--safe)';
-  btn.style.color = 'var(--safe)';
-  setTimeout(() => { btn.innerHTML = 'Refresh'; btn.style.borderColor = ''; btn.style.color = ''; }, 2000);
+  btn.textContent = '\u2713 Updated';
+  btn.classList.add('refresh-success');
+  setTimeout(() => { btn.textContent = 'Refresh'; btn.classList.remove('refresh-success'); }, 2000);
 }
 
 function f(v, suf='', fallback='\u2014') { return v != null ? v + suf : fallback; }
@@ -1371,15 +1378,15 @@ function updateStaleness(dataTime) {
   if (!el) return;
   const diffMin = Math.round((Date.now() - dataTime.getTime()) / 60000);
   const baseStr = dataTime.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  el.classList.remove('stale-warn', 'stale-danger');
   if (diffMin < 2) {
     el.textContent = baseStr;
-    el.style.color = '';
   } else if (diffMin < 60) {
     el.textContent = baseStr + ' (' + diffMin + 'm ago)';
-    el.style.color = diffMin > 20 ? 'var(--moderate)' : '';
+    if (diffMin > 20) el.classList.add('stale-warn');
   } else {
     el.textContent = baseStr + ' (' + Math.round(diffMin / 60) + 'h ago)';
-    el.style.color = 'var(--danger)';
+    el.classList.add('stale-danger');
   }
 }
 
@@ -1426,7 +1433,7 @@ function renderCurrent() {
   if (c.observed_lapse_rate_c_km != null) {
     const lr = c.observed_lapse_rate_c_km;
     const lrSub = lr < 0 ? 'Inversion detected' : lr < 4 ? 'Weak lapse' : lr > 8 ? 'Strong lapse' : 'Normal';
-    html += statCard('Lapse Rate', lr.toFixed(1) + ' \u00B0C/km', lrSub, '');
+    html += statCard('<abbr class="jargon" title="Temperature change per km altitude: steeper = more unstable">Lapse Rate</abbr>', lr.toFixed(1) + ' \u00B0C/km', lrSub, '');
   }
   document.getElementById('current-row').innerHTML = html;
 }
@@ -1583,7 +1590,7 @@ function renderRWIS() {
     </div>`;
   }
   el.innerHTML = `<div class="rwis-section">
-    <div class="panel-label">Road Weather (RWIS)</div>
+    <div class="panel-label">Road Weather (<abbr class="jargon" title="Road Weather Information System: automated road sensors">RWIS</abbr>)</div>
     <div class="rwis-grid">${cards}</div>
   </div>`;
 }
@@ -1792,7 +1799,7 @@ function buildResortPanel(rn) {
         <div class="chart-container"><canvas id="chart-models-${rn}"></canvas></div>
         <div class="scroll-wrap mt-3">
         <table class="data-table">
-          <thead><tr><th>Date</th><th>GFS</th><th>ECMWF</th><th>ICON</th><th>High</th><th>Spread</th><th>Confidence</th></tr></thead>
+          <thead><tr><th>Date</th><th><abbr class="jargon" title="Global Forecast System: NOAA global model">GFS</abbr></th><th><abbr class="jargon" title="European Centre model: often most accurate">ECMWF</abbr></th><th><abbr class="jargon" title="Icosahedral model: German weather service">ICON</abbr></th><th>High</th><th>Spread</th><th>Confidence</th></tr></thead>
           <tbody>`;
     for (const d of spread.slice(0, 7)) {
       const m = d.models || {};
@@ -2316,6 +2323,12 @@ function renderModelComparison() {
     nbmMaxPop = Math.max(...(nbm.hourly.precipitation_probability.slice(0, 24).filter(v => v != null)));
   }
 
+  const modelTooltips = {
+    GFS: 'Global Forecast System: NOAA global model',
+    ECMWF: 'European Centre model: often most accurate',
+    ICON: 'Icosahedral model: German weather service',
+    HRRR: 'High-Resolution Rapid Refresh: short-range US model'
+  };
   let tableHtml = `<table class="data-table">
     <thead><tr><th>Model</th><th>24h Snow</th><th>48h Snow</th><th>72h Snow</th><th>7-Day Snow</th><th>Weight</th></tr></thead>
     <tbody>`;
@@ -2326,8 +2339,10 @@ function renderModelComparison() {
     const wStr = w != null ? (w * 100).toFixed(0) + '%' : '--';
     const hasData = spread.some(d => d.models?.[mn]?.snow_in != null);
     if (!hasData) continue;
+    const mnTip = modelTooltips[mn];
+    const mnLabel = mnTip ? `<abbr class="jargon" title="${esc(mnTip)}">${esc(mn)}</abbr>` : esc(mn);
     tableHtml += `<tr>
-      <td>${esc(mn)}</td>
+      <td>${mnLabel}</td>
       <td class="snow-val">${t.d1.toFixed(1)}"</td>
       <td class="snow-val">${t.d2.toFixed(1)}"</td>
       <td class="snow-val">${t.d3.toFixed(1)}"</td>
@@ -2338,7 +2353,7 @@ function renderModelComparison() {
 
   if (nwsSnow24 > 0 || nwsSnow7d > 0) {
     tableHtml += `<tr>
-      <td>NWS Human</td>
+      <td><abbr class="jargon" title="National Weather Service forecaster-edited values">NWS Human</abbr></td>
       <td class="snow-val">${nwsSnow24.toFixed(1)}"</td>
       <td class="snow-val">${nwsSnow48.toFixed(1)}"</td>
       <td class="snow-val">${nwsSnow72.toFixed(1)}"</td>
