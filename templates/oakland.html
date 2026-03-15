@@ -296,6 +296,18 @@
             {% if solar and solar.sunrise %}<span class="nws-ref">&#9728; {{ solar.sunrise }}  &#9790; {{ solar.sunset }}</span>{% endif %}
         </div>
 
+        <!-- AQI + UV compact indicator -->
+        {% if aqi is not none or uv_index is not none %}
+        <div class="conditions-row" style="padding-top: 0; font-size: 12px; gap: 16px;">
+            {% if aqi is not none %}
+            <span class="nws-ref" style="font-weight: 600; color: {% if aqi <= 50 %}#090{% elif aqi <= 100 %}#c60{% elif aqi <= 150 %}#c60{% else %}#c00{% endif %};">AQI {{ aqi }} {{ aqi_category }}</span>
+            {% endif %}
+            {% if uv_index is not none %}
+            <span class="nws-ref" style="font-weight: 600; color: {% if uv_index <= 2 %}#090{% elif uv_index <= 5 %}#c60{% elif uv_index <= 7 %}#c60{% else %}#c00{% endif %};">UV {{ uv_index }} {{ uv_info.level }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- Barometer / Rain Prediction -->
         {% if pressure_forecast and pressure_forecast.rain_pct is not none %}
         {% set pf = pressure_forecast %}

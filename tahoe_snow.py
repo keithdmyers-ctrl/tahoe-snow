@@ -614,8 +614,9 @@ def fetch_open_meteo(lat: float, lon: float) -> dict:
                 "freezing_level_height", "weather_code", "cloud_cover",
                 "relative_humidity_2m", "dew_point_2m",
                 "apparent_temperature", "pressure_msl", "visibility", "cape",
+                "uv_index",
             ]),
-            "daily": "sunrise,sunset",
+            "daily": "sunrise,sunset,uv_index_max",
             "models": ",".join(MODELS),
             "forecast_days": 16,
             "timezone": "America/Los_Angeles",
@@ -647,8 +648,9 @@ def fetch_open_meteo_multi(locations: dict) -> dict:
                 "freezing_level_height", "weather_code", "cloud_cover",
                 "relative_humidity_2m", "dew_point_2m",
                 "apparent_temperature", "pressure_msl", "visibility", "cape",
+                "uv_index",
             ]),
-            "daily": "sunrise,sunset",
+            "daily": "sunrise,sunset,uv_index_max",
             "models": ",".join(MODELS),
             "forecast_days": 16,
             "timezone": "America/Los_Angeles",
@@ -665,6 +667,90 @@ def fetch_open_meteo_multi(locations: dict) -> dict:
         return {n: {"error": f"HTTP {resp.status_code}"} for n in names}
     except Exception as e:
         return {n: {"error": str(e)} for n in names}
+
+
+def fetch_air_quality(lat: float, lon: float) -> dict:
+    """Fetch air quality data from Open-Meteo Air Quality API."""
+    try:
+        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": "us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone",
+            "hourly": "us_aqi,pm2_5,pm10",
+            "forecast_days": 3,
+            "timezone": "America/Los_Angeles",
+        }
+        resp = requests.get(url, params=params, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            current = data.get("current", {})
+            hourly = data.get("hourly", {})
+
+            # AQI category
+            aqi = current.get("us_aqi", 0) or 0
+            if aqi <= 50:
+                category = "Good"
+            elif aqi <= 100:
+                category = "Moderate"
+            elif aqi <= 150:
+                category = "Unhealthy for Sensitive"
+            elif aqi <= 200:
+                category = "Unhealthy"
+            elif aqi <= 300:
+                category = "Very Unhealthy"
+            else:
+                category = "Hazardous"
+
+            return {
+                "aqi": aqi,
+                "category": category,
+                "pm2_5": current.get("pm2_5"),
+                "pm10": current.get("pm10"),
+                "ozone": current.get("ozone"),
+                "hourly_aqi": hourly.get("us_aqi", [])[:72],
+                "hourly_time": hourly.get("time", [])[:72],
+            }
+        return {"error": f"HTTP {resp.status_code}"}
+    except Exception as e:
+        logger.warning("Air quality fetch failed: %s", e)
+        return {"error": str(e)}
+
+
+def uv_level(uv_index_val):
+    """Classify UV index into risk level and protection advice."""
+    if uv_index_val is None:
+        return {"level": "Unknown", "protection": ""}
+    uv = float(uv_index_val)
+    if uv <= 2:
+        return {"level": "Low", "protection": "No protection needed"}
+    elif uv <= 5:
+        return {"level": "Moderate", "protection": "Wear sunscreen"}
+    elif uv <= 7:
+        return {"level": "High", "protection": "Wear sunscreen, hat"}
+    elif uv <= 10:
+        return {"level": "Very High", "protection": "Avoid midday sun"}
+    else:
+        return {"level": "Extreme", "protection": "Stay indoors midday"}
+
+
+def aqi_category(aqi_val):
+    """Classify AQI value into EPA category."""
+    if aqi_val is None:
+        return "Unknown"
+    aqi = int(aqi_val)
+    if aqi <= 50:
+        return "Good"
+    elif aqi <= 100:
+        return "Moderate"
+    elif aqi <= 150:
+        return "Unhealthy for Sensitive"
+    elif aqi <= 200:
+        return "Unhealthy"
+    elif aqi <= 300:
+        return "Very Unhealthy"
+    else:
+        return "Hazardous"
 
 
 def fetch_snotel_current() -> dict:
@@ -1936,6 +2022,7 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
         psl = hourly.get(f"pressure_msl_{model}", [])
         vis = hourly.get(f"visibility_{model}", [])
         cape_data = hourly.get(f"cape_{model}", [])
+        uv_data = hourly.get(f"uv_index_{model}", hourly.get("uv_index", []))
 
         hours = []
         for i in range(len(times)):
@@ -1977,6 +2064,7 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
             dp = dewpt[i] if i < len(dewpt) and dewpt[i] is not None else None
             ps = psl[i] if i < len(psl) and psl[i] is not None else None
             vi = vis[i] if i < len(vis) and vis[i] is not None else None
+            uvi = uv_data[i] if i < len(uv_data) and uv_data[i] is not None else None
 
             hours.append({
                 "time": times[i],
@@ -2000,6 +2088,7 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
                 "pressure_hpa": round(ps, 1) if ps is not None else None,
                 "visibility_mi": round(vi / 1609.34, 1) if vi is not None else None,
                 "cape_jkg": round(ca) if ca is not None else None,
+                "uv_index": round(uvi, 1) if uvi is not None else None,
             })
 
         parsed["models"][label] = hours
@@ -3540,12 +3629,17 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 ss_dt = datetime.fromisoformat(ss_list[0])
                 daylight_sec = (ss_dt - sr_dt).total_seconds()
                 daylight_hours = round(daylight_sec / 3600, 2)
+                # UV index max from daily data
+                uv_max_list = daily.get("uv_index_max", [])
+                uv_max_today = round(uv_max_list[0], 1) if uv_max_list and uv_max_list[0] is not None else None
                 solar = {
                     "sunrise": sr_dt.strftime("%-I:%M %p"),
                     "sunset": ss_dt.strftime("%-I:%M %p"),
                     "sunrise_iso": sr_list[0],
                     "sunset_iso": ss_list[0],
                     "daylight_hours": daylight_hours,
+                    "uv_index_max": uv_max_today,
+                    "uv_level": uv_level(uv_max_today) if uv_max_today is not None else None,
                 }
             except (ValueError, TypeError, IndexError):
                 pass

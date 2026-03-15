@@ -29,6 +29,7 @@ from tahoe_snow import (
     fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
     fetch_avalanche, fetch_forecast_discussion,
     fetch_radar_nowcast, fetch_webcam_conditions,
+    fetch_air_quality, uv_level, aqi_category,
     parse_open_meteo, aggregate_daily, multi_model_spread,
     generate_summary, analyze_all, format_report,
     RESORTS, SNOTEL_STATIONS, MODELS, MODEL_LABELS,
@@ -788,6 +789,157 @@ class TestEdgeCases(TestCase):
         }
         summary = generate_summary(minimal)
         self.assertIsInstance(summary, str)
+
+
+# ===================================================================
+# 8. AQI and UV Index Tests
+# ===================================================================
+
+class TestAqiCategory(TestCase):
+    """Test AQI category threshold classification."""
+
+    def test_good(self):
+        self.assertEqual(aqi_category(0), "Good")
+        self.assertEqual(aqi_category(25), "Good")
+        self.assertEqual(aqi_category(50), "Good")
+
+    def test_moderate(self):
+        self.assertEqual(aqi_category(51), "Moderate")
+        self.assertEqual(aqi_category(75), "Moderate")
+        self.assertEqual(aqi_category(100), "Moderate")
+
+    def test_unhealthy_for_sensitive(self):
+        self.assertEqual(aqi_category(101), "Unhealthy for Sensitive")
+        self.assertEqual(aqi_category(150), "Unhealthy for Sensitive")
+
+    def test_unhealthy(self):
+        self.assertEqual(aqi_category(151), "Unhealthy")
+        self.assertEqual(aqi_category(200), "Unhealthy")
+
+    def test_very_unhealthy(self):
+        self.assertEqual(aqi_category(201), "Very Unhealthy")
+        self.assertEqual(aqi_category(300), "Very Unhealthy")
+
+    def test_hazardous(self):
+        self.assertEqual(aqi_category(301), "Hazardous")
+        self.assertEqual(aqi_category(500), "Hazardous")
+
+    def test_none(self):
+        self.assertEqual(aqi_category(None), "Unknown")
+
+    def test_boundary_values(self):
+        """Test exact boundary values."""
+        boundaries = [
+            (50, "Good"), (51, "Moderate"),
+            (100, "Moderate"), (101, "Unhealthy for Sensitive"),
+            (150, "Unhealthy for Sensitive"), (151, "Unhealthy"),
+            (200, "Unhealthy"), (201, "Very Unhealthy"),
+            (300, "Very Unhealthy"), (301, "Hazardous"),
+        ]
+        for val, expected in boundaries:
+            self.assertEqual(aqi_category(val), expected,
+                             f"AQI {val} should be '{expected}'")
+
+
+class TestUvLevel(TestCase):
+    """Test UV index level classification."""
+
+    def test_low(self):
+        result = uv_level(0)
+        self.assertEqual(result["level"], "Low")
+        self.assertIn("No protection", result["protection"])
+
+        result = uv_level(2)
+        self.assertEqual(result["level"], "Low")
+
+    def test_moderate(self):
+        result = uv_level(3)
+        self.assertEqual(result["level"], "Moderate")
+        self.assertIn("sunscreen", result["protection"].lower())
+
+        result = uv_level(5)
+        self.assertEqual(result["level"], "Moderate")
+
+    def test_high(self):
+        result = uv_level(6)
+        self.assertEqual(result["level"], "High")
+
+        result = uv_level(7)
+        self.assertEqual(result["level"], "High")
+
+    def test_very_high(self):
+        result = uv_level(8)
+        self.assertEqual(result["level"], "Very High")
+        self.assertIn("midday", result["protection"].lower())
+
+        result = uv_level(10)
+        self.assertEqual(result["level"], "Very High")
+
+    def test_extreme(self):
+        result = uv_level(11)
+        self.assertEqual(result["level"], "Extreme")
+
+        result = uv_level(15)
+        self.assertEqual(result["level"], "Extreme")
+
+    def test_none(self):
+        result = uv_level(None)
+        self.assertEqual(result["level"], "Unknown")
+
+    def test_boundary_values(self):
+        """Test exact boundary values."""
+        boundaries = [
+            (2, "Low"), (3, "Moderate"),
+            (5, "Moderate"), (6, "High"),
+            (7, "High"), (8, "Very High"),
+            (10, "Very High"), (11, "Extreme"),
+        ]
+        for val, expected in boundaries:
+            result = uv_level(val)
+            self.assertEqual(result["level"], expected,
+                             f"UV {val} should be '{expected}', got '{result['level']}'")
+
+    def test_always_has_protection_advice(self):
+        """Every level should have protection advice."""
+        for uv in range(0, 15):
+            result = uv_level(uv)
+            self.assertIsInstance(result["protection"], str)
+            self.assertGreater(len(result["protection"]), 0)
+
+
+class TestFetchAirQuality(TestCase):
+    """Test air quality fetch returns expected structure."""
+
+    def test_fetch_returns_dict(self):
+        """Air quality API should return a dict."""
+        result = fetch_air_quality(37.8024, -122.1828)
+        self.assertIsInstance(result, dict)
+
+    def test_fetch_has_expected_fields(self):
+        """Successful fetch should contain AQI and category."""
+        result = fetch_air_quality(37.8024, -122.1828)
+        if "error" not in result:
+            self.assertIn("aqi", result)
+            self.assertIn("category", result)
+            self.assertIn("pm2_5", result)
+            self.assertIn("hourly_aqi", result)
+            self.assertIsInstance(result["aqi"], (int, float))
+            self.assertIn(result["category"],
+                          ["Good", "Moderate", "Unhealthy for Sensitive",
+                           "Unhealthy", "Very Unhealthy", "Hazardous"])
+
+    def test_fetch_aqi_range(self):
+        """AQI should be non-negative."""
+        result = fetch_air_quality(37.8024, -122.1828)
+        if "error" not in result:
+            self.assertGreaterEqual(result["aqi"], 0)
+
+    def test_fetch_hourly_length(self):
+        """Hourly AQI should have up to 72 hours (3 days)."""
+        result = fetch_air_quality(37.8024, -122.1828)
+        if "error" not in result and result.get("hourly_aqi"):
+            self.assertLessEqual(len(result["hourly_aqi"]), 72)
+            self.assertGreater(len(result["hourly_aqi"]), 0)
 
 
 if __name__ == "__main__":

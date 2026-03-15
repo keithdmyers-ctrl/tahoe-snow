@@ -23,6 +23,7 @@ from tahoe_snow import (
     fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
     fetch_avalanche, fetch_forecast_discussion,
     fetch_rwis_stations, fetch_radar_nowcast,
+    fetch_air_quality,
     analyze_all, compute_ski_decision, generate_storm_narrative,
     log_storm_event, get_storm_history,
     RESORTS, SNOTEL_STATIONS,
@@ -104,6 +105,7 @@ def fetch_tahoe_analysis():
     lifts = _safe_fetch(fetch_all_lift_status)
     rwis = _safe_fetch(fetch_rwis_stations, TAHOE["lat"], TAHOE["lon"], default=[])
     radar = _safe_fetch(fetch_radar_nowcast, TAHOE["lat"], TAHOE["lon"])
+    tahoe_aqi = _safe_fetch(fetch_air_quality, TAHOE["lat"], TAHOE["lon"])
 
     # Run analysis pipeline
     analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
@@ -132,6 +134,7 @@ def fetch_tahoe_analysis():
     analysis["lifts"] = lifts
     analysis["rwis"] = rwis if rwis else []
     analysis["radar"] = radar
+    analysis["air_quality"] = _check_error(tahoe_aqi)
 
     # Compute decision (needs chains, lifts, storm attached)
     analysis["decision"] = compute_ski_decision(analysis)
@@ -164,6 +167,7 @@ def fetch_oakland_data():
     home_pws = _safe_fetch(fetch_pws_nearby, OAKLAND["lat"], OAKLAND["lon"], default=[])
     home_alerts = _safe_fetch(fetch_nws_alerts, OAKLAND["lat"], OAKLAND["lon"], default=[])
     home_normals = _safe_fetch(fetch_climate_normals, OAKLAND["lat"], OAKLAND["lon"])
+    home_aqi = _safe_fetch(fetch_air_quality, OAKLAND["lat"], OAKLAND["lon"])
 
     logger.info("Oakland data fetch complete")
     return {
@@ -174,4 +178,5 @@ def fetch_oakland_data():
         "home_pws": home_pws,
         "home_alerts": home_alerts,
         "home_normals": _check_error(home_normals),
+        "home_aqi": _check_error(home_aqi),
     }
