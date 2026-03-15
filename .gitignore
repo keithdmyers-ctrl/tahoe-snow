@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 *.png
+!static/icon-*.png
 .alerts_state.json
 .forecast_verification.json
 .snow_verification.json

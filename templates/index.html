@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0f1923">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%230f1923'/><text x='90' y='140' font-size='120' text-anchor='middle'>&#10052;</text></svg>">
+<meta name="theme-color" content="#0a1420">
 <meta name="apple-mobile-web-app-title" content="Tahoe Snow">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
 <title>Tahoe Snow Report</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#10052;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -1044,6 +1045,62 @@ table.data-table tr:hover td { background: var(--card-hover); }
   border-bottom: 1px dotted var(--text-dim);
   cursor: help;
   text-decoration: none;
+}
+
+/* -- Bottom navigation (PWA / mobile) -- */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(13, 27, 42, 0.92);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 8px 0 env(safe-area-inset-bottom, 8px);
+  z-index: 1000;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+@media (max-width: 768px) {
+  .bottom-nav { display: flex; justify-content: space-around; }
+  .container { padding-bottom: 70px !important; }
+}
+@media (display-mode: standalone) {
+  .bottom-nav { display: flex; justify-content: space-around; }
+  .container { padding-bottom: 70px !important; }
+}
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  background: none;
+  transition: color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.bottom-nav-item.active,
+.bottom-nav-item:hover { color: var(--accent); }
+.bottom-nav-icon { font-size: 20px; }
+
+/* -- Pull-to-refresh indicator -- */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s;
+  z-index: 2000;
+  pointer-events: none;
 }
 </style>
 </head>
@@ -2915,6 +2972,62 @@ document.addEventListener('click', function(e) {
     return;
   }
 });
+// --- PWA: Register service worker ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(reg => console.log('SW registered:', reg.scope))
+    .catch(err => console.log('SW registration failed:', err));
+}
+
+// --- PWA: Bottom nav scroll-to-section ---
+function scrollToSection(id) {
+  if (id === 'top') {
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  } else {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  // Update active state
+  document.querySelectorAll('.bottom-nav-item').forEach(item => {
+    const sectionKey = id === 'top' ? 'top' : id.replace('-section','').replace('-tabs','').replace('-body','');
+    item.classList.toggle('active', item.dataset.section === sectionKey);
+  });
+}
+
+// --- PWA: Pull-to-refresh for standalone mode ---
+let _touchStartY = 0;
+document.addEventListener('touchstart', e => { _touchStartY = e.touches[0].clientY; }, {passive: true});
+document.addEventListener('touchend', e => {
+  const touchEndY = e.changedTouches[0].clientY;
+  if (window.scrollY === 0 && touchEndY - _touchStartY > 100) {
+    refreshData();
+  }
+}, {passive: true});
 </script>
+
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bottom-nav-item active" data-section="top" onclick="scrollToSection('top')">
+    <span class="bottom-nav-icon">&#9729;</span>
+    <span>Decision</span>
+  </button>
+  <button class="bottom-nav-item" data-section="resort" onclick="scrollToSection('resort-tabs')">
+    <span class="bottom-nav-icon">&#9968;</span>
+    <span>Resorts</span>
+  </button>
+  <button class="bottom-nav-item" data-section="snotel" onclick="scrollToSection('snotel-body')">
+    <span class="bottom-nav-icon">&#10052;</span>
+    <span>Snow</span>
+  </button>
+  <button class="bottom-nav-item" data-section="model-comparison" onclick="scrollToSection('model-comparison-body')">
+    <span class="bottom-nav-icon">&#128202;</span>
+    <span>Models</span>
+  </button>
+  <button class="bottom-nav-item" data-section="verify" onclick="scrollToSection('verify-body')">
+    <span class="bottom-nav-icon">&#9881;</span>
+    <span>Verify</span>
+  </button>
+</nav>
+
+<div class="pull-indicator" id="pull-indicator"></div>
 </body>
 </html>
