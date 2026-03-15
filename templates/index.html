@@ -11,6 +11,8 @@
 <title>Tahoe Snow Report</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#10052;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root {
   --bg: #0f1923;
@@ -1045,6 +1047,36 @@ table.data-table tr:hover td { background: var(--card-hover); }
   cursor: help;
   text-decoration: none;
 }
+/* -- Leaflet map overrides (dark theme) -- */
+#tahoe-map {
+  background: var(--bg);
+}
+#tahoe-map .leaflet-tile-pane {
+  filter: brightness(0.7) invert(1) contrast(1.1) hue-rotate(200deg) saturate(0.3) brightness(0.8);
+}
+#tahoe-map .leaflet-control-attribution {
+  background: rgba(26,38,52,0.8) !important;
+  color: var(--text-dim) !important;
+  font-size: 9px;
+}
+#tahoe-map .leaflet-control-attribution a {
+  color: var(--accent) !important;
+}
+#tahoe-map .leaflet-control-zoom a {
+  background: var(--card) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+#tahoe-map .leaflet-popup-content-wrapper {
+  background: var(--card);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+#tahoe-map .leaflet-popup-tip { background: var(--card); }
+#tahoe-map .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
+#tahoe-map .leaflet-popup-content b { color: var(--snow); }
+.resort-marker, .snotel-marker, .chain-marker { background: transparent !important; border: none !important; }
 </style>
 </head>
 <body>
@@ -1089,6 +1121,10 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div id="alerts-section"></div>
   <div id="narrative-section"></div>
   <div class="summary-banner" id="summary"></div>
+
+  <div id="map-section" class="section" style="margin-bottom:16px">
+    <div id="tahoe-map" style="height:350px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border)"></div>
+  </div>
 
   <div id="storm-section"></div>
   <div class="resort-tabs" id="resort-tabs"></div>
@@ -1294,9 +1330,99 @@ function render() {
   renderAFD();
   renderModelComparison();
   renderStormHistory();
+  renderMap();
   renderPreviews();
   renderVerification();
   requestAnimationFrame(initScrollWraps);
+}
+
+function renderMap() {
+  if (!DATA || !DATA.resorts) return;
+  if (window._tahoeMap) { window._tahoeMap.invalidateSize(); return; }
+
+  const mapEl = document.getElementById('tahoe-map');
+  if (!mapEl) return;
+
+  const map = L.map('tahoe-map', {scrollWheelZoom: false}).setView([39.1, -120.15], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 13,
+  }).addTo(map);
+
+  // Resort markers with coordinates
+  const resortCoords = {
+    'Heavenly': [38.9353, -119.9400],
+    'Northstar': [39.2746, -120.1210],
+    'Kirkwood': [38.6850, -120.0653],
+    'Palisades Tahoe': [39.1968, -120.2354],
+    'Sugar Bowl': [39.3048, -120.3333],
+    'Sierra-at-Tahoe': [38.7990, -120.0800],
+    'Boreal': [39.3320, -120.3480],
+    'Mt. Rose': [39.3150, -119.8850],
+  };
+
+  for (const [name, data] of Object.entries(DATA.resorts)) {
+    const coords = resortCoords[name];
+    if (!coords) continue;
+    const peak = data.zones?.peak || {};
+    const snow24 = data.zones?.peak?.snow_24h || 0;
+    const lifts = DATA.lifts?.[name.toLowerCase().replace(/[^a-z]/g, '-')] || DATA.lifts?.[name.toLowerCase()] || {};
+
+    const snowColor = snow24 > 6 ? '#2ed573' : snow24 > 0 ? '#7ec8e3' : '#4a9eff';
+    const icon = L.divIcon({
+      className: 'resort-marker',
+      html: `<div style="background:#1e3a5f;color:white;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;border:2px solid ${snowColor};box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer">${snow24 > 0 ? snow24.toFixed(0) + '"' : name.length > 8 ? name.slice(0,6) + '..' : name}</div>`,
+      iconSize: null,
+    });
+
+    const peakTemp = peak.current?.temp_f;
+    const liftsOpen = lifts.open;
+    const liftsTotal = lifts.total;
+    L.marker(coords, {icon}).addTo(map)
+      .bindPopup(`<b>${esc(name)}</b><br>24h Snow: ${snow24.toFixed(1)}"<br>Peak Temp: ${peakTemp != null ? peakTemp + '\u00b0F' : '?'}<br>Lifts: ${liftsOpen != null ? liftsOpen : '?'}/${liftsTotal != null ? liftsTotal : '?'}`)
+      .on('click', function() {
+        const tab = document.querySelector(`.resort-tab[data-resort="${name}"]`);
+        if (tab) { tab.click(); tab.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }
+      });
+  }
+
+  // SNOTEL station markers
+  if (DATA.snotel_current) {
+    for (const [name, stn] of Object.entries(DATA.snotel_current)) {
+      if (stn.error || !stn.lat || !stn.lon) continue;
+      const depth = stn.snow_depth_in || 0;
+      const icon = L.divIcon({
+        className: 'snotel-marker',
+        html: `<div style="background:#0a1929;color:#7ec8e3;padding:2px 5px;border-radius:4px;font-size:9px;border:1px solid rgba(126,200,227,0.27);white-space:nowrap">${depth > 0 ? depth + '"' : '--'}</div>`,
+        iconSize: null,
+      });
+      L.marker([stn.lat, stn.lon], {icon}).addTo(map)
+        .bindPopup(`<b>${esc(name)}</b><br>Depth: ${depth > 0 ? depth + '"' : 'N/A'}<br>SWE: ${stn.swe_in != null ? stn.swe_in + '"' : '?'}<br>Elev: ${stn.elev_ft || '?'} ft`);
+    }
+  }
+
+  // Chain control markers
+  if (DATA.chains && DATA.chains.length > 0) {
+    for (const chain of DATA.chains) {
+      const routeName = chain.route || chain.highway || '';
+      const isI80 = routeName.includes('80');
+      const chainCoords = isI80 ? [39.32, -120.33] : [38.81, -120.03];
+      const level = chain.level || chain.status || 'R?';
+      const bgColor = (level.includes('R2') || level.includes('R3') || level.includes('closed')) ? '#c00' :
+                       (level.includes('R1') || level.includes('chain')) ? '#c60' : '#555';
+      L.marker(chainCoords, {
+        icon: L.divIcon({
+          className: 'chain-marker',
+          html: `<div style="background:${bgColor};color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.4)">${esc(level)}</div>`,
+          iconSize: null,
+        })
+      }).addTo(map).bindPopup(`<b>${esc(routeName || 'Chain Control')}</b><br>${esc(chain.status || chain.details || '')}`);
+    }
+  }
+
+  window._tahoeMap = map;
+  // Fix tile loading after container becomes visible
+  setTimeout(() => map.invalidateSize(), 200);
 }
 
 function renderPreviews() {

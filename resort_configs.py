@@ -137,42 +137,44 @@ RESORT_REGISTRY: dict[str, ResortConfig] = {
     # STUBBED RESORTS — Activate by setting enabled=True
     # ===================================================================
 
-    "Palisades Tahoe": ResortConfig(  # Activate by setting enabled=True
+    "Palisades Tahoe": ResortConfig(
         name="Palisades Tahoe",
         region="tahoe_north",
         zones=[
             ZoneConfig("base", "Village at Palisades", 39.1968, -120.2354, 6200,
-                       aspect_deg=315, slope_angle_deg=15),
+                       aspect_deg=180, slope_angle_deg=15),
             ZoneConfig("mid", "Gold Coast", 39.1930, -120.2400, 7800,
-                       aspect_deg=315, slope_angle_deg=25),
+                       aspect_deg=30, slope_angle_deg=25),
             ZoneConfig("peak", "Granite Chief", 39.1850, -120.2550, 9050,
-                       aspect_deg=315, slope_angle_deg=35),
+                       aspect_deg=350, slope_angle_deg=35),
         ],
         liftie_slug="palisades-tahoe",
         snotel_stations=["784", "539"],  # Squaw Valley GC, Independence Lake
         nearest_sounding="REV",
         chain_route="I-80",
-        aspect="NW",
-        enabled=False,
+        aspect="NE",
+        east_shore=False,
+        enabled=True,
     ),
 
-    "Sugar Bowl": ResortConfig(  # Activate by setting enabled=True
+    "Sugar Bowl": ResortConfig(
         name="Sugar Bowl",
         region="tahoe_north",
         zones=[
             ZoneConfig("base", "Judah Lodge", 39.3050, -120.3340, 6883,
-                       aspect_deg=180, slope_angle_deg=18),
+                       aspect_deg=200, slope_angle_deg=18),
             ZoneConfig("mid", "Christmas Tree", 39.3020, -120.3300, 7500,
-                       aspect_deg=180, slope_angle_deg=25),
+                       aspect_deg=350, slope_angle_deg=25),
             ZoneConfig("peak", "Mt Lincoln", 39.2990, -120.3260, 8383,
-                       aspect_deg=180, slope_angle_deg=32),
+                       aspect_deg=10, slope_angle_deg=32),
         ],
         liftie_slug="sugar-bowl",
         snotel_stations=["784", "809"],  # Squaw Valley GC, Tahoe City Cross
         nearest_sounding="REV",
         chain_route="I-80",
-        aspect="S",
-        enabled=False,
+        aspect="N",
+        east_shore=False,
+        enabled=True,
     ),
 
     "Sierra-at-Tahoe": ResortConfig(  # Activate by setting enabled=True
