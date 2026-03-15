@@ -14,28 +14,25 @@ Use --dry-run to preview what would be logged without writing to disk.
 
 import argparse
 import json
+import logging
 import sys
 import os
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from tahoe_snow import (
-    fetch_nws_observations, fetch_nws_forecast, fetch_nws_gridpoints,
-    fetch_open_meteo_multi,
-    fetch_snotel_current, fetch_snotel_history,
-    fetch_avalanche, fetch_forecast_discussion,
-    analyze_all, RESORTS, SNOTEL_STATIONS,
-)
+from data_pipeline import fetch_tahoe_analysis, fetch_oakland_data
 from forecast_verification import (
     log_daily_verification, log_snow_verification,
     log_elevation_verification, get_verification_summary,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Daily forecast verification — compare forecasts to observations"
+        description="Daily forecast verification -- compare forecasts to observations"
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -46,45 +43,26 @@ def main():
     now = datetime.now(timezone.utc)
     print(f"[{now.isoformat()}] Starting daily verification run")
 
-    # --- Fetch current observations ---
-    print("  Fetching NWS observations...")
-    home_obs = fetch_nws_observations(39.17, -120.145)
+    # --- Fetch all data via shared pipeline ---
+    print("  Fetching Tahoe analysis via shared pipeline...")
+    analysis = fetch_tahoe_analysis()
+
+    print("  Fetching Oakland data...")
+    oakland = fetch_oakland_data()
+    home_obs = oakland["home_obs"] or {}
+    home_fc = oakland["home_fc"] or {}
+
     if not home_obs:
         print("  WARNING: No NWS observations available")
-        home_obs = {}
-
-    print("  Fetching NWS forecast...")
-    home_fc = fetch_nws_forecast(39.17, -120.145)
     if not home_fc:
         print("  WARNING: No NWS forecast available")
-        home_fc = {}
 
-    # --- Fetch SNOTEL and build analysis ---
-    print("  Fetching SNOTEL data...")
-    snotel = fetch_snotel_current()
+    snotel = analysis.get("snotel_current", {})
     snotel_ok = sum(1 for s in snotel.values() if "error" not in s)
     print(f"  Got {snotel_ok}/{len(snotel)} SNOTEL stations")
 
-    print("  Fetching Open-Meteo multi-resort...")
-    resort_points = {
-        rn: {"lat": r["base"]["lat"], "lon": r["base"]["lon"]}
-        for rn, r in RESORTS.items()
-    }
-    om = fetch_open_meteo_multi(resort_points)
-
-    print("  Fetching supplemental data...")
-    avy = fetch_avalanche()
-    afd = fetch_forecast_discussion()
-    nws_grids = fetch_nws_gridpoints(39.17, -120.145)
-
-    print("  Running analyze_all...")
-    analysis = analyze_all(
-        home_obs, home_fc, om, snotel, afd, avy, {},
-        nws_grids=nws_grids if "error" not in nws_grids else None,
-    )
-
     if args.dry_run:
-        print("\n  DRY RUN — would log the following:")
+        print("\n  DRY RUN -- would log the following:")
         print(f"  - Observation temp: {home_obs.get('temp_f', 'N/A')}F")
         print(f"  - SNOTEL stations: {snotel_ok}")
         snotel_hist = analysis.get("snotel_history", {})
