@@ -1030,6 +1030,13 @@ table.data-table tr:hover td { background: var(--card-hover); }
   font-size: 13px;
   margin-bottom: var(--sp-4);
 }
+
+/* -- Jargon tooltips -- */
+.jargon {
+  border-bottom: 1px dotted var(--text-dim);
+  cursor: help;
+  text-decoration: none;
+}
 </style>
 </head>
 <body>
@@ -1062,7 +1069,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
       <div class="time" id="header-time"></div>
       <div class="header-solar" id="header-solar"></div>
     </div>
-    <button class="refresh-btn" onclick="refreshData()" id="refresh-btn">Refresh</button>
+    <button class="refresh-btn" id="refresh-btn">Refresh</button>
   </div>
 </div>
 
@@ -1086,7 +1093,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div id="lifts-section"></div>
 
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+    <button class="section-header" aria-expanded="false">
       <span>Current Observation Detail <span class="section-preview" id="preview-current"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed">
@@ -1095,7 +1102,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
   </div>
 
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+    <button class="section-header" aria-expanded="false">
       <span>Snowpack History &amp; Season Stats <span class="section-preview" id="preview-history"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="history-body">
@@ -1105,21 +1112,21 @@ table.data-table tr:hover td { background: var(--card-hover); }
   </div>
 
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
-      <span>NWS Forecaster Discussion (Reno WFO)</span> <span class="toggle">&#9662;</span>
+    <button class="section-header" aria-expanded="false">
+      <span>NWS Forecaster Discussion (<abbr class="jargon" title="Area Forecast Discussion: NWS forecaster notes">AFD</abbr>, Reno WFO)</span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="afd-body"></div>
   </div>
 
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
-      <span>Snowpack &mdash; All SNOTEL Stations <span class="section-preview" id="preview-snotel"></span></span> <span class="toggle">&#9662;</span>
+    <button class="section-header" aria-expanded="false">
+      <span>Snowpack &mdash; All <abbr class="jargon" title="Automated snow monitoring stations (USDA)">SNOTEL</abbr> Stations <span class="section-preview" id="preview-snotel"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="snotel-body"></div>
   </div>
 
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+    <button class="section-header" aria-expanded="false">
       <span>Model Comparison &mdash; All Sources <span class="section-preview" id="preview-model-comp"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="model-comparison-body">
@@ -1130,14 +1137,14 @@ table.data-table tr:hover td { background: var(--card-hover); }
   </div>
 
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+    <button class="section-header" aria-expanded="false">
       <span>Storm History <span class="section-preview" id="preview-storm-history"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="storm-history-body"></div>
   </div>
 
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+    <button class="section-header" aria-expanded="false">
       <span>Forecast Verification <span class="section-preview" id="preview-verify"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="verify-body">
@@ -1188,7 +1195,7 @@ async function loadData() {
         return;
       }
       document.getElementById('loading').innerHTML =
-        '<div class="container" style="padding-top:60px"><div class="state-message--error text-center">Data loading timed out</div><div class="state-message--sub text-center">The server is still fetching weather data. This can take a few minutes on first load.</div><div class="text-center"><button class="refresh-btn" onclick="_loadRetries=0;loadData()">Retry</button></div></div>';
+        '<div class="container" style="padding-top:60px"><div class="state-message--error text-center">Data loading timed out</div><div class="state-message--sub text-center">The server is still fetching weather data. This can take a few minutes on first load.</div><div class="text-center"><button class="refresh-btn" data-action="retry-load">Retry</button></div></div>';
       return;
     }
     _loadRetries = 0;
@@ -1203,7 +1210,7 @@ async function loadData() {
   } catch (e) {
     console.error('loadData error:', e);
     document.getElementById('loading').innerHTML =
-      '<div class="container" style="padding-top:60px"><div class="state-message--error text-center">Unable to connect to weather server</div><div class="state-message--sub text-center">Check your connection and try again.</div><div class="text-center"><button class="refresh-btn" onclick="location.reload()">Retry</button></div></div>';
+      '<div class="container" style="padding-top:60px"><div class="state-message--error text-center">Unable to connect to weather server</div><div class="state-message--sub text-center">Check your connection and try again.</div><div class="text-center"><button class="refresh-btn" data-action="reload">Retry</button></div></div>';
   }
 }
 
@@ -1722,7 +1729,7 @@ function buildResortPanel(rn) {
         </div>
       </div>
       <div class="zone-details">
-        <div class="zd-row"><span>Snow Ratio</span><span class="zd-val">${f(snap.slr, ':1')}</span></div>
+        <div class="zd-row"><span><abbr class="jargon" title="Snow-to-Liquid Ratio: higher = fluffier powder">SLR</abbr></span><span class="zd-val">${f(snap.slr, ':1')}</span></div>
         <div class="zd-row"><span>Quality</span><span class="zd-val">${esc(snap.snow_quality || '\u2014')}</span></div>
         <div class="zd-row"><span>Wind</span><span class="zd-val">${esc(snap.wind_dir || '')} ${f(snap.wind_mph, '')} mph</span></div>
         <div class="zd-row"><span>Gusts</span><span class="zd-val">${f(snap.wind_gust_mph, ' mph')}</span></div>
@@ -1734,7 +1741,7 @@ function buildResortPanel(rn) {
   // 48h chart (open)
   html += `
   <div class="section">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="true">
+    <button class="section-header" aria-expanded="true">
       48-Hour Forecast &mdash; ${rn} Peak <span class="toggle" style="transform:rotate(180deg)">&#9662;</span>
     </button>
     <div class="section-body">
@@ -1748,7 +1755,7 @@ function buildResortPanel(rn) {
   if (buckets.length > 0) {
     html += `
     <div class="section">
-      <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <button class="section-header" aria-expanded="false">
         Day/Night Accumulation &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
       </button>
       <div class="section-body collapsed">
@@ -1778,7 +1785,7 @@ function buildResortPanel(rn) {
   if (spread.length > 0) {
     html += `
     <div class="section">
-      <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <button class="section-header" aria-expanded="false">
         Multi-Model Comparison &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
       </button>
       <div class="section-body collapsed">
@@ -1807,7 +1814,7 @@ function buildResortPanel(rn) {
   const ns = rd.nearest_snotel || [];
   if (ns.length > 0) {
     const maxNsDepth = Math.max(...ns.map(s => s.snow_depth_in || 0), 1);
-    html += `<div class="section"><button class="section-header" onclick="toggleSection(this)" aria-expanded="false">Nearby SNOTEL <span class="toggle">&#9662;</span></button><div class="section-body collapsed">`;
+    html += `<div class="section"><button class="section-header" aria-expanded="false">Nearby <abbr class="jargon" title="Automated snow monitoring stations (USDA)">SNOTEL</abbr> <span class="toggle">&#9662;</span></button><div class="section-body collapsed">`;
     for (const s of ns) {
       const depth = s.snow_depth_in || 0;
       const pct = (depth / maxNsDepth * 100).toFixed(0);
@@ -1815,7 +1822,7 @@ function buildResortPanel(rn) {
         <span class="name">${esc(s.name || '')} (${s.elev_ft}ft)</span>
         <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
         <span class="depth">${f(depth, '"')}</span>
-        <span class="swe">SWE ${f(s.swe_in, '"')}</span>
+        <span class="swe"><abbr class="jargon" title="Snow Water Equivalent: water content of snowpack">SWE</abbr> ${f(s.swe_in, '"')}</span>
       </div>`;
     }
     html += '</div></div>';
@@ -1885,7 +1892,7 @@ function buildHourlyChart(rn) {
             afterBody: function(ctx) {
               const i = ctx[0].dataIndex;
               const h = timeline[i];
-              return `Feels: ${f(h.feels_like_f, '\u00B0F')}\nGust: ${f(h.wind_gust_mph, ' mph')}\nSLR: ${h.slr}:1 ${h.snow_quality}`;
+              return `Feels: ${f(h.feels_like_f, '\u00B0F')}\nGust: ${f(h.wind_gust_mph, ' mph')}\nSLR (Snow-Liquid Ratio): ${h.slr}:1 ${h.snow_quality}`;
             }
           }
         },
@@ -1970,20 +1977,20 @@ function renderComparison() {
         ${compareRow('Vert Drop', f(c.vert_ft, ' ft'))}
         ${compareRow('Base Temp', f(c.base_temp_f, '\u00B0F'))}
         ${compareRow('Base/Peak Feels', `${f(c.base_feels_like_f, '\u00B0')} / ${f(c.peak_feels_like_f, '\u00B0')}`)}
-        ${compareRow('Snow Ratio', f(c.peak_slr, ':1'))}
+        ${compareRow('<abbr class="jargon" title="Snow-to-Liquid Ratio: higher = fluffier powder">SLR</abbr>', f(c.peak_slr, ':1'))}
         ${compareRow('Base Precip', esc(c.base_precip_type || '\u2014'))}
         ${compareRow('Peak Precip', esc(c.peak_precip_type || '\u2014'))}
         ${compareRow('Base/Mid 24h', `${f(c.base_24h_snow_in, '"')} / ${f(c.mid_24h_snow_in, '"')}`)}
-        ${compareRow('SWE', f(c.snowpack_swe_in, '"'))}
+        ${compareRow('<abbr class="jargon" title="Snow Water Equivalent: water content of snowpack">SWE</abbr>', f(c.snowpack_swe_in, '"'))}
         ${compareRow('Aspect', esc(c.aspect || '\u2014'))}
       </div>
-      <button class="compare-toggle" onclick="toggleCompareDetail(this)" aria-expanded="false">More &#9662;</button>
+      <button class="compare-toggle" aria-expanded="false">More &#9662;</button>
     </div>`;
   }
   html += '</div>';
 
   html += `<div class="section mt-4">
-    <button class="section-header" onclick="toggleSection(this)" aria-expanded="true">
+    <button class="section-header" aria-expanded="true">
       7-Day Forecast &mdash; All Resorts (Peak) <span class="toggle" style="transform:rotate(180deg)">&#9662;</span>
     </button>
     <div class="section-body"><div class="chart-container chart-container--extra"><canvas id="chart-compare-all"></canvas></div></div>
@@ -2104,7 +2111,7 @@ function renderSnotel() {
       <span class="name">${esc(name)} (${d.elev_ft}ft)</span>
       <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
       <span class="depth">${depth}"</span>
-      <span class="swe">SWE ${f(d.swe_in, '"')}</span>
+      <span class="swe"><abbr class="jargon" title="Snow Water Equivalent: water content of snowpack">SWE</abbr> ${f(d.swe_in, '"')}</span>
     </div>`;
   }
   document.getElementById('snotel-body').innerHTML = html;
@@ -2342,14 +2349,14 @@ function renderModelComparison() {
 
   if (nbm) {
     tableHtml += `<tr>
-      <td>NBM</td>
+      <td><abbr class="jargon" title="National Blend of Models: NWS consensus forecast">NBM</abbr></td>
       <td colspan="4" class="text-sm color-dim">Precip prob: ${nbmMaxPop}% (24h max)</td>
       <td>--</td>
     </tr>`;
   }
 
   tableHtml += `<tr class="model-table-highlight">
-    <td>Blended</td>
+    <td><abbr class="jargon" title="Bayesian Model Averaging: weighted model blend">BMA</abbr> Blended</td>
     <td class="snow-val">${blended.d1.toFixed(1)}"</td>
     <td class="snow-val">${blended.d2.toFixed(1)}"</td>
     <td class="snow-val">${blended.d3.toFixed(1)}"</td>
@@ -2619,11 +2626,11 @@ async function renderVerification() {
 
   html += '<div>';
   html += '<div class="panel-label">Model Performance</div>';
-  html += '<div class="scroll-wrap"><table class="verify-table"><thead><tr><th>Model</th><th>Metric</th><th>MAE</th><th>Bias</th><th>RMSE</th><th>N</th></tr></thead><tbody>';
+  html += '<div class="scroll-wrap"><table class="verify-table"><thead><tr><th>Model</th><th>Metric</th><th><abbr class="jargon" title="Mean Absolute Error: average forecast mistake">MAE</abbr></th><th>Bias</th><th><abbr class="jargon" title="Root Mean Square Error: accuracy metric">RMSE</abbr></th><th>N</th></tr></thead><tbody>';
   const sources = v.sources_all || {};
   for (const [src, metrics] of Object.entries(sources)) {
     for (const [metric, stats] of Object.entries(metrics)) {
-      const metricLabel = metric.replace(/_/g, ' ').replace('temp high f', 'Temp Hi').replace('temp low f', 'Temp Lo').replace('snow in', 'Snow').replace('precip pct', 'PoP');
+      const metricLabel = metric.replace(/_/g, ' ').replace('temp high f', 'Temp Hi').replace('temp low f', 'Temp Lo').replace('snow in', 'Snow').replace('precip pct', '<abbr class="jargon" title="Probability of Precipitation">PoP</abbr>');
       html += `<tr>
         <td class="font-bold">${esc(src)}</td>
         <td>${metricLabel}</td>
@@ -2646,7 +2653,7 @@ async function renderVerification() {
   html += '<div class="verify-grid">';
 
   html += '<div>';
-  html += '<div class="panel-label">PoP Calibration Curve</div>';
+  html += '<div class="panel-label"><abbr class="jargon" title="Probability of Precipitation">PoP</abbr> Calibration Curve</div>';
   html += '<div class="verify-chart-container"><canvas id="chart-verify-pop"></canvas></div>';
   html += '</div>';
 
@@ -2847,26 +2854,51 @@ function initScrollWraps() {
   });
 }
 
-// Lazy-build model charts when sections expand
+// Event delegation for section toggles, compare detail, refresh, and retry actions
 document.addEventListener('click', function(e) {
+  // Section toggle
   const header = e.target.closest('.section-header');
-  if (!header) return;
-  const body = header.nextElementSibling;
-  if (!body) return;
-  requestAnimationFrame(() => {
-    if (!body.classList.contains('collapsed')) {
-      // Lazy-build model charts
-      const canvases = body.querySelectorAll('canvas[id^="chart-models-"]');
-      canvases.forEach(c => {
-        const rn = c.id.replace('chart-models-', '');
-        if (!charts[`models-${rn}`]) buildModelChart(rn);
+  if (header) {
+    toggleSection(header);
+    // Lazy-build charts when sections expand
+    const body = header.nextElementSibling;
+    if (body) {
+      requestAnimationFrame(() => {
+        if (!body.classList.contains('collapsed')) {
+          const canvases = body.querySelectorAll('canvas[id^="chart-models-"]');
+          canvases.forEach(c => {
+            const rn = c.id.replace('chart-models-', '');
+            if (!charts[`models-${rn}`]) buildModelChart(rn);
+          });
+          if (body.querySelector('#chart-snotel-history') && !charts['snotel-history']) renderHistory();
+          if (body.querySelector('#chart-model-comparison') && !charts['model-comparison']) renderModelComparison();
+        }
       });
-      // Lazy-build history chart
-      if (body.querySelector('#chart-snotel-history') && !charts['snotel-history']) renderHistory();
-      // Lazy-build model comparison chart
-      if (body.querySelector('#chart-model-comparison') && !charts['model-comparison']) renderModelComparison();
     }
-  });
+    return;
+  }
+
+  // Compare detail toggle
+  const compareBtn = e.target.closest('.compare-toggle');
+  if (compareBtn) {
+    toggleCompareDetail(compareBtn);
+    return;
+  }
+
+  // Refresh button
+  if (e.target.closest('#refresh-btn')) {
+    refreshData();
+    return;
+  }
+
+  // Retry buttons (dynamically generated in error states)
+  const actionBtn = e.target.closest('[data-action]');
+  if (actionBtn) {
+    const action = actionBtn.dataset.action;
+    if (action === 'retry-load') { _loadRetries = 0; loadData(); }
+    else if (action === 'reload') { location.reload(); }
+    return;
+  }
 });
 </script>
 </body>
