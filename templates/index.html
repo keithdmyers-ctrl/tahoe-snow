@@ -138,6 +138,7 @@ body {
   padding: 20px 16px;
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
+  overflow-x: hidden;
   padding-bottom: max(20px, env(safe-area-inset-bottom));
 }
 
@@ -513,10 +514,10 @@ button.section-header {
   -webkit-mask-image: none;
   mask-image: none;
 }
-table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
+table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; max-width: 100%; }
 @media (max-width: 500px) {
   table.data-table { font-size: 11px; }
-  table.data-table th, table.data-table td { padding: 6px 6px; }
+  table.data-table th, table.data-table td { padding: 5px 4px; }
 }
 table.data-table th {
   text-align: left; padding: 8px 10px; color: var(--text-dim);

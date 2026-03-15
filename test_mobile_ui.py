@@ -248,7 +248,10 @@ def run_tests():
         compare_canvas = page.query_selector("#chart-compare-all")
         if compare_canvas:
             box = compare_canvas.bounding_box()
-            compare_canvas.scroll_into_view_if_needed()
+            try:
+                compare_canvas.scroll_into_view_if_needed(timeout=5000)
+            except Exception:
+                page.evaluate('document.getElementById("chart-compare-all")?.scrollIntoView()')
             page.wait_for_timeout(300)
             ss = screenshot(page, "08_compare_chart", 8)
             log_result("Comparison chart renders", box and box["height"] > 50,
