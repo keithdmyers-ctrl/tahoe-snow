@@ -1341,7 +1341,6 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div class="aqi-uv-row" id="aqi-uv-row"></div>
   <div id="alerts-section"></div>
   <div id="narrative-section"></div>
-  <div class="summary-banner" id="summary"></div>
 
   <div id="map-section" class="section mb-4">
     <div id="tahoe-map" class="map-container"></div>
@@ -1542,7 +1541,6 @@ function render() {
   renderHeader();
   renderAlerts();
   renderNarrative();
-  renderSummary();
   renderStorm();
   renderCurrent();
   renderAvalanche();
@@ -1820,13 +1818,6 @@ function updateStaleness(dataTime) {
   }
 }
 
-function renderSummary() {
-  let text = esc(DATA.summary || '');
-  // Highlight key numbers and temps in the summary for scannability
-  text = text.replace(/(\d+(\.\d+)?)(&quot;|″|inches|in\b)/gi, '<strong class="snow-val">$1$3</strong>');
-  text = text.replace(/(\d+)°F/g, '<strong>$1°F</strong>');
-  document.getElementById('summary').innerHTML = text;
-}
 
 function renderCurrent() {
   const c = DATA.current_conditions || {};
