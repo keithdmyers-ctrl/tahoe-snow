@@ -2325,12 +2325,17 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
     hero_7d_forecast = 0
     hero_7d_forecast_resort = ""
     for rn in RESORTS:
-        spread = resorts_out.get(rn, {}).get("zones", {}).get("peak", {}).get("model_spread", [])
-        total_3d = sum((d.get("models", {}).get("GFS", {}).get("snow_in", 0) for d in spread[:3]), 0)
+        peak_z = resorts_out.get(rn, {}).get("zones", {}).get("peak", {})
+        # Use blended day_night_buckets for 72h total (already skill-weighted + NWS-blended)
+        buckets = peak_z.get("day_night_buckets", [])
+        # Sum snow from first 3 days of buckets (each day has Day+Night)
+        bucket_dates = sorted(set(b["date"] for b in buckets))
+        total_3d = sum(b["snow_in"] for b in buckets if b["date"] in bucket_dates[:3])
         if total_3d > hero_72h:
             hero_72h = round(total_3d, 1)
             hero_72h_resort = rn
-        total_7d = sum((d.get("models", {}).get("GFS", {}).get("snow_in", 0) for d in spread[:7]), 0)
+        # Use the zone's already-blended snow_7d_forecast (skill-weighted + NWS gridpoint blended)
+        total_7d = peak_z.get("snow_7d_forecast", 0)
         if total_7d > hero_7d_forecast:
             hero_7d_forecast = round(total_7d, 1)
             hero_7d_forecast_resort = rn

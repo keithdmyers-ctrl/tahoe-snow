@@ -23,8 +23,12 @@ from pathlib import Path
 
 # Import from main module
 sys.path.insert(0, os.path.dirname(__file__))
-from tahoe_snow import (fetch_open_meteo, fetch_snotel_current, fetch_avalanche,
-                         parse_open_meteo, aggregate_daily, RESORTS, compute_slr)
+from tahoe_snow import (fetch_nws_observations, fetch_nws_forecast,
+                         fetch_open_meteo, fetch_nws_gridpoints,
+                         fetch_snotel_current, fetch_avalanche,
+                         fetch_forecast_discussion, fetch_sounding,
+                         fetch_ensemble, fetch_synoptic_stations,
+                         analyze_all, RESORTS)
 
 import requests
 
@@ -155,11 +159,39 @@ def main():
 
     alerts = []
 
-    # Fetch data
+    # Fetch data and run full blended pipeline via analyze_all()
     log("Checking conditions...")
-    om = fetch_open_meteo(39.17, -120.145)
+    tahoe_lat, tahoe_lon = 39.17, -120.145
+    obs = fetch_nws_observations(tahoe_lat, tahoe_lon)
+    nws = fetch_nws_forecast(tahoe_lat, tahoe_lon)
+    om = fetch_open_meteo(tahoe_lat, tahoe_lon)
     snotel = fetch_snotel_current()
     avy = fetch_avalanche()
+    afd = fetch_forecast_discussion()
+
+    # Optional enrichment sources (best-effort)
+    try:
+        nws_grids = fetch_nws_gridpoints(tahoe_lat, tahoe_lon)
+    except Exception:
+        nws_grids = {}
+    try:
+        sounding = fetch_sounding("REV")
+    except Exception:
+        sounding = {}
+    try:
+        ensemble = fetch_ensemble(tahoe_lat, tahoe_lon)
+    except Exception:
+        ensemble = {}
+    try:
+        synoptic = fetch_synoptic_stations(tahoe_lat, tahoe_lon, radius_miles=30)
+    except Exception:
+        synoptic = {}
+
+    analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
+                           nws_grids=nws_grids if "error" not in nws_grids else None,
+                           sounding=sounding if "error" not in sounding else None,
+                           ensemble=ensemble if ensemble.get("models") else None,
+                           synoptic=synoptic if "error" not in synoptic else None)
 
     for resort_name, resort_cfg in config.get("resorts", {}).items():
         if not resort_cfg.get("enabled"):
@@ -167,26 +199,22 @@ def main():
         if resort_name not in RESORTS:
             continue
 
-        resort = RESORTS[resort_name]
-        peak = resort["peak"]
+        # Use blended data from analyze_all() instead of raw single-model output
+        resort_data = analysis.get("resorts", {}).get(resort_name, {})
+        peak_z = resort_data.get("zones", {}).get("peak", {})
+        timeline = peak_z.get("timeline_48h", [])
 
-        # Parse forecast for peak
-        parsed = parse_open_meteo(om, peak["elev_ft"])
-        if "error" in parsed:
-            log(f"Error parsing {resort_name}: {parsed['error']}")
+        if not timeline:
+            log(f"No blended data for {resort_name}")
             continue
 
-        gfs = parsed["models"].get("GFS", [])
-        if not gfs:
-            continue
+        # 24h and 48h snow from blended timeline
+        snow_24h = sum(h.get("snowfall_in", 0) for h in timeline[:24])
+        snow_48h = sum(h.get("snowfall_in", 0) for h in timeline[:48])
 
-        # 24h snow
-        snow_24h = sum(h["snowfall_in"] for h in gfs[:24])
-        snow_48h = sum(h["snowfall_in"] for h in gfs[:48])
-
-        # Best SLR during snow
-        snow_hours = [h for h in gfs[:48] if h["snowfall_in"] > 0]
-        avg_slr = (sum(h["slr"] for h in snow_hours) / len(snow_hours)) if snow_hours else 0
+        # Average SLR during snow hours
+        snow_hours = [h for h in timeline[:48] if h.get("snowfall_in", 0) > 0]
+        avg_slr = (sum(h.get("slr", 0) for h in snow_hours) / len(snow_hours)) if snow_hours else 0
 
         # Check 24h threshold
         thresh_24 = thresholds.get("snow_24h_inches", 6)

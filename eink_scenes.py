@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from tahoe_snow import (
     fetch_nws_observations, fetch_nws_forecast, fetch_open_meteo,
+    fetch_nws_gridpoints, fetch_ensemble, fetch_synoptic_stations,
     fetch_nbm, fetch_pws_nearby, aggregate_pws, fetch_cssl_snow,
     fetch_nws_alerts, fetch_sounding, fetch_climate_normals,
     fetch_caltrans_chains, fetch_all_lift_status,
@@ -133,6 +134,20 @@ def fetch_all(force=False):
     chains = fetch_caltrans_chains()
     lifts = fetch_all_lift_status()
 
+    print("Fetching additional data sources...")
+    try:
+        nws_grids = fetch_nws_gridpoints(TAHOE["lat"], TAHOE["lon"])
+    except Exception:
+        nws_grids = {}
+    try:
+        ensemble = fetch_ensemble(TAHOE["lat"], TAHOE["lon"])
+    except Exception:
+        ensemble = {}
+    try:
+        synoptic = fetch_synoptic_stations(TAHOE["lat"], TAHOE["lon"], radius_miles=30)
+    except Exception:
+        synoptic = {}
+
     print("Fetching Tahoe data...")
     obs = fetch_nws_observations(TAHOE["lat"], TAHOE["lon"])
     nws = fetch_nws_forecast(TAHOE["lat"], TAHOE["lon"])
@@ -146,7 +161,11 @@ def fetch_all(force=False):
     storm = get_storm_total(snotel)
 
     print("Analyzing...")
-    analysis = analyze_all(obs, nws, om, snotel, afd, avy, {})
+    analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
+                           nws_grids=nws_grids if "error" not in nws_grids else None,
+                           sounding=sounding if "error" not in sounding else None,
+                           ensemble=ensemble if ensemble.get("models") else None,
+                           synoptic=synoptic if "error" not in synoptic else None)
 
     _cache.update({
         "data": analysis, "home_obs": home_obs, "home_fc": home_fc,
