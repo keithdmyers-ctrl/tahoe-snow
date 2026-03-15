@@ -1,6 +1,6 @@
-const CACHE_NAME = 'tahoe-snow-v1';
-const STATIC_ASSETS = ['/', '/static/manifest.json'];
-const API_CACHE = 'tahoe-snow-api-v1';
+const CACHE_NAME = 'tahoe-snow-v2';
+const STATIC_ASSETS = ['/static/manifest.json'];
+const API_CACHE = 'tahoe-snow-api-v2';
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -21,22 +21,22 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // API calls: network-first with cache fallback
-  if (url.pathname.startsWith('/api/')) {
+  // Only-static assets (icons, manifest): cache-first
+  if (url.pathname.startsWith('/static/')) {
     event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          const clone = response.clone();
-          caches.open(API_CACHE).then(cache => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() => caches.match(event.request))
+      caches.match(event.request).then(cached => cached || fetch(event.request))
     );
     return;
   }
 
-  // Static: cache-first
+  // Everything else (HTML pages, API calls): network-first with cache fallback
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
+    fetch(event.request)
+      .then(response => {
+        const clone = response.clone();
+        caches.open(API_CACHE).then(cache => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
