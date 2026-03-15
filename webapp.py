@@ -32,7 +32,7 @@ from tahoe_snow import (
     analyze_all, RESORTS, SNOTEL_STATIONS,
 )
 from pressure_forecast import get_storm_total
-from forecast_verification import log_daily_verification
+from forecast_verification import log_daily_verification, get_verification_summary
 
 app = Flask(__name__)
 
@@ -136,6 +136,16 @@ def index():
 def api_data():
     data = get_analysis()
     return jsonify(data)
+
+
+@app.route("/api/verification")
+def api_verification():
+    """Return forecast verification summary as JSON."""
+    try:
+        summary = get_verification_summary()
+        return jsonify(summary)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/refresh")
