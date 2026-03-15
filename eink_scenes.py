@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-E-Ink Scene Manager — Inky Impression 7.3" (2025 Edition)
+E-Ink Scene Manager -- Inky Impression 7.3" (2025 Edition)
 
 Button-driven scene switching between Oakland local weather and Heavenly/Tahoe.
 
@@ -21,6 +21,7 @@ Usage:
 """
 
 import json
+import logging
 import os
 import sys
 import time
@@ -29,26 +30,19 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from tahoe_snow import (
-    fetch_nws_observations, fetch_nws_forecast, fetch_open_meteo,
-    fetch_nws_gridpoints, fetch_ensemble, fetch_synoptic_stations,
-    fetch_nbm, fetch_pws_nearby, aggregate_pws, fetch_cssl_snow,
-    fetch_nws_alerts, fetch_sounding, fetch_climate_normals,
-    fetch_caltrans_chains, fetch_all_lift_status,
-    fetch_snotel_current, fetch_avalanche, fetch_forecast_discussion,
-    fetch_rwis_stations,
-    analyze_all, RESORTS,
-)
+from data_pipeline import fetch_tahoe_analysis, fetch_oakland_data
+from tahoe_snow import aggregate_pws
 from sensors import read_all as read_sensors
-from pressure_forecast import get_forecast as get_pressure_forecast, predict_rain_timing, get_storm_total
+from pressure_forecast import get_forecast as get_pressure_forecast, predict_rain_timing
 from forecast_verification import log_daily_verification, get_bias_corrections
 from eink_renderer import render_template, send_to_display, DISPLAY_W, DISPLAY_H
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 HOME = {"label": "Oakland", "lat": 37.8024, "lon": -122.1828, "elev_ft": 450}
-TAHOE = {"lat": 39.17, "lon": -120.145}
 
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".scene_state.json")
 PREVIEW_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -59,16 +53,16 @@ BTN_B = 6   # Heavenly
 BTN_C = 16  # Refresh
 BTN_D = 24  # Heavenly Detail
 
-# Weather condition → emoji mapping for NWS shortForecast text
+# Weather condition -> emoji mapping for NWS shortForecast text
 CONDITION_ICONS = {
-    "sunny": "☀️", "clear": "☀️", "mostly sunny": "🌤",
-    "partly sunny": "⛅", "partly cloudy": "⛅", "mostly cloudy": "🌥",
-    "cloudy": "☁️", "overcast": "☁️",
-    "rain": "🌧", "showers": "🌧", "drizzle": "🌧",
-    "thunderstorm": "⛈", "thunder": "⛈",
-    "snow": "❄️", "flurries": "🌨", "blizzard": "❄️",
-    "fog": "🌫", "haze": "🌫", "mist": "🌫",
-    "wind": "💨", "breezy": "💨",
+    "sunny": "\u2600\ufe0f", "clear": "\u2600\ufe0f", "mostly sunny": "\U0001f324",
+    "partly sunny": "\u26c5", "partly cloudy": "\u26c5", "mostly cloudy": "\U0001f325",
+    "cloudy": "\u2601\ufe0f", "overcast": "\u2601\ufe0f",
+    "rain": "\U0001f327", "showers": "\U0001f327", "drizzle": "\U0001f327",
+    "thunderstorm": "\u26c8", "thunder": "\u26c8",
+    "snow": "\u2744\ufe0f", "flurries": "\U0001f328", "blizzard": "\u2744\ufe0f",
+    "fog": "\U0001f32b", "haze": "\U0001f32b", "mist": "\U0001f32b",
+    "wind": "\U0001f4a8", "breezy": "\U0001f4a8",
 }
 
 
@@ -78,7 +72,7 @@ def _condition_icon(text: str) -> str:
     for key, icon in CONDITION_ICONS.items():
         if key in t:
             return icon
-    return "🌡"
+    return "\U0001f321"
 
 
 def _t(val):
@@ -102,96 +96,60 @@ def _snow_str(val):
 
 
 # ---------------------------------------------------------------------------
-# Data fetching
+# Data fetching (thread-safe cache)
 # ---------------------------------------------------------------------------
-_cache = {"data": None, "home_obs": None, "home_fc": None, "home_om": None,
-          "home_nbm": None, "home_pws": None, "cssl": None,
-          "home_alerts": None, "tahoe_alerts": None, "sounding": None,
-          "home_normals": None, "storm": None,
-          "chains": None, "lifts": None, "rwis": None,
-          "sensors": None, "timestamp": 0}
+_cache = {"data": None, "oakland": None, "sensors": None, "timestamp": 0}
+_cache_lock = threading.Lock()
 CACHE_TTL = 900  # 15 min
 
 
 def fetch_all(force=False):
-    """Fetch all data, cached."""
+    """Fetch all data via shared pipeline, cached with lock protection."""
     now = time.time()
-    if not force and _cache["data"] and (now - _cache["timestamp"]) < CACHE_TTL:
-        return _cache
+    with _cache_lock:
+        if not force and _cache["data"] and (now - _cache["timestamp"]) < CACHE_TTL:
+            return _cache
 
     print("Fetching sensor data...")
     sensors = read_sensors()
 
     print("Fetching Oakland weather...")
-    home_obs = fetch_nws_observations(HOME["lat"], HOME["lon"])
-    home_fc = fetch_nws_forecast(HOME["lat"], HOME["lon"])
-    home_om = fetch_open_meteo(HOME["lat"], HOME["lon"])
-    home_nbm = fetch_nbm(HOME["lat"], HOME["lon"])
-    home_pws = fetch_pws_nearby(HOME["lat"], HOME["lon"])
+    oakland = fetch_oakland_data()
 
-    print("Fetching alerts & extras...")
-    home_alerts = fetch_nws_alerts(HOME["lat"], HOME["lon"])
-    tahoe_alerts = fetch_nws_alerts(TAHOE["lat"], TAHOE["lon"])
-    sounding = fetch_sounding("REV")
-    home_normals = fetch_climate_normals(HOME["lat"], HOME["lon"])
-    chains = fetch_caltrans_chains()
-    lifts = fetch_all_lift_status()
+    print("Fetching Tahoe data + analysis...")
+    analysis = fetch_tahoe_analysis()
 
-    print("Fetching additional data sources...")
+    # Build a cache dict that the scene builders expect
+    new_cache = {
+        "data": analysis,
+        "home_obs": oakland["home_obs"],
+        "home_fc": oakland["home_fc"],
+        "home_om": oakland["home_om"],
+        "home_nbm": oakland["home_nbm"],
+        "home_pws": oakland["home_pws"],
+        "home_alerts": oakland["home_alerts"],
+        "cssl": analysis.get("cssl"),
+        "tahoe_alerts": analysis.get("alerts", []),
+        "sounding": analysis.get("sounding"),
+        "home_normals": None,  # Oakland normals not fetched here; use pipeline if needed
+        "storm": analysis.get("storm"),
+        "chains": analysis.get("chains"),
+        "lifts": analysis.get("lifts"),
+        "rwis": analysis.get("rwis", []),
+        "sensors": sensors,
+        "timestamp": time.time(),
+    }
+
+    # Daily forecast verification logging (best-effort)
     try:
-        nws_grids = fetch_nws_gridpoints(TAHOE["lat"], TAHOE["lon"])
-    except Exception:
-        nws_grids = {}
-    try:
-        ensemble = fetch_ensemble(TAHOE["lat"], TAHOE["lon"])
-    except Exception:
-        ensemble = {}
-    try:
-        synoptic = fetch_synoptic_stations(TAHOE["lat"], TAHOE["lon"], radius_miles=30)
-    except Exception:
-        synoptic = {}
-    try:
-        rwis = fetch_rwis_stations(TAHOE["lat"], TAHOE["lon"])
-    except Exception:
-        rwis = []
-
-    print("Fetching Tahoe data...")
-    obs = fetch_nws_observations(TAHOE["lat"], TAHOE["lon"])
-    nws = fetch_nws_forecast(TAHOE["lat"], TAHOE["lon"])
-    om = fetch_open_meteo(TAHOE["lat"], TAHOE["lon"])
-    snotel = fetch_snotel_current()
-    avy = fetch_avalanche()
-    afd = fetch_forecast_discussion()
-    cssl = fetch_cssl_snow()
-
-    # Storm total tracking (uses pressure history + SNOTEL)
-    storm = get_storm_total(snotel)
-
-    print("Analyzing...")
-    analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
-                           nws_grids=nws_grids if "error" not in nws_grids else None,
-                           sounding=sounding if "error" not in sounding else None,
-                           ensemble=ensemble if ensemble.get("models") else None,
-                           synoptic=synoptic if "error" not in synoptic else None,
-                           rwis=rwis if rwis else None,
-                           cssl=cssl if cssl and "error" not in cssl else None)
-
-    _cache.update({
-        "data": analysis, "home_obs": home_obs, "home_fc": home_fc,
-        "home_om": home_om, "home_nbm": home_nbm, "home_pws": home_pws,
-        "cssl": cssl, "home_alerts": home_alerts, "tahoe_alerts": tahoe_alerts,
-        "sounding": sounding, "home_normals": home_normals, "storm": storm,
-        "chains": chains, "lifts": lifts, "rwis": rwis,
-        "sensors": sensors, "timestamp": time.time(),
-    })
-
-    # Daily forecast verification logging
-    try:
-        log_daily_verification(home_obs, home_fc, analysis)
+        log_daily_verification(oakland["home_obs"], oakland["home_fc"], analysis)
     except Exception:
         pass  # verification is best-effort
 
-    return _cache
+    with _cache_lock:
+        _cache.update(new_cache)
+
+    return new_cache
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +245,7 @@ def build_oakland_context(cache) -> dict:
     outdoor_humidity = outdoor.get("humidity_pct")
     pf = get_pressure_forecast(current_humidity=outdoor_humidity)
 
-    # PWS consensus — better ground truth than single NWS airport station
+    # PWS consensus -- better ground truth than single NWS airport station
     pws_raw = cache.get("home_pws") or []
     pws = aggregate_pws(pws_raw) if pws_raw else {}
 
@@ -452,7 +410,7 @@ def build_heavenly_context(cache) -> dict:
         except Exception:
             name = date[-5:]
         short = dd["conditions"][0][:16] if dd["conditions"] else ""
-        icon = _condition_icon(short) if short else "🌡"
+        icon = _condition_icon(short) if short else "\U0001f321"
         snow_days.append({
             "name": name,
             "snow": dd["snow"],
@@ -500,7 +458,7 @@ def build_heavenly_context(cache) -> dict:
     lifts_open = lifts_data.get("open", 0) if "error" not in lifts_data else None
     lifts_total = lifts_data.get("total", 0) if "error" not in lifts_data else None
 
-    # RWIS road temp — pick the first station with pavement data for compact display
+    # RWIS road temp -- pick the first station with pavement data for compact display
     rwis = cache.get("rwis") or []
     road_temp_f = None
     for r in rwis:
@@ -532,9 +490,9 @@ def build_heavenly_context(cache) -> dict:
     }
 
 
-PRECIP_ICONS = {"Snow": "❄️", "Mix": "🌨", "Rain": "🌧", "None": ""}
+PRECIP_ICONS = {"Snow": "\u2744\ufe0f", "Mix": "\U0001f328", "Rain": "\U0001f327", "None": ""}
 PRECIP_CLASSES = {"Snow": "snow-type", "Mix": "mix-type", "Rain": "rain-type", "None": "none-type"}
-ZONE_ICONS = {"Peak": "▲", "Mid": "■", "Base": "●"}
+ZONE_ICONS = {"Peak": "\u25b2", "Mid": "\u25a0", "Base": "\u25cf"}
 
 
 def build_detail_context(cache) -> dict:
@@ -563,7 +521,7 @@ def build_detail_context(cache) -> dict:
 
     heavenly = analysis.get("resorts", {}).get("Heavenly", {})
 
-    # Build zones in peak → mid → base order (high to low elevation)
+    # Build zones in peak -> mid -> base order (high to low elevation)
     zones = []
     for zone_key, zone_name in [("peak", "Peak"), ("mid", "Mid"), ("base", "Base")]:
         zd = heavenly.get("zones", {}).get(zone_key, {})
@@ -597,7 +555,7 @@ def build_detail_context(cache) -> dict:
 
         zones.append({
             "name": zone_name,
-            "icon": ZONE_ICONS.get(zone_name, "·"),
+            "icon": ZONE_ICONS.get(zone_name, "\u00b7"),
             "label": zd.get("label", ""),
             "elev": zd.get("elev_ft", "?"),
             "temp": _t(snap.get("temp_f")),
@@ -609,7 +567,7 @@ def build_detail_context(cache) -> dict:
             "gust": snap.get("wind_gust_mph", 0),
             "quality": (snap.get("snow_quality", "")[:12]) if snow24 > 0 else "",
             "precip_type": precip_type,
-            "precip_icon": PRECIP_ICONS.get(precip_type, "—"),
+            "precip_icon": PRECIP_ICONS.get(precip_type, "\u2014"),
             "precip_class": PRECIP_CLASSES.get(precip_type, "none-type"),
             "hourly": hourly,
         })
@@ -715,7 +673,7 @@ def start_button_listener():
         import gpiod
         from gpiod.line import Bias, Direction, Edge
     except ImportError:
-        print("gpiod not available — button listener requires Raspberry Pi.")
+        print("gpiod not available -- button listener requires Raspberry Pi.")
         print("Run with --scene oakland or --scene heavenly instead.")
         return
 

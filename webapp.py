@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tahoe Snow Web App — Flask backend.
+Tahoe Snow Web App -- Flask backend.
 
 Serves the dashboard UI and provides a JSON API for live data.
 Data is cached in memory with a configurable TTL to avoid hammering APIs.
@@ -10,7 +10,7 @@ Usage:
   .venv/bin/python3 webapp.py --port 8080     # custom port
 """
 
-import json
+import logging
 import sys
 import os
 import time
@@ -20,21 +20,11 @@ from datetime import datetime, timezone
 from flask import Flask, render_template, jsonify
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tahoe_snow import (
-    fetch_nws_observations, fetch_nws_forecast, fetch_nws_gridpoints,
-    fetch_open_meteo_multi,
-    fetch_nbm, fetch_pws_nearby, aggregate_pws,
-    fetch_synoptic_stations, fetch_cssl_snow,
-    fetch_nws_alerts, fetch_sounding, fetch_climate_normals,
-    fetch_ensemble, fetch_caltrans_chains, fetch_all_lift_status,
-    fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
-    fetch_avalanche, fetch_forecast_discussion,
-    fetch_rwis_stations,
-    analyze_all, compute_ski_decision, log_storm_event,
-    get_storm_history, RESORTS, SNOTEL_STATIONS,
-)
-from pressure_forecast import get_storm_total
+from data_pipeline import fetch_tahoe_analysis, fetch_oakland_data
+from tahoe_snow import log_storm_event
 from forecast_verification import log_daily_verification, get_verification_summary
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -61,79 +51,26 @@ def get_analysis(force: bool = False) -> dict:
         _cache["loading"] = True
 
     try:
-        obs = fetch_nws_observations(39.17, -120.145)
-        nws = fetch_nws_forecast(39.17, -120.145)
-        resort_points = {rn: {"lat": r["base"]["lat"], "lon": r["base"]["lon"]}
-                         for rn, r in RESORTS.items()}
-        om = fetch_open_meteo_multi(resort_points)
-        snotel = fetch_snotel_current()
-        avy = fetch_avalanche()
-        afd = fetch_forecast_discussion()
-
-        # Additional data sources
-        tahoe_nbm = fetch_nbm(39.17, -120.145)
-        nws_grids = fetch_nws_gridpoints(39.17, -120.145)
-        cssl = fetch_cssl_snow()
-        tahoe_alerts = fetch_nws_alerts(39.17, -120.145)
-        sounding = fetch_sounding("REV")
-        normals = fetch_climate_normals(39.17, -120.145)
-        ensemble = fetch_ensemble(39.17, -120.145)
-        synoptic = fetch_synoptic_stations(39.17, -120.145, radius_miles=30)
-        storm = get_storm_total(snotel)
-        chains = fetch_caltrans_chains()
-        lifts = fetch_all_lift_status()
-
-        # RWIS road weather stations (best-effort)
-        try:
-            rwis = fetch_rwis_stations(39.17, -120.145)
-        except Exception:
-            rwis = []
-
-        # Pass all data sources to analyze_all for full pipeline integration:
-        # NWS grids, sounding, ensemble, and Synoptic stations
-        analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
-                               nws_grids=nws_grids if "error" not in nws_grids else None,
-                               sounding=sounding if "error" not in sounding else None,
-                               ensemble=ensemble if ensemble.get("models") else None,
-                               synoptic=synoptic if "error" not in synoptic else None,
-                               rwis=rwis if rwis else None,
-                               cssl=cssl if cssl and "error" not in cssl else None)
-
-        # Attach extra data to analysis for the web UI
-        analysis["nbm"] = tahoe_nbm if "error" not in tahoe_nbm else None
-        analysis["nws_grids"] = nws_grids if "error" not in nws_grids else None
-        analysis["cssl"] = cssl if "error" not in cssl else None
-        analysis["alerts"] = tahoe_alerts or []
-        if not analysis.get("sounding"):
-            analysis["sounding"] = sounding if "error" not in sounding else None
-        analysis["normals"] = normals if "error" not in normals else None
-        if not analysis.get("ensemble"):
-            analysis["ensemble"] = ensemble if ensemble.get("models") else None
-        analysis["synoptic"] = synoptic if "error" not in synoptic else None
-        analysis["storm"] = storm
-        analysis["chains"] = chains
-        analysis["lifts"] = lifts
-        analysis["rwis"] = rwis
+        analysis = fetch_tahoe_analysis()
 
         # Daily forecast verification logging (best-effort)
         try:
-            home_obs = fetch_nws_observations(37.8024, -122.1828)
-            home_fc = fetch_nws_forecast(37.8024, -122.1828)
-            log_daily_verification(home_obs, home_fc, analysis)
+            oakland = fetch_oakland_data()
+            log_daily_verification(oakland["home_obs"], oakland["home_fc"], analysis)
         except Exception:
             pass  # verification is best-effort, never break main flow
 
-        # Compute ski decision (needs chains, lifts, storm attached above)
-        analysis["decision"] = compute_ski_decision(analysis)
-
         # Storm archive: log when storm ends (transition from active to inactive)
+        storm = analysis.get("storm")
         current_storm = storm.get("in_storm", False) if storm else False
-        if _prev_storm_state and not current_storm:
-            log_storm_event(analysis)
-        _prev_storm_state = current_storm
 
-        # Attach storm history for display
-        analysis["storm_history"] = get_storm_history()
+        # Thread safety: update _prev_storm_state inside the lock
+        with _lock:
+            prev = _prev_storm_state
+            _prev_storm_state = current_storm
+
+        if prev and not current_storm:
+            log_storm_event(analysis)
 
         with _lock:
             _cache["data"] = analysis
@@ -141,8 +78,7 @@ def get_analysis(force: bool = False) -> dict:
             _cache["loading"] = False
         return analysis
     except Exception as e:
-        import logging
-        logging.exception("Error fetching weather data")
+        logger.exception("Error fetching weather data")
         with _lock:
             _cache["loading"] = False
             cached = _cache["data"]

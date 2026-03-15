@@ -10,11 +10,12 @@ Setup:
 
 Notification methods:
   - Desktop notification (notify-send, works on GNOME/Wayland)
-  - Webhook (POST to any URL — Discord, Slack, ntfy.sh, etc.)
+  - Webhook (POST to any URL -- Discord, Slack, ntfy.sh, etc.)
   - Log file (always written)
 """
 
 import json
+import logging
 import os
 import sys
 import subprocess
@@ -23,14 +24,12 @@ from pathlib import Path
 
 # Import from main module
 sys.path.insert(0, os.path.dirname(__file__))
-from tahoe_snow import (fetch_nws_observations, fetch_nws_forecast,
-                         fetch_open_meteo, fetch_nws_gridpoints,
-                         fetch_snotel_current, fetch_avalanche,
-                         fetch_forecast_discussion, fetch_sounding,
-                         fetch_ensemble, fetch_synoptic_stations,
-                         analyze_all, RESORTS)
+from data_pipeline import fetch_tahoe_analysis
+from tahoe_snow import RESORTS
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 CONFIG_FILE = Path(__file__).parent / "alerts_config.json"
 STATE_FILE = Path(__file__).parent / ".alerts_state.json"
@@ -159,39 +158,10 @@ def main():
 
     alerts = []
 
-    # Fetch data and run full blended pipeline via analyze_all()
+    # Fetch data via shared pipeline (full blended analysis)
     log("Checking conditions...")
-    tahoe_lat, tahoe_lon = 39.17, -120.145
-    obs = fetch_nws_observations(tahoe_lat, tahoe_lon)
-    nws = fetch_nws_forecast(tahoe_lat, tahoe_lon)
-    om = fetch_open_meteo(tahoe_lat, tahoe_lon)
-    snotel = fetch_snotel_current()
-    avy = fetch_avalanche()
-    afd = fetch_forecast_discussion()
-
-    # Optional enrichment sources (best-effort)
-    try:
-        nws_grids = fetch_nws_gridpoints(tahoe_lat, tahoe_lon)
-    except Exception:
-        nws_grids = {}
-    try:
-        sounding = fetch_sounding("REV")
-    except Exception:
-        sounding = {}
-    try:
-        ensemble = fetch_ensemble(tahoe_lat, tahoe_lon)
-    except Exception:
-        ensemble = {}
-    try:
-        synoptic = fetch_synoptic_stations(tahoe_lat, tahoe_lon, radius_miles=30)
-    except Exception:
-        synoptic = {}
-
-    analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
-                           nws_grids=nws_grids if "error" not in nws_grids else None,
-                           sounding=sounding if "error" not in sounding else None,
-                           ensemble=ensemble if ensemble.get("models") else None,
-                           synoptic=synoptic if "error" not in synoptic else None)
+    analysis = fetch_tahoe_analysis()
+    avy = analysis.get("avalanche", {})
 
     for resort_name, resort_cfg in config.get("resorts", {}).items():
         if not resort_cfg.get("enabled"):
