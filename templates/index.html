@@ -461,8 +461,26 @@ button.section-header {
 .chart-container { position: relative; height: 250px; margin: 8px 0; }
 .chart-container--tall { height: 280px; }
 .chart-container--extra { height: 300px; }
-@media (max-width: 800px) { .chart-container { height: 220px; } }
-@media (max-width: 500px) { .chart-container { height: 200px; } }
+@media (max-width: 800px) { .chart-container { height: 220px; } .chart-container--extra { height: 260px; } }
+@media (max-width: 500px) { .chart-container { height: 200px; } .chart-container--extra { height: 220px; } }
+
+/* -- Accumulation cards (replaces giant table) -- */
+.accum-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.accum-card {
+  background: rgba(15,25,35,0.6);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+.accum-night { background: rgba(10,18,28,0.8); }
+.accum-header { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.accum-snow { font-size: 22px; font-weight: 800; margin: 2px 0 4px; font-variant-numeric: tabular-nums; }
+.accum-snow:not(.snow-val) { color: var(--text-dim); font-size: 14px; }
+.accum-details { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-dim); align-items: center; }
 
 /* -- Tables -- */
 /* Scroll hint for tables */
@@ -2152,7 +2170,7 @@ function buildResortPanel(rn) {
     </div>
   </div>`;
 
-  // Day/Night accumulation (collapsed)
+  // Day/Night accumulation — compact card layout instead of giant table
   const peak = rd.zones.peak;
   const buckets = peak ? peak.day_night_buckets || [] : [];
   if (buckets.length > 0) {
@@ -2161,26 +2179,22 @@ function buildResortPanel(rn) {
       <button class="section-header" aria-expanded="false">
         Day/Night Accumulation &mdash; ${rn} Peak <span class="toggle">&#9662;</span>
       </button>
-      <div class="section-body collapsed">
-        <div class="scroll-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th>Date</th><th>Period</th><th>Snow</th><th>Liquid</th>
-            <th>Hi</th><th>Lo</th><th>Feels Like</th><th>Wind/Gust</th><th>Type</th>
-          </tr></thead><tbody>`;
-    for (const b of buckets.slice(0, 20)) {
+      <div class="section-body collapsed"><div class="accum-grid">`;
+    for (const b of buckets.slice(0, 14)) {
       const sc = b.snow_in > 0 ? 'snow-val' : '';
-      html += `<tr>
-        <td>${formatDateLabel(b.date)}</td><td>${esc(b.period || '')}</td>
-        <td class="${sc}">${b.snow_in}"</td><td>${b.liquid_in}"</td>
-        <td class="${tempClass(b.temp_high_f)}">${f(b.temp_high_f, '\u00B0')}</td>
-        <td class="${tempClass(b.temp_low_f)}">${f(b.temp_low_f, '\u00B0')}</td>
-        <td class="${tempClass(b.feels_like_low_f)}">${f(b.feels_like_low_f, '\u00B0')}</td>
-        <td>${f(b.wind_avg_mph, '')}/${f(b.wind_max_gust_mph, '')} mph</td>
-        <td>${precipBadge(b.precip_type)}</td>
-      </tr>`;
+      const isNight = (b.period || '').toLowerCase().includes('night');
+      const periodIcon = isNight ? '\u{1F319}' : '\u2600\uFE0F';
+      html += `<div class="accum-card ${isNight ? 'accum-night' : ''}">
+        <div class="accum-header">${periodIcon} ${formatDateLabel(b.date)} ${esc(b.period || '')}</div>
+        <div class="accum-snow ${sc}">${b.snow_in > 0 ? b.snow_in + '"' : '\u2014'}</div>
+        <div class="accum-details">
+          <span class="${tempClass(b.temp_high_f)}">${f(b.temp_high_f, '\u00B0')}/${f(b.temp_low_f, '\u00B0')}</span>
+          <span>${f(b.wind_avg_mph, '')}${b.wind_max_gust_mph > 0 ? 'g' + f(b.wind_max_gust_mph, '') : ''} mph</span>
+          ${precipBadge(b.precip_type)}
+        </div>
+      </div>`;
     }
-    html += '</tbody></table></div></div></div>';
+    html += '</div></div></div>';
   }
 
   // Multi-model comparison (collapsed)
@@ -2394,9 +2408,9 @@ function renderComparison() {
 
   html += `<div class="section mt-4">
     <button class="section-header" aria-expanded="true">
-      7-Day Forecast &mdash; All Resorts (Peak) <span class="toggle toggle--open">&#9662;</span>
+      7-Day Snow Forecast &mdash; All Resorts <span class="toggle">&#9662;</span>
     </button>
-    <div class="section-body"><div class="chart-container chart-container--extra"><canvas id="chart-compare-all"></canvas></div></div>
+    <div class="section-body collapsed"><div class="chart-container chart-container--extra"><canvas id="chart-compare-all"></canvas></div></div>
   </div>`;
 
   document.getElementById('comparison-panel').innerHTML = html;
@@ -2438,34 +2452,21 @@ function buildCompareChart() {
   const datasets = [];
   let labels = [];
 
+  // Snow bars only — no temp lines. Keeps chart clean and readable on mobile.
   for (const rn of RESORT_NAMES) {
     const spread = (DATA.resorts[rn]?.zones?.peak?.model_spread || []).slice(0, MAX_DAYS);
     if (labels.length === 0) {
-      labels = spread.map(d => formatDateLabel(d.date));
+      labels = spread.map(d => {
+        try { return new Date(d.date).toLocaleDateString('en-US', {weekday: 'short'}); }
+        catch(e) { return formatDateLabel(d.date); }
+      });
     }
     datasets.push({
-      label: rn + ' Snow',
+      label: rn,
       data: spread.map(d => (d.models?.GFS||{}).snow_in || 0),
-      type: 'bar',
-      backgroundColor: RESORT_COLORS[rn] + '66',
+      backgroundColor: RESORT_COLORS[rn] + '88',
       borderColor: RESORT_COLORS[rn],
       borderWidth: 1,
-      yAxisID: 'snow',
-      order: 1,
-    });
-    datasets.push({
-      label: rn + ' Temp',
-      data: spread.map(d => (d.models?.GFS||{}).temp_high_f ?? null),
-      type: 'line',
-      borderColor: RESORT_COLORS[rn],
-      backgroundColor: 'transparent',
-      borderWidth: 2,
-      borderDash: [4, 4],
-      tension: 0.3,
-      pointRadius: 3,
-      pointBackgroundColor: RESORT_COLORS[rn],
-      yAxisID: 'temp',
-      order: 0,
     });
   }
 
@@ -2477,13 +2478,12 @@ function buildCompareChart() {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: CHART_LEGEND,
-        tooltip: CHART_TOOLTIP,
+        legend: { ...CHART_LEGEND, position: 'bottom', labels: { ...CHART_LEGEND.labels, boxWidth: 12, padding: 8 } },
+        tooltip: { ...CHART_TOOLTIP, callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}"` } },
       },
       scales: {
-        x: SCALE_X,
-        snow: { position: 'left', ...SCALE_SNOW, grid: { color: '#1a263488' }, title: { display: true, text: 'Snow (in)', color: '#7ec8e3', font: { size: 11 } } },
-        temp: { position: 'right', ...SCALE_TEMP, grid: { display: false }, title: { display: true, text: 'High Temp (\u00B0F)', color: '#ff8c42', font: { size: 11 } } },
+        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 0, font: { size: 12 } } },
+        y: { ...SCALE_SNOW, grid: { color: '#1a263422' }, title: { display: true, text: 'Snow (inches)', color: '#7ec8e3', font: { size: 11 } } },
       },
     },
   });
