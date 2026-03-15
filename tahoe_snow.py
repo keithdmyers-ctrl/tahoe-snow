@@ -39,6 +39,7 @@ Usage:
 """
 
 import json
+import logging
 import os
 import re
 import sys
@@ -48,36 +49,15 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import requests
 
+from resort_configs import get_active_resorts_legacy, RESORT_REGISTRY
+
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Resort Presets
 # ---------------------------------------------------------------------------
 
-RESORTS = {
-    "Heavenly": {
-        "base": {"label": "California Lodge", "lat": 38.9353, "lon": -119.9406, "elev_ft": 6540, "aspect_deg": 180},
-        "mid":  {"label": "Sky Deck / Tamarack", "lat": 38.9310, "lon": -119.9250, "elev_ft": 8500, "aspect_deg": 20},
-        "peak": {"label": "Monument Peak", "lat": 38.9280, "lon": -119.9070, "elev_ft": 10067, "aspect_deg": 350},
-        "aspect": "NE",
-        "nearest_snotel": ["Fallen Leaf", "Hagan's Meadow"],
-        "east_shore": True,  # Subject to lake effect enhancement
-    },
-    "Northstar": {
-        "base": {"label": "Village", "lat": 39.2744, "lon": -120.1210, "elev_ft": 6330, "aspect_deg": 200},
-        "mid":  {"label": "Vista Express", "lat": 39.2680, "lon": -120.1150, "elev_ft": 7600, "aspect_deg": 340},
-        "peak": {"label": "Mt Pluto", "lat": 39.2630, "lon": -120.1100, "elev_ft": 8610, "aspect_deg": 10},
-        "aspect": "SW",
-        "nearest_snotel": ["Independence Lake", "Independence Camp", "Tahoe City Cross"],
-        "east_shore": False,
-    },
-    "Kirkwood": {
-        "base": {"label": "Lodge", "lat": 38.6850, "lon": -120.0650, "elev_ft": 7800, "aspect_deg": 170},
-        "mid":  {"label": "Sunrise / Solitude", "lat": 38.6820, "lon": -120.0720, "elev_ft": 8800, "aspect_deg": 350},
-        "peak": {"label": "Thimble Peak", "lat": 38.6790, "lon": -120.0780, "elev_ft": 9800, "aspect_deg": 5},
-        "aspect": "N",
-        "nearest_snotel": ["CSS Lab", "Hagan's Meadow"],
-        "east_shore": False,
-    },
-}
+RESORTS = get_active_resorts_legacy()
 
 SNOTEL_STATIONS = {
     "Tahoe City Cross":  {"id": "809", "state": "CA", "elev_ft": 6230},
@@ -594,7 +574,8 @@ def fetch_nws_observations(lat: float, lon: float) -> dict:
                         "timestamp": p.get("timestamp", ""),
                     }
         return {}
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_nws_observations failed: %s", e)
         return {}
 
 
@@ -617,7 +598,8 @@ def fetch_nws_forecast(lat: float, lon: float) -> dict:
         if hr.status_code == 200:
             result["hourly"] = hr.json().get("properties", {}).get("periods", [])[:156]  # up to 6.5 days
         return result
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_nws_forecast failed: %s", e)
         return {}
 
 
@@ -736,7 +718,8 @@ def fetch_snotel_history(station_id: str, state: str, days: int = 10) -> list:
                     result[code] = [(v["date"], v["value"]) for v in el.get("values", []) if v.get("value") is not None]
                 return result
         return {}
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_snotel_history(%s) failed: %s", station_id, e)
         return {}
 
 
@@ -760,7 +743,8 @@ def fetch_snotel_season(station_id: str, state: str) -> dict:
                         stats[code] = {"current": vals[-1], "peak": max(vals), "days": len(vals)}
                 return stats
         return {}
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_snotel_season(%s) failed: %s", station_id, e)
         return {}
 
 
@@ -916,10 +900,12 @@ def fetch_pws_nearby(lat: float, lon: float, max_stations: int = 5) -> list[dict
                         "uv": obs_data.get("uv"),
                         "timestamp": obs_data.get("obsTimeLocal"),
                     })
-            except Exception:
+            except Exception as e:
+                logger.debug("PWS station %s fetch failed: %s", sid, e)
                 continue
         return results
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_pws_nearby failed: %s", e)
         return []
 
 
@@ -1096,8 +1082,8 @@ def fetch_cssl_snow() -> dict:
                                 "new_snow_in": round(delta, 1),
                             })
                     result["hourly_new_snow"] = hourly_new[-24:]  # last 24 entries
-        except Exception:
-            pass  # hourly data is optional enhancement
+        except Exception as e:
+            logger.debug("CSSL hourly snow data unavailable: %s", e)
 
         # Sensor 9 = Wind Speed, Sensor 10 = Wind Direction at Donner Summit
         for sensor_num, key in [("9", "wind_mph"), ("10", "wind_dir_deg")]:
@@ -1116,8 +1102,8 @@ def fetch_cssl_snow() -> dict:
                     valid_w = [d for d in data_w if d.get("value") is not None and d["value"] != -9999]
                     if valid_w:
                         result[key] = valid_w[-1]["value"]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("CSSL sensor %s fetch failed: %s", sensor_num, e)
 
         result["source"] = "CDEC/CSSL"
         result["elev_ft"] = 6890
@@ -1149,7 +1135,8 @@ def fetch_nws_alerts(lat: float, lon: float) -> list[dict]:
                 "expires": p.get("expires", ""),
             })
         return alerts
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_nws_alerts failed: %s", e)
         return []
 
 
@@ -1288,13 +1275,16 @@ def fetch_climate_normals(lat: float, lon: float) -> dict:
 
         avg_high_c = sum(month_highs) / len(month_highs)
         avg_low_c = sum(month_lows) / len(month_lows)
-        avg_precip_mm = sum(month_precip) / 30  # avg daily precip
+        # month_precip has daily values for ~30 days/yr * 30 yrs.
+        # Average monthly total = sum / num_years
+        num_years = 30
+        avg_monthly_precip_mm = sum(month_precip) / num_years
 
         return {
             "month": now.strftime("%B"),
             "avg_high_f": round(avg_high_c * 9/5 + 32),
             "avg_low_f": round(avg_low_c * 9/5 + 32),
-            "avg_precip_in_month": round(sum(month_precip) / (30 * 25.4), 1),
+            "avg_precip_in_month": round(avg_monthly_precip_mm / 25.4, 1),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -1429,7 +1419,8 @@ def fetch_caltrans_chains() -> list[dict]:
                 "timestamp": item.get("Timestamp", ""),
             })
         return controls
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_chain_controls failed: %s", e)
         return []
 
 
@@ -1465,10 +1456,15 @@ def fetch_lift_status(resort: str = "heavenly") -> dict:
 
 
 def fetch_all_lift_status() -> dict:
-    """Fetch lift status for all three Tahoe resorts."""
+    """Fetch lift status for all active Tahoe resorts."""
     results = {}
-    for slug in ("heavenly", "northstar", "kirkwood"):
-        results[slug] = fetch_lift_status(slug)
+    slugs = [
+        (name.lower(), cfg.liftie_slug)
+        for name, cfg in RESORT_REGISTRY.items()
+        if cfg.enabled and cfg.liftie_slug
+    ]
+    for name, slug in slugs:
+        results[name] = fetch_lift_status(slug)
     return results
 
 
@@ -1513,7 +1509,8 @@ def fetch_forecast_discussion() -> str:
                 if ar.status_code == 200:
                     return ar.json().get("productText", "")[:4000]
         return ""
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_forecast_discussion failed: %s", e)
         return ""
 
 
@@ -1763,7 +1760,8 @@ def fetch_rwis_stations(lat: float = 39.17, lon: float = -120.145) -> list[dict]
             stations.append(station_data)
 
         return stations
-    except Exception:
+    except Exception as e:
+        logger.warning("fetch_rwis_stations failed: %s", e)
         return []
 
 
@@ -1842,8 +1840,8 @@ def fetch_radar_nowcast(lat: float, lon: float,
                         dist_miles / storm_speed_mph * 60
                     )
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("fetch_radar_nowcast failed: %s", e)
 
     return result
 
@@ -3078,8 +3076,8 @@ def log_storm_event(analysis: dict) -> dict | None:
         with open(tmp, "w") as f:
             json.dump(archive, f, indent=2)
         os.replace(tmp, STORM_ARCHIVE_FILE)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to save storm archive: %s", e)
 
     return event
 
@@ -3101,7 +3099,7 @@ def get_storm_history() -> list:
 def generate_summary(analysis: dict) -> str:
     """Generate a natural-language AI-style summary from the analysis data."""
     lines = []
-    cur = analysis["current_conditions"]
+    cur = analysis.get("current_conditions", {})
     obs = cur.get("observation", {})
 
     # Current snapshot
@@ -3200,7 +3198,8 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         from forecast_verification import get_model_weights, get_bias_corrections
         model_weights = get_model_weights()
         bias_corrections = get_bias_corrections()
-    except Exception:
+    except Exception as e:
+        logger.debug("Forecast verification weights unavailable: %s", e)
         model_weights = None
         bias_corrections = {}
 
@@ -3222,8 +3221,10 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         hourly = nws.get("hourly", [])
         if hourly:
             base_temp_f = hourly[0].get("temperature")
-            try: base_wind_mph = float(hourly[0].get("windSpeed", "0 mph").split()[0])
-            except Exception: pass
+            try:
+                base_wind_mph = float(hourly[0].get("windSpeed", "0 mph").split()[0])
+            except Exception:
+                pass
             base_wind_dir = DIR_MAP.get(hourly[0].get("windDirection", "W"), 270)
 
     base_temp_c = (base_temp_f - 32) * 5 / 9 if base_temp_f else 0.0

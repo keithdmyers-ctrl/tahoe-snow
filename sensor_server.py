@@ -12,15 +12,47 @@ Usage:
 """
 
 import json
+import logging
 import sys
 import os
+import time
+import threading
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
+
+logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pressure_forecast import record_pressure
 
 DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sensor_data.json")
+
+# Rate limiting: max 1 POST per 3 seconds per IP
+RATE_LIMIT_SECONDS = 3
+_rate_limit_lock = threading.Lock()
+_last_post_by_ip: dict[str, float] = {}
+_RATE_LIMIT_CLEANUP_INTERVAL = 300  # clean up stale entries every 5 min
+_last_cleanup_time = 0.0
+
+
+def _check_rate_limit(ip: str) -> bool:
+    """Return True if the request should be allowed, False if rate-limited."""
+    global _last_cleanup_time
+    now = time.monotonic()
+    with _rate_limit_lock:
+        # Periodic cleanup of stale entries
+        if now - _last_cleanup_time > _RATE_LIMIT_CLEANUP_INTERVAL:
+            cutoff = now - RATE_LIMIT_SECONDS * 10
+            stale = [k for k, v in _last_post_by_ip.items() if v < cutoff]
+            for k in stale:
+                del _last_post_by_ip[k]
+            _last_cleanup_time = now
+
+        last_time = _last_post_by_ip.get(ip, 0.0)
+        if now - last_time < RATE_LIMIT_SECONDS:
+            return False
+        _last_post_by_ip[ip] = now
+        return True
 
 
 def load_data():
@@ -43,6 +75,15 @@ class SensorHandler(BaseHTTPRequestHandler):
         if self.path != "/sensor":
             self.send_response(404)
             self.end_headers()
+            return
+
+        # Rate limiting per IP
+        client_ip = self.client_address[0]
+        if not _check_rate_limit(client_ip):
+            self.send_response(429)
+            self.end_headers()
+            self.wfile.write(b"Too many requests - max 1 POST per 3 seconds")
+            logger.debug("Rate limited POST from %s", client_ip)
             return
 
         length = int(self.headers.get("Content-Length", 0))

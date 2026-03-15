@@ -24,9 +24,12 @@ Usage:
 """
 
 import json
+import logging
 import math
 import os
 from datetime import datetime, timezone, timedelta
+
+logger = logging.getLogger(__name__)
 
 HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             ".pressure_history.json")
@@ -328,9 +331,9 @@ def _parse_open_meteo_precip(om: dict) -> list[float]:
     # Open-Meteo returns per-model hourly data
     model_precips = []
     for key, val in om.items():
-        if not isinstance(val, dict):
+        if not isinstance(val, dict) or "hourly" not in val:
             continue
-        hourly = val.get("hourly", om.get("hourly"))
+        hourly = val.get("hourly")
         if hourly and "precipitation" in hourly:
             model_precips.append(hourly["precipitation"])
     # Also check top-level hourly (single-model response)
@@ -542,8 +545,8 @@ def predict_rain_timing(nws_hourly: list[dict], pressure_fc: dict,
     try:
         from forecast_verification import recalibrate_pop
         combined_pct = recalibrate_pop(combined_pct)
-    except Exception:
-        pass  # Use uncalibrated if verification module unavailable
+    except Exception as e:
+        logger.debug("Recalibration unavailable, using raw probability: %s", e)
 
     # Determine if rain is predicted (threshold: 15%)
     RAIN_THRESHOLD = 15
@@ -683,7 +686,8 @@ def _format_rain_time(dt) -> str | None:
         if delta > 18:
             time_str = local.strftime("%a ") + time_str
         return time_str
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to format rain time: %s", e)
         return None
 
 
@@ -809,8 +813,8 @@ def get_storm_total(snotel_current: dict = None) -> dict:
         with open(tmp_file, "w") as f:
             json.dump(state, f)
         os.replace(tmp_file, STORM_STATE_FILE)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to save storm state: %s", e)
 
     return {
         "in_storm": state.get("in_storm", False),
