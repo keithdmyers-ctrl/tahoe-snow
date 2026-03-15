@@ -119,8 +119,8 @@ sudo dphys-swapfile setup
 sudo dphys-swapfile swapon
 
 # Clone the project
-git clone <your-repo-url> ~/tahoe-snow
-cd ~/tahoe-snow
+git clone <your-repo-url> ~/projects/tahoe-snow
+cd ~/projects/tahoe-snow
 
 # Create virtual environment
 python3 -m venv .venv
@@ -129,6 +129,24 @@ source .venv/bin/activate
 # Install Python dependencies
 pip install requests numpy pillow jinja2 inky[rpi] smbus2 flask gpiod
 ```
+
+> **Install path note:** The shipped systemd service files assume installation at `/home/keith/projects/tahoe-snow`. If you cloned elsewhere, update the paths in `services/tahoe-eink.service` and `services/tahoe-sensors.service` before copying them.
+
+#### Synoptic/MesoWest API token (optional)
+
+Synoptic/MesoWest provides RWIS road weather stations and mesonet station data. It requires a free API token.
+
+1. Register at https://synopticdata.com (free tier)
+2. Set the environment variable:
+   ```bash
+   export SYNOPTIC_TOKEN=your_token_here
+   ```
+3. Add to `.bashrc` for persistence, or add to the systemd service file's `Environment=` line:
+   ```
+   Environment=SYNOPTIC_TOKEN=your_token_here
+   ```
+
+If not set, those data sources return empty results (the system still works, just fewer sources).
 
 > **Pi 3 performance note:** The Pi 3 is slower than Pi 5 but fully capable of running
 > this project. Display rendering takes ~45-60 seconds (vs ~30 on Pi 5). Data fetching
@@ -191,7 +209,7 @@ GPIO22 (SCL) ── SCL
 ### Step 5: Start the sensor server on the Pi
 
 ```bash
-cd ~/tahoe-snow
+cd ~/projects/tahoe-snow
 
 # Test it manually first
 .venv/bin/python3 sensor_server.py
@@ -199,34 +217,20 @@ cd ~/tahoe-snow
 # Check that ESP32 readings arrive: curl http://localhost:8081/sensor
 ```
 
-Set up as a systemd service for auto-start:
+Set up as a systemd service for auto-start using the shipped service file:
 
 ```bash
-sudo tee /etc/systemd/system/sensor-server.service << 'EOF'
-[Unit]
-Description=ESP32 Sensor Receiver
-After=network.target
-
-[Service]
-Type=simple
-User=keith
-WorkingDirectory=/home/keith/tahoe-snow
-ExecStart=/home/keith/tahoe-snow/.venv/bin/python3 sensor_server.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl enable sensor-server
-sudo systemctl start sensor-server
+sudo cp ~/projects/tahoe-snow/services/tahoe-sensors.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tahoe-sensors
 ```
+
+See `services/README.md` for full service setup instructions.
 
 ### Step 6: Test the display
 
 ```bash
-cd ~/tahoe-snow
+cd ~/projects/tahoe-snow
 
 # Generate a preview image (saves eink_preview.png)
 .venv/bin/python3 eink_scenes.py --preview
@@ -247,7 +251,7 @@ Add:
 
 ```
 # Update e-ink display every 30 minutes
-*/30 * * * * cd /home/keith/tahoe-snow && .venv/bin/python3 eink_scenes.py >> /tmp/eink.log 2>&1
+*/30 * * * * cd /home/keith/projects/tahoe-snow && .venv/bin/python3 eink_scenes.py >> /tmp/eink.log 2>&1
 ```
 
 ### Step 8: Mount the outdoor sensor
@@ -265,7 +269,7 @@ Add:
 - The weatherproof enclosure should have small ventilation holes (not sealed airtight) so air circulates over the BME280
 - Drill 2-3 small holes (3mm) in the bottom of the enclosure for airflow and moisture drainage
 
-## Data Sources (all free, no API keys)
+## Data Sources (all free, most require no API keys)
 
 | Source | Data | Update Frequency |
 |--------|------|-----------------|
@@ -288,7 +292,7 @@ nano alerts_config.json
 .venv/bin/python3 alerts.py
 
 # Add to cron (every 30 min)
-*/30 * * * * cd /home/keith/tahoe-snow && .venv/bin/python3 alerts.py >> /tmp/alerts.log 2>&1
+*/30 * * * * cd /home/keith/projects/tahoe-snow && .venv/bin/python3 alerts.py >> /tmp/alerts.log 2>&1
 ```
 
 Supports desktop notifications (notify-send) and webhooks (Discord, Slack, ntfy.sh).
@@ -301,7 +305,7 @@ Supports desktop notifications (notify-send) and webhooks (Discord, Slack, ntfy.
 - Try: `python3 -c "from inky.auto import auto; print(auto())"`
 
 **Sensor data shows "--" on display:**
-- Check sensor_server is running: `systemctl status sensor-server`
+- Check sensor server is running: `systemctl status tahoe-sensors`
 - Check ESP32 is POSTing: `curl http://localhost:8081/sensor`
 - Check sensor_data.json has recent timestamps
 

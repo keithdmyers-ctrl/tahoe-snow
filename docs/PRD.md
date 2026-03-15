@@ -235,6 +235,9 @@ Palisades Tahoe, Sugar Bowl, Sierra-at-Tahoe, Boreal, Mt. Rose
 
 ## 8. PRD Compliance Evaluation (2026-03-14)
 
+> Note: This evaluation is a self-assessment based on code review.
+> Ratings should be validated with real user testing.
+
 ### Skiers (S1-S14)
 
 | # | Requirement | Status |

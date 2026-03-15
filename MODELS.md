@@ -131,13 +131,21 @@ These multiply together: a 10,000 ft peak in a strong WSW storm can get ~2x the 
 
 ### 2c. Precipitation Type
 
-Simple temperature threshold with a mixed zone:
+Uses **wet-bulb temperature** (Stull 2011) rather than dry-bulb, because evaporative cooling of falling hydrometeors determines the actual phase at ground level. This is the same approach used by NWS and research meteorologists.
+
+**Discrete classification** (used for labels):
 
 ```
-temp_c <= -2°C  →  Snow
--2 to +1°C      →  Mix (snow counted at 50% of SLR)
-above +1°C      →  Rain (no snow accumulation)
+wet_bulb_c <= -1.0°C  →  Snow
+-1.0 to +1.5°C        →  Mix (snow counted at 50% of SLR)
+above +1.5°C           →  Rain (no snow accumulation)
 ```
+
+**Continuous probability** (used for zone phase probabilities):
+
+A logistic sigmoid centered at 0.5°C wet-bulb with width 1.5°C produces smooth snow/mix/rain probabilities instead of hard cutoffs. Elevation correction relative to the freezing level shifts the probability curve (higher elevation = more snow-favorable).
+
+**Fallback**: When humidity data is unavailable (needed to compute wet-bulb), the system falls back to a dry-bulb threshold (0°C) for classification.
 
 ### 2d. Snow Quality Labels
 
@@ -356,5 +364,6 @@ Open-Meteo grid point (resort base lat/lon, ~1900m model elevation)
 | Liftie.info | `liftie.info/api/resort/{name}` | ~1 min | Lift open/closed counts |
 | Avalanche.org | `api.avalanche.org/v2/public/products/map-layer` | Daily | Sierra avalanche danger rating |
 | NWS Reno AFD | `api.weather.gov/products/types/AFD/locations/REV` | ~4x/day | Forecaster discussion text |
+| Synoptic/MesoWest | `api.synopticdata.com/v2/stations/latest` | ~5 min | Mesonet stations (RAWS, DOT, ski patrol) |
 
-All sources are free, public, and require no API keys (the WU PWS key is a well-known public widget key).
+All sources are free and public. Most require no API keys (the WU PWS key is a well-known public widget key). Synoptic/MesoWest requires a free token from https://synopticdata.com — if not set, that source is skipped.

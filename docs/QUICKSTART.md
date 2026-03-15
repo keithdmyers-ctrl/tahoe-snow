@@ -181,9 +181,11 @@ You should see a "Swap" row showing 512M.
 
 ### Download the project
 ```bash
-git clone https://github.com/keithdmyers-ctrl/tahoe-snow.git ~/tahoe-snow
-cd ~/tahoe-snow
+git clone https://github.com/keithdmyers-ctrl/tahoe-snow.git ~/projects/tahoe-snow
+cd ~/projects/tahoe-snow
 ```
+
+> **Install path note:** The shipped systemd service files assume installation at `/home/keith/projects/tahoe-snow`. If you cloned elsewhere, update the paths in `services/tahoe-eink.service` and `services/tahoe-sensors.service` before copying them.
 
 ### Set up Python and install dependencies
 ```bash
@@ -191,6 +193,22 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install requests numpy pillow jinja2 inky[rpi] smbus2 flask gpiod
 ```
+
+### Set up Synoptic/MesoWest API token (optional)
+
+Synoptic/MesoWest provides RWIS road weather stations and mesonet station data (170K+ stations including RAWS, DOT, and ski patrol sensors). It requires a free API token.
+
+1. Register at https://synopticdata.com (free tier is sufficient)
+2. Set the environment variable:
+   ```bash
+   export SYNOPTIC_TOKEN=your_token_here
+   ```
+3. To make it persistent, add to your `.bashrc`:
+   ```bash
+   echo 'export SYNOPTIC_TOKEN=your_token_here' >> ~/.bashrc
+   ```
+
+If not set, Synoptic and RWIS data sources return empty results. The system still works with all other data sources — you just get fewer ground-truth observations.
 
 > **What is a virtual environment (venv)?** It's an isolated Python install so this project's packages don't interfere with anything else on the Pi. You'll always need to run `source .venv/bin/activate` before running project commands.
 
@@ -227,7 +245,7 @@ Wait 10 seconds, then unplug the power cable.
 3. Test the display is detected:
 
 ```bash
-cd ~/tahoe-snow
+cd ~/projects/tahoe-snow
 source .venv/bin/activate
 python3 -c "from inky.auto import auto; d = auto(); print(f'{d.width}x{d.height}')"
 ```
@@ -347,7 +365,7 @@ The sensor server is a small program on the Pi that listens for data from the ES
 SSH into the Pi and test it:
 
 ```bash
-cd ~/tahoe-snow
+cd ~/projects/tahoe-snow
 source .venv/bin/activate
 
 # Start the server manually to test
@@ -360,36 +378,22 @@ Wait up to 5 minutes — you should see readings arrive from your ESP32s. Press 
 
 ### Set it up to run automatically on boot
 
+The repo ships pre-configured service files. Copy and enable the sensor server:
+
 ```bash
-sudo tee /etc/systemd/system/sensor-server.service << 'EOF'
-[Unit]
-Description=ESP32 Sensor Receiver
-After=network.target
-
-[Service]
-Type=simple
-User=keith
-WorkingDirectory=/home/keith/tahoe-snow
-ExecStart=/home/keith/tahoe-snow/.venv/bin/python3 sensor_server.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl enable sensor-server
-sudo systemctl start sensor-server
+sudo cp ~/projects/tahoe-snow/services/tahoe-sensors.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tahoe-sensors
 ```
 
 Verify it's running:
 ```bash
-sudo systemctl status sensor-server
+sudo systemctl status tahoe-sensors
 ```
 
 You should see "active (running)" in green.
 
-> **What is systemd?** It's the Linux service manager. By creating a "service file," we tell the Pi to automatically start the sensor server on boot, and restart it if it ever crashes.
+> **What is systemd?** It's the Linux service manager. By creating a "service file," we tell the Pi to automatically start the sensor server on boot, and restart it if it ever crashes. See `services/README.md` for full setup instructions.
 
 ---
 
@@ -398,7 +402,7 @@ You should see "active (running)" in green.
 This is the moment of truth.
 
 ```bash
-cd ~/tahoe-snow
+cd ~/projects/tahoe-snow
 source .venv/bin/activate
 
 # Generate a preview image first (saves a PNG, doesn't need the display)
@@ -434,7 +438,7 @@ If it asks which editor to use, choose **1** (nano — the simplest one).
 
 Add this line at the very bottom of the file:
 ```
-*/30 * * * * cd /home/keith/tahoe-snow && .venv/bin/python3 eink_scenes.py --refresh >> /tmp/eink.log 2>&1
+*/30 * * * * cd /home/keith/projects/tahoe-snow && .venv/bin/python3 eink_scenes.py --refresh >> /tmp/eink.log 2>&1
 ```
 
 Save and exit: press `Ctrl+O`, then `Enter`, then `Ctrl+X`.
@@ -443,28 +447,12 @@ Save and exit: press `Ctrl+O`, then `Enter`, then `Ctrl+X`.
 
 ### Enable button switching
 
-The Inky Impression has 4 physical buttons (A, B, C, D) on its edge. Set up a service to listen for button presses:
+The Inky Impression has 4 physical buttons (A, B, C, D) on its edge. Copy and enable the e-ink display service:
 
 ```bash
-sudo tee /etc/systemd/system/eink-buttons.service << 'EOF'
-[Unit]
-Description=E-Ink Button Listener
-After=network.target
-
-[Service]
-Type=simple
-User=keith
-WorkingDirectory=/home/keith/tahoe-snow
-ExecStart=/home/keith/tahoe-snow/.venv/bin/python3 eink_scenes.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl enable eink-buttons
-sudo systemctl start eink-buttons
+sudo cp ~/projects/tahoe-snow/services/tahoe-eink.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tahoe-eink
 ```
 
 ### Button map
@@ -518,13 +506,13 @@ Your weather station is now:
 
 **Powder alerts** — get notified when big snow is forecast:
 ```bash
-cd ~/tahoe-snow && source .venv/bin/activate
+cd ~/projects/tahoe-snow && source .venv/bin/activate
 nano alerts_config.json    # edit thresholds
 python3 alerts.py          # test it
 ```
 Add to cron for automatic alerts:
 ```
-*/30 * * * * cd /home/keith/tahoe-snow && .venv/bin/python3 alerts.py >> /tmp/alerts.log 2>&1
+*/30 * * * * cd /home/keith/projects/tahoe-snow && .venv/bin/python3 alerts.py >> /tmp/alerts.log 2>&1
 ```
 
 **Web dashboard** — view the same data in a browser:
@@ -551,7 +539,7 @@ Then open `http://weatherpi.local:5000` in your browser.
 |---------|-----|
 | Display test errors about SPI | Run `sudo raspi-config nonint do_spi 0` then `sudo reboot` |
 | Display shows nothing | Check it's firmly seated on the GPIO header. Power off, reseat, power on |
-| Display shows "--" for temps | Sensor data hasn't arrived — check `sudo systemctl status sensor-server` |
+| Display shows "--" for temps | Sensor data hasn't arrived — check `sudo systemctl status tahoe-sensors` |
 | Display shows "stale" sensor data | ESP32 hasn't reported in 15+ min — check its power and WiFi |
 | Rendering hangs or crashes | Pi 3 memory issue — verify swap is enabled with `free -h` (should show 512M swap). Re-run the swap setup from Step 3 if missing |
 
@@ -565,6 +553,16 @@ Then open `http://weatherpi.local:5000` in your browser.
 | No blinks at all | Not running — check USB power, try unplugging and replugging |
 | Outdoor temp way too high | Sensor is in direct sunlight — must be in shade |
 
+### Web dashboard problems
+
+| Symptom | Fix |
+|---------|-----|
+| Flask not starting | Check port 5000 is not in use (`lsof -i :5000`), check Python path (`which python3`) |
+| Page shows "Loading..." | API fetch is in progress — can take up to 60 seconds on first load after startup |
+| Page shows "Unavailable" | All API calls failed — check network connectivity (`ping api.weather.gov`) |
+| Data seems stale | Data is cached for 15 minutes. Use the Refresh button (throttled to once per 60 seconds) |
+| Charts not rendering | Check browser console (F12) for Chart.js errors. Try a hard refresh (Ctrl+Shift+R) |
+
 ### Checking logs
 
 ```bash
@@ -572,15 +570,15 @@ Then open `http://weatherpi.local:5000` in your browser.
 cat /tmp/eink.log
 
 # Sensor server status
-sudo systemctl status sensor-server
-sudo journalctl -u sensor-server --since "1 hour ago"
+sudo systemctl status tahoe-sensors
+sudo journalctl -u tahoe-sensors --since "1 hour ago"
 
-# Button listener status
-sudo systemctl status eink-buttons
-sudo journalctl -u eink-buttons --since "1 hour ago"
+# Button listener / e-ink service status
+sudo systemctl status tahoe-eink
+sudo journalctl -u tahoe-eink --since "1 hour ago"
 
 # Current sensor data
-cat ~/tahoe-snow/sensor_data.json
+cat ~/projects/tahoe-snow/sensor_data.json
 ```
 
 ---
