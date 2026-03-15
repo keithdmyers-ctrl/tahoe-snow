@@ -482,6 +482,29 @@ button.section-header {
 .accum-snow:not(.snow-val) { color: var(--text-dim); font-size: 14px; }
 .accum-details { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-dim); align-items: center; }
 
+/* -- Compare chart resort pills -- */
+.compare-chart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px; margin-bottom: 8px;
+}
+.resort-toggles { display: flex; flex-wrap: wrap; gap: 4px; }
+.resort-pill {
+  padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid var(--pill-color, var(--accent));
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  transition: all 0.15s; line-height: 1.3;
+}
+.resort-pill.active {
+  background: var(--pill-color, var(--accent));
+  color: #fff; border-color: var(--pill-color, var(--accent));
+}
+.resort-pill:hover:not(.active) { background: rgba(255,255,255,0.05); }
+.pill-snow { font-weight: 800; margin-left: 2px; }
+@media (max-width: 500px) {
+  .compare-chart-header { flex-direction: column; align-items: flex-start; }
+  .resort-pill { padding: 3px 8px; font-size: 10px; }
+}
+
 /* -- Tables -- */
 /* Scroll hint for tables */
 .scroll-wrap {
@@ -2407,15 +2430,16 @@ function renderComparison() {
   html += '</div>';
 
   html += `<div class="section mt-4">
-    <button class="section-header" aria-expanded="true">
-      7-Day Snow Forecast &mdash; All Resorts <span class="toggle">&#9662;</span>
-    </button>
-    <div class="section-body collapsed"><div class="chart-container chart-container--extra"><canvas id="chart-compare-all"></canvas></div></div>
+    <div class="compare-chart-header">
+      <div class="panel-label">7-Day Snow Forecast</div>
+      <div class="resort-toggles" id="resort-toggles"></div>
+    </div>
+    <div class="chart-container chart-container--extra"><canvas id="chart-compare-all"></canvas></div>
   </div>`;
 
   document.getElementById('comparison-panel').innerHTML = html;
   document.getElementById('comparison-panel').classList.add('active');
-  requestAnimationFrame(buildCompareChart);
+  requestAnimationFrame(() => { buildCompareToggles(); buildCompareChart(); });
 }
 
 function toggleCompareDetail(el) {
@@ -2443,6 +2467,43 @@ function rankBadge(label, resort) {
   return `<span class="rank-row"><span class="rank-label">${label}:</span> <span class="rank-value ${colorCls}">${esc(resort || '\u2014')}</span></span>`;
 }
 
+// Track which resorts are toggled on for the comparison chart
+let _compareActiveResorts = new Set();
+
+function buildCompareToggles() {
+  const container = document.getElementById('resort-toggles');
+  if (!container) return;
+
+  // Rank resorts by 7-day snow total and auto-select top 2
+  const ranked = RESORT_NAMES.map(rn => {
+    const spread = DATA.resorts[rn]?.zones?.peak?.model_spread || [];
+    const total7d = spread.slice(0, 7).reduce((s, d) => s + ((d.models?.GFS||{}).snow_in || 0), 0);
+    return { name: rn, total: total7d };
+  }).sort((a, b) => b.total - a.total);
+
+  if (_compareActiveResorts.size === 0) {
+    // First load: auto-select top 2 (the "epic" mountains)
+    ranked.slice(0, 2).forEach(r => _compareActiveResorts.add(r.name));
+  }
+
+  container.innerHTML = ranked.map(r => {
+    const active = _compareActiveResorts.has(r.name);
+    const color = RESORT_COLORS[r.name] || '#4a9eff';
+    return `<button class="resort-pill ${active ? 'active' : ''}" data-resort="${esc(r.name)}"
+      style="--pill-color:${color}">${esc(r.name)} <span class="pill-snow">${r.total.toFixed(0)}"</span></button>`;
+  }).join('');
+}
+
+function toggleCompareResort(name) {
+  if (_compareActiveResorts.has(name)) {
+    if (_compareActiveResorts.size > 1) _compareActiveResorts.delete(name);
+  } else {
+    _compareActiveResorts.add(name);
+  }
+  buildCompareToggles();
+  buildCompareChart();
+}
+
 function buildCompareChart() {
   const canvas = document.getElementById('chart-compare-all');
   if (!canvas) return;
@@ -2452,8 +2513,8 @@ function buildCompareChart() {
   const datasets = [];
   let labels = [];
 
-  // Snow bars only — no temp lines. Keeps chart clean and readable on mobile.
   for (const rn of RESORT_NAMES) {
+    if (!_compareActiveResorts.has(rn)) continue;
     const spread = (DATA.resorts[rn]?.zones?.peak?.model_spread || []).slice(0, MAX_DAYS);
     if (labels.length === 0) {
       labels = spread.map(d => {
@@ -2464,9 +2525,10 @@ function buildCompareChart() {
     datasets.push({
       label: rn,
       data: spread.map(d => (d.models?.GFS||{}).snow_in || 0),
-      backgroundColor: RESORT_COLORS[rn] + '88',
+      backgroundColor: RESORT_COLORS[rn] + '99',
       borderColor: RESORT_COLORS[rn],
       borderWidth: 1,
+      borderRadius: 3,
     });
   }
 
@@ -2478,12 +2540,12 @@ function buildCompareChart() {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { ...CHART_LEGEND, position: 'bottom', labels: { ...CHART_LEGEND.labels, boxWidth: 12, padding: 8 } },
+        legend: { display: false },
         tooltip: { ...CHART_TOOLTIP, callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}"` } },
       },
       scales: {
-        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 0, font: { size: 12 } } },
-        y: { ...SCALE_SNOW, grid: { color: '#1a263422' }, title: { display: true, text: 'Snow (inches)', color: '#7ec8e3', font: { size: 11 } } },
+        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 0, font: { size: 12, weight: 'bold' } } },
+        y: { ...SCALE_SNOW, grid: { color: '#1a263422' } },
       },
     },
   });
@@ -3293,6 +3355,13 @@ document.addEventListener('click', function(e) {
   const compareBtn = e.target.closest('.compare-toggle');
   if (compareBtn) {
     toggleCompareDetail(compareBtn);
+    return;
+  }
+
+  // Resort comparison pill toggle
+  const pill = e.target.closest('.resort-pill[data-resort]');
+  if (pill) {
+    toggleCompareResort(pill.dataset.resort);
     return;
   }
 
