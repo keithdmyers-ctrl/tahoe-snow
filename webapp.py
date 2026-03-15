@@ -29,7 +29,8 @@ from tahoe_snow import (
     fetch_ensemble, fetch_caltrans_chains, fetch_all_lift_status,
     fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
     fetch_avalanche, fetch_forecast_discussion,
-    analyze_all, RESORTS, SNOTEL_STATIONS,
+    analyze_all, compute_ski_decision, log_storm_event,
+    get_storm_history, RESORTS, SNOTEL_STATIONS,
 )
 from pressure_forecast import get_storm_total
 
@@ -42,10 +43,13 @@ app = Flask(__name__)
 CACHE_TTL = 900  # 15 minutes
 _cache = {"data": None, "timestamp": 0, "loading": False}
 _lock = threading.Lock()
+_prev_storm_state = False  # Track storm transitions for archiving
 
 
 def get_analysis(force: bool = False) -> dict:
     """Return cached analysis, refreshing if stale."""
+    global _prev_storm_state
+
     now = time.time()
     with _lock:
         if _cache["data"] and not force and (now - _cache["timestamp"]) < CACHE_TTL:
@@ -100,6 +104,18 @@ def get_analysis(force: bool = False) -> dict:
         analysis["chains"] = chains
         analysis["lifts"] = lifts
 
+        # Compute ski decision (needs chains, lifts, storm attached above)
+        analysis["decision"] = compute_ski_decision(analysis)
+
+        # Storm archive: log when storm ends (transition from active to inactive)
+        current_storm = storm.get("in_storm", False) if storm else False
+        if _prev_storm_state and not current_storm:
+            log_storm_event(analysis)
+        _prev_storm_state = current_storm
+
+        # Attach storm history for display
+        analysis["storm_history"] = get_storm_history()
+
         with _lock:
             _cache["data"] = analysis
             _cache["timestamp"] = time.time()
@@ -127,6 +143,19 @@ def index():
 def api_data():
     data = get_analysis()
     return jsonify(data)
+
+
+@app.route("/api/decision")
+def api_decision():
+    """Return just the ski decision data."""
+    data = get_analysis()
+    if data.get("error"):
+        return jsonify({"error": data["error"]}), 503
+    return jsonify({
+        "decision": data.get("decision", {}),
+        "storm_narrative": data.get("storm_narrative", ""),
+        "storm_history": data.get("storm_history", []),
+    })
 
 
 @app.route("/api/refresh")

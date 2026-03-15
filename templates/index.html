@@ -693,6 +693,99 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .season-stats-row .station-stat { min-width: 160px; }
 }
 
+/* -- Decision banner -- */
+.decision-banner {
+  background: linear-gradient(135deg, #1a2634, #1e3a5f);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+.decision-score {
+  font-size: 64px; font-weight: 900; line-height: 1;
+  width: 100px; height: 100px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 2px solid;
+  font-variant-numeric: tabular-nums;
+}
+.decision-score.green { color: var(--safe); border-color: var(--safe); }
+.decision-score.yellow { color: var(--moderate); border-color: var(--moderate); }
+.decision-score.red { color: var(--danger); border-color: var(--danger); }
+.decision-info { flex: 1; min-width: 0; }
+.decision-label { font-size: 20px; font-weight: 700; }
+.decision-best { font-size: 14px; color: var(--accent); margin-top: 4px; }
+.decision-reasoning { font-size: 13px; color: var(--text-dim); margin-top: 6px; }
+.decision-factors {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+}
+.decision-factor {
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.06); color: var(--text-dim);
+}
+.decision-factor .df-val { color: var(--text); font-weight: 600; }
+@media (max-width: 600px) {
+  .decision-banner { flex-direction: column; text-align: center; padding: 18px 14px; gap: 14px; }
+  .decision-score { width: 80px; height: 80px; font-size: 48px; }
+  .decision-label { font-size: 17px; }
+  .decision-factors { justify-content: center; }
+}
+
+/* -- Storm narrative -- */
+.narrative-block {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-dim);
+  box-shadow: var(--shadow);
+}
+.narrative-block .narrative-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.2px; color: var(--accent); margin-bottom: 6px;
+}
+@media (max-width: 500px) {
+  .narrative-block { padding: 12px 14px; font-size: 13px; }
+}
+
+/* -- Model comparison -- */
+.model-table-highlight { background: rgba(74, 158, 255, 0.08) !important; }
+.model-table-highlight td { color: var(--accent) !important; font-weight: 700; }
+
+/* -- Storm history -- */
+.storm-history-summary {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  font-size: 13px; color: var(--text-dim); margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06);
+}
+.storm-history-summary .shs-item { display: flex; gap: 4px; }
+.storm-history-summary .shs-label { color: var(--text-dim); }
+.storm-history-summary .shs-value { color: var(--text); font-weight: 600; }
+
+/* -- Data source panels -- */
+.source-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px; margin-top: 8px;
+}
+.source-card {
+  background: rgba(15,25,35,0.6);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.source-card .sc-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.source-card .sc-value { font-size: 20px; font-weight: 700; margin: 4px 0; font-variant-numeric: tabular-nums; }
+.source-card .sc-sub { font-size: 11px; color: var(--text-dim); }
+
 .footer {
   text-align: center; padding: 32px 20px; color: var(--text-dim);
   font-size: 11px; letter-spacing: 0.3px;
@@ -738,8 +831,10 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
 <div class="container" id="app" style="display:none">
 
+  <div id="decision-section"></div>
   <div class="hero-row" id="hero-row"></div>
   <div id="alerts-section"></div>
+  <div id="narrative-section"></div>
   <div class="summary-banner" id="summary"></div>
 
   <div id="storm-section"></div>
@@ -782,6 +877,24 @@ table.data-table tr:hover td { background: var(--card-hover); }
       <span>Snowpack &mdash; All SNOTEL Stations <span class="section-preview" id="preview-snotel"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="snotel-body"></div>
+  </div>
+
+  <div class="section">
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>Model Comparison &mdash; All Sources <span class="section-preview" id="preview-model-comp"></span></span> <span class="toggle">&#9662;</span>
+    </button>
+    <div class="section-body collapsed" id="model-comparison-body">
+      <div class="scroll-wrap" id="model-comp-table-wrap"></div>
+      <div class="chart-container" style="height:280px;margin-top:16px"><canvas id="chart-model-comparison"></canvas></div>
+      <div id="data-sources-panel" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <button class="section-header" onclick="toggleSection(this)" aria-expanded="false">
+      <span>Storm History <span class="section-preview" id="preview-storm-history"></span></span> <span class="toggle">&#9662;</span>
+    </button>
+    <div class="section-body collapsed" id="storm-history-body"></div>
   </div>
 
   <div class="footer">
@@ -899,9 +1012,11 @@ function toggleSection(el) {
 
 function render() {
   if (!DATA || DATA.error) return;
+  renderDecision();
   renderHero();
   renderHeader();
   renderAlerts();
+  renderNarrative();
   renderSummary();
   renderStorm();
   renderCurrent();
@@ -913,6 +1028,8 @@ function render() {
   renderSnotel();
   renderHistory();
   renderAFD();
+  renderModelComparison();
+  renderStormHistory();
   renderPreviews();
   requestAnimationFrame(initScrollWraps);
 }
@@ -1752,6 +1869,401 @@ function renderAFD() {
   document.getElementById('afd-body').innerHTML = `<div class="afd-text">${afd}</div>`;
 }
 
+// -- Decision Banner --
+function renderDecision() {
+  const d = DATA.decision;
+  if (!d || d.score == null) {
+    document.getElementById('decision-section').innerHTML = '';
+    return;
+  }
+  const colorCls = d.score >= 75 ? 'green' : d.score >= 45 ? 'yellow' : 'red';
+  const factors = d.factors || {};
+  let factorHtml = '';
+  if (factors.snow != null) factorHtml += `<span class="decision-factor">Snow <span class="df-val">${factors.snow}</span></span>`;
+  if (factors.quality != null) factorHtml += `<span class="decision-factor">Quality <span class="df-val">${factors.quality}</span></span>`;
+  if (factors.lifts != null) factorHtml += `<span class="decision-factor">Lifts <span class="df-val">${factors.lifts}</span></span>`;
+  if (factors.avalanche != null) factorHtml += `<span class="decision-factor">Avy <span class="df-val">${factors.avalanche}</span></span>`;
+  if (factors.chains != null) factorHtml += `<span class="decision-factor">Chains <span class="df-val">${factors.chains}</span></span>`;
+  if (factors.crowd != null && factors.crowd < 1.0) factorHtml += `<span class="decision-factor">Crowd <span class="df-val">${Math.round(factors.crowd * 100)}%</span></span>`;
+  if (factors.agreement != null && factors.agreement !== 0) factorHtml += `<span class="decision-factor">Agreement <span class="df-val">${factors.agreement > 0 ? '+' : ''}${factors.agreement}</span></span>`;
+
+  let bestLine = '';
+  if (d.best_day && d.best_resort) {
+    bestLine = `Best day: ${esc(d.best_day)} at ${esc(d.best_resort)}`;
+  } else if (d.best_resort) {
+    bestLine = `Best resort: ${esc(d.best_resort)}`;
+  }
+
+  document.getElementById('decision-section').innerHTML = `
+    <div class="decision-banner">
+      <div class="decision-score ${colorCls}">${d.score}</div>
+      <div class="decision-info">
+        <div class="decision-label">${esc(d.label || '')}</div>
+        ${bestLine ? `<div class="decision-best">${bestLine}</div>` : ''}
+        ${d.reasoning ? `<div class="decision-reasoning">${esc(d.reasoning)}</div>` : ''}
+        ${factorHtml ? `<div class="decision-factors">${factorHtml}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+// -- Storm Narrative --
+function renderNarrative() {
+  const narrative = DATA.storm_narrative;
+  if (!narrative) {
+    document.getElementById('narrative-section').innerHTML = '';
+    return;
+  }
+  document.getElementById('narrative-section').innerHTML = `
+    <div class="narrative-block">
+      <div class="narrative-title">Storm Briefing</div>
+      ${esc(narrative)}
+    </div>`;
+}
+
+// -- Model Comparison Panel --
+function renderModelComparison() {
+  const heavenly = DATA.resorts?.Heavenly;
+  if (!heavenly) return;
+  const peak = heavenly.zones?.peak;
+  if (!peak || !peak.model_spread) return;
+  const spread = peak.model_spread || [];
+
+  // Build model comparison table
+  const modelNames = ['GFS', 'ECMWF', 'ICON', 'HRRR'];
+  const weights = DATA.model_weights || {};
+
+  // Calculate cumulative snow per model for 24h, 48h, 72h, 7d
+  const modelTotals = {};
+  for (const mn of modelNames) {
+    modelTotals[mn] = { d1: 0, d2: 0, d3: 0, d7: 0 };
+    for (let i = 0; i < Math.min(spread.length, 7); i++) {
+      const snow = (spread[i]?.models?.[mn]?.snow_in) || 0;
+      if (i < 1) modelTotals[mn].d1 += snow;
+      if (i < 2) modelTotals[mn].d2 += snow;
+      if (i < 3) modelTotals[mn].d3 += snow;
+      modelTotals[mn].d7 += snow;
+    }
+  }
+
+  // Blended totals
+  const blended = { d1: 0, d2: 0, d3: 0, d7: 0 };
+  const timeline = peak.timeline_48h || [];
+  blended.d1 = timeline.slice(0, 24).reduce((s, h) => s + (h.snowfall_in || 0), 0);
+  blended.d2 = timeline.slice(0, 48).reduce((s, h) => s + (h.snowfall_in || 0), 0);
+  blended.d3 = blended.d2; // 48h is our max blended timeline
+  blended.d7 = peak.snow_7d_forecast || 0;
+
+  // NWS Human (from nws_grids)
+  const nwsGrids = DATA.nws_grids;
+  let nwsSnow24 = 0, nwsSnow48 = 0, nwsSnow72 = 0, nwsSnow7d = 0;
+  if (nwsGrids && nwsGrids.snowfallAmount) {
+    const now = new Date();
+    for (const v of nwsGrids.snowfallAmount) {
+      try {
+        const start = new Date(v.start);
+        const hoursFromNow = (start - now) / 3600000;
+        if (hoursFromNow < 24) nwsSnow24 += v.value || 0;
+        if (hoursFromNow < 48) nwsSnow48 += v.value || 0;
+        if (hoursFromNow < 72) nwsSnow72 += v.value || 0;
+        if (hoursFromNow < 168) nwsSnow7d += v.value || 0;
+      } catch(e) {}
+    }
+  }
+
+  // NBM data
+  const nbm = DATA.nbm;
+  let nbmMaxPop = 0;
+  if (nbm && nbm.hourly && nbm.hourly.precipitation_probability) {
+    nbmMaxPop = Math.max(...(nbm.hourly.precipitation_probability.slice(0, 24).filter(v => v != null)));
+  }
+
+  let tableHtml = `<table class="data-table">
+    <thead><tr><th>Model</th><th>24h Snow</th><th>48h Snow</th><th>72h Snow</th><th>7-Day Snow</th><th>Weight</th></tr></thead>
+    <tbody>`;
+
+  for (const mn of modelNames) {
+    const t = modelTotals[mn];
+    const w = weights[mn];
+    const wStr = w != null ? (w * 100).toFixed(0) + '%' : '--';
+    const hasData = spread.some(d => d.models?.[mn]?.snow_in != null);
+    if (!hasData) continue;
+    tableHtml += `<tr>
+      <td>${esc(mn)}</td>
+      <td class="snow-val">${t.d1.toFixed(1)}"</td>
+      <td class="snow-val">${t.d2.toFixed(1)}"</td>
+      <td class="snow-val">${t.d3.toFixed(1)}"</td>
+      <td class="snow-val">${t.d7.toFixed(1)}"</td>
+      <td>${wStr}</td>
+    </tr>`;
+  }
+
+  // NWS Human row
+  if (nwsSnow24 > 0 || nwsSnow7d > 0) {
+    tableHtml += `<tr>
+      <td>NWS Human</td>
+      <td class="snow-val">${nwsSnow24.toFixed(1)}"</td>
+      <td class="snow-val">${nwsSnow48.toFixed(1)}"</td>
+      <td class="snow-val">${nwsSnow72.toFixed(1)}"</td>
+      <td class="snow-val">${nwsSnow7d.toFixed(1)}"</td>
+      <td>--</td>
+    </tr>`;
+  }
+
+  // NBM row
+  if (nbm) {
+    tableHtml += `<tr>
+      <td>NBM</td>
+      <td colspan="4" style="font-size:12px;color:var(--text-dim)">Precip prob: ${nbmMaxPop}% (24h max)</td>
+      <td>--</td>
+    </tr>`;
+  }
+
+  // Blended row (highlighted)
+  tableHtml += `<tr class="model-table-highlight">
+    <td>Blended</td>
+    <td class="snow-val">${blended.d1.toFixed(1)}"</td>
+    <td class="snow-val">${blended.d2.toFixed(1)}"</td>
+    <td class="snow-val">${blended.d3.toFixed(1)}"</td>
+    <td class="snow-val">${blended.d7.toFixed(1)}"</td>
+    <td>--</td>
+  </tr>`;
+
+  // Ensemble range row
+  const ens = DATA.ensemble;
+  if (ens && ens.models) {
+    let ensLabel = '';
+    for (const [ml, daily] of Object.entries(ens.models)) {
+      if (Array.isArray(daily) && daily.length > 0) {
+        const d1 = daily[0];
+        ensLabel += `${ml}: ${d1.snow_p10 || 0}-${d1.snow_p90 || 0}" (p10-p90) `;
+      }
+    }
+    if (ensLabel) {
+      tableHtml += `<tr>
+        <td>Ensemble Range</td>
+        <td colspan="5" style="font-size:12px;color:var(--text-dim)">${esc(ensLabel.trim())}</td>
+      </tr>`;
+    }
+  }
+
+  tableHtml += '</tbody></table>';
+
+  document.getElementById('model-comp-table-wrap').innerHTML = tableHtml;
+
+  // Preview text
+  const previewEl = document.getElementById('preview-model-comp');
+  if (previewEl) {
+    const totalModels = modelNames.filter(mn => spread.some(d => d.models?.[mn]?.snow_in != null)).length;
+    previewEl.textContent = `\u2014 ${totalModels} models, blended ${blended.d1.toFixed(1)}" 24h`;
+  }
+
+  // Build data sources panel (NBM, NWS grids, ensemble, normals, synoptic)
+  let sourcesHtml = '';
+
+  // NWS Grid Data
+  if (nwsGrids) {
+    sourcesHtml += '<div class="panel-label" style="margin-top:12px">NWS Forecaster-Edited Data</div><div class="source-grid">';
+    if (nwsGrids.snowfallAmount && nwsGrids.snowfallAmount.length > 0) {
+      sourcesHtml += `<div class="source-card"><div class="sc-label">NWS Snow (24h)</div><div class="sc-value snow-val">${nwsSnow24.toFixed(1)}"</div><div class="sc-sub">Forecaster-edited gridpoint</div></div>`;
+    }
+    if (nwsGrids.snowLevel && nwsGrids.snowLevel.length > 0) {
+      const sl = nwsGrids.snowLevel[0];
+      sourcesHtml += `<div class="source-card"><div class="sc-label">NWS Snow Level</div><div class="sc-value">${sl.value.toLocaleString()}'</div><div class="sc-sub">Forecaster estimate</div></div>`;
+    }
+    if (nwsGrids.probabilityOfPrecipitation && nwsGrids.probabilityOfPrecipitation.length > 0) {
+      const maxPop = Math.max(...nwsGrids.probabilityOfPrecipitation.slice(0, 8).map(v => v.value || 0));
+      sourcesHtml += `<div class="source-card"><div class="sc-label">NWS Precip Prob</div><div class="sc-value">${maxPop}%</div><div class="sc-sub">Next 48h max</div></div>`;
+    }
+    sourcesHtml += '</div>';
+  }
+
+  // Climate normals
+  const normals = DATA.normals;
+  if (normals && !normals.error) {
+    sourcesHtml += '<div class="panel-label" style="margin-top:12px">Climate Normals &amp; Anomaly</div><div class="source-grid">';
+    if (normals.temp_normal_f != null) {
+      const obs = DATA.current_conditions?.observation;
+      const currentTemp = obs?.temp_f || DATA.current_conditions?.lake_level_temp_f;
+      const anomaly = currentTemp != null ? (currentTemp - normals.temp_normal_f).toFixed(1) : null;
+      const anomStr = anomaly != null ? (parseFloat(anomaly) >= 0 ? '+' + anomaly : anomaly) + '\u00B0F' : '';
+      sourcesHtml += `<div class="source-card"><div class="sc-label">Normal High</div><div class="sc-value">${normals.temp_normal_f}\u00B0F</div><div class="sc-sub">${anomStr ? 'Anomaly: ' + anomStr : '30-yr avg'}</div></div>`;
+    }
+    if (normals.precip_normal_in != null) {
+      sourcesHtml += `<div class="source-card"><div class="sc-label">Normal Precip</div><div class="sc-value">${normals.precip_normal_in}"</div><div class="sc-sub">Monthly average</div></div>`;
+    }
+    sourcesHtml += '</div>';
+  }
+
+  // Synoptic stations
+  const synoptic = DATA.synoptic;
+  if (synoptic && synoptic.stations && synoptic.stations.length > 0) {
+    const stns = synoptic.stations.slice(0, 6);
+    sourcesHtml += `<div class="panel-label" style="margin-top:12px">Nearby Weather Stations (Synoptic/MesoWest)</div><div class="source-grid">`;
+    for (const stn of stns) {
+      const name = stn.name || stn.stid || 'Station';
+      const temp = stn.temp_f;
+      const elev = stn.elev_ft;
+      const wind = stn.wind_mph;
+      sourcesHtml += `<div class="source-card">
+        <div class="sc-label">${esc(name)}</div>
+        <div class="sc-value ${tempClass(temp)}">${temp != null ? Math.round(temp) + '\u00B0F' : '\u2014'}</div>
+        <div class="sc-sub">${elev ? elev + ' ft' : ''} ${wind != null ? '| Wind ' + Math.round(wind) + ' mph' : ''}</div>
+      </div>`;
+    }
+    sourcesHtml += '</div>';
+  }
+
+  document.getElementById('data-sources-panel').innerHTML = sourcesHtml;
+
+  // Build grouped bar chart for model comparison
+  buildModelComparisonChart(spread, modelNames, modelTotals, nwsSnow24, blended);
+}
+
+function buildModelComparisonChart(spread, modelNames, modelTotals, nwsSnow24, blended) {
+  const canvas = document.getElementById('chart-model-comparison');
+  if (!canvas) return;
+  destroyChart('model-comparison');
+
+  const labels = spread.slice(0, 7).map(d => formatDateLabel(d.date));
+  const colors = { GFS: '#4a9eff', ECMWF: '#2ed573', ICON: '#ffa502', HRRR: '#a55eea' };
+  const datasets = [];
+
+  for (const mn of modelNames) {
+    const hasData = spread.some(d => d.models?.[mn]?.snow_in != null);
+    if (!hasData) continue;
+    datasets.push({
+      label: mn,
+      data: spread.slice(0, 7).map(d => (d.models?.[mn]?.snow_in) || 0),
+      backgroundColor: (colors[mn] || '#99aabb') + '88',
+      borderColor: colors[mn] || '#99aabb',
+      borderWidth: 1,
+    });
+  }
+
+  // Add ensemble p10-p90 as error bar-like shaded area if available
+  const ens = DATA.ensemble;
+  if (ens && ens.models) {
+    for (const [ml, daily] of Object.entries(ens.models)) {
+      if (Array.isArray(daily) && daily.length > 0) {
+        datasets.push({
+          label: ml + ' p90',
+          data: daily.slice(0, 7).map(d => d.snow_p90 || 0),
+          type: 'line',
+          borderColor: ml === 'GFS' ? '#4a9eff44' : '#2ed57344',
+          backgroundColor: ml === 'GFS' ? '#4a9eff11' : '#2ed57311',
+          fill: true,
+          borderWidth: 1,
+          borderDash: [3, 3],
+          pointRadius: 0,
+          tension: 0.3,
+        });
+        break; // Only show one ensemble range
+      }
+    }
+  }
+
+  charts['model-comparison'] = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: CHART_LEGEND,
+        tooltip: {
+          ...CHART_TOOLTIP,
+          callbacks: {
+            afterBody: function(ctx) {
+              const i = ctx[0].dataIndex;
+              const d = spread[i];
+              if (!d) return '';
+              return `Spread: ${d.snow_spread}" | Confidence: ${d.confidence}`;
+            }
+          }
+        },
+      },
+      scales: {
+        x: SCALE_X,
+        y: { ...SCALE_SNOW, grid: { color: '#1a263488' }, title: { display: true, text: 'Snow (in)', color: '#7ec8e3', font: { size: 11 } } },
+      },
+    },
+  });
+}
+
+// -- Storm History --
+function renderStormHistory() {
+  const history = DATA.storm_history || [];
+  const el = document.getElementById('storm-history-body');
+  if (!el) return;
+
+  if (!history.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:16px;font-size:13px">No storms archived yet. Storm events are logged automatically when detected by barometric pressure analysis.</div>';
+    const preview = document.getElementById('preview-storm-history');
+    if (preview) preview.textContent = '\u2014 No storms archived';
+    return;
+  }
+
+  // Last 10 storms
+  const recent = history.slice(-10).reverse();
+  let html = '<div class="scroll-wrap"><table class="data-table"><thead><tr>';
+  html += '<th>Date</th><th>Duration</th><th>Total</th><th>Peak Rate</th><th>Max Wind</th><th>Best Model</th>';
+  html += '</tr></thead><tbody>';
+
+  let totalSnow = 0;
+  let totalStorms = recent.length;
+
+  for (const storm of recent) {
+    const startDate = storm.start_date ? new Date(storm.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '--';
+    const dur = storm.duration_hours ? storm.duration_hours + 'h' : '--';
+    const total = storm.total_precip_in || 0;
+    totalSnow += total;
+    const peakRate = storm.peak_snow_rate ? storm.peak_snow_rate + '"/hr' : '--';
+    const maxWind = storm.max_wind ? storm.max_wind + ' mph' : '--';
+
+    // Find best model (lowest error)
+    let bestModel = '--';
+    const perf = storm.model_performance || {};
+    let minError = Infinity;
+    for (const [mn, mp] of Object.entries(perf)) {
+      if (mp.error != null && mp.error < minError) {
+        minError = mp.error;
+        bestModel = mn;
+      }
+    }
+
+    html += `<tr>
+      <td>${startDate}</td>
+      <td>${dur}</td>
+      <td class="snow-val">${total}"</td>
+      <td>${peakRate}</td>
+      <td>${maxWind}</td>
+      <td>${esc(bestModel)}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+
+  // Season summary
+  const avgError = history.reduce((sum, s) => {
+    const errs = Object.values(s.model_performance || {}).map(m => m.error || 0);
+    return sum + (errs.length ? errs.reduce((a, b) => a + b, 0) / errs.length : 0);
+  }, 0) / (history.length || 1);
+
+  html += `<div class="storm-history-summary">
+    <div class="shs-item"><span class="shs-label">Total storms:</span> <span class="shs-value">${history.length}</span></div>
+    <div class="shs-item"><span class="shs-label">Season total:</span> <span class="shs-value">${totalSnow.toFixed(1)}"</span></div>
+    <div class="shs-item"><span class="shs-label">Avg model error:</span> <span class="shs-value">${avgError.toFixed(1)}"</span></div>
+  </div>`;
+
+  el.innerHTML = html;
+
+  // Preview
+  const preview = document.getElementById('preview-storm-history');
+  if (preview) {
+    preview.textContent = `\u2014 ${history.length} storms, ${totalSnow.toFixed(0)}" total`;
+  }
+}
+
 // -- Init --
 loadData();
 setInterval(() => loadData(), 900000);
@@ -1809,6 +2321,8 @@ document.addEventListener('click', function(e) {
       });
       // Lazy-build history chart
       if (body.querySelector('#chart-snotel-history') && !charts['snotel-history']) renderHistory();
+      // Lazy-build model comparison chart
+      if (body.querySelector('#chart-model-comparison') && !charts['model-comparison']) renderModelComparison();
     }
   });
 });

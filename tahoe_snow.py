@@ -1859,6 +1859,607 @@ def calibrated_confidence(model_spread: list, ensemble: dict | None = None) -> l
 
 
 # ---------------------------------------------------------------------------
+# "Should I Go?" Decision Engine
+# ---------------------------------------------------------------------------
+
+STORM_ARCHIVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   ".storm_archive.json")
+
+
+def _snow_score(snow_24h: float, snow_72h: float) -> int:
+    """Score snow forecast on 0-100 scale.
+    Weighs 24h at 60%, 72h at 40% to reward imminent powder."""
+    def _curve(inches):
+        if inches <= 0:
+            return 0
+        if inches <= 6:
+            return int(inches * 50 / 6)
+        if inches <= 12:
+            return int(50 + (inches - 6) * 30 / 6)
+        if inches <= 18:
+            return int(80 + (inches - 12) * 20 / 6)
+        return 100
+    return int(_curve(snow_24h) * 0.6 + _curve(snow_72h) * 0.4)
+
+
+def _quality_score(slr: float | None) -> int:
+    """Score snow quality by SLR. Higher SLR = lighter drier powder."""
+    if slr is None:
+        return 50  # neutral default
+    if slr >= 15:
+        return 100
+    if slr >= 12:
+        return 80
+    if slr >= 8:
+        return 50
+    return 20
+
+
+def _lift_score(lifts_data: dict, resort_key: str) -> int:
+    """Score lift availability for a resort."""
+    if not lifts_data:
+        return 50  # neutral when unknown
+    key = resort_key.lower()
+    d = lifts_data.get(key, {})
+    if not d or d.get("error") or not d.get("total"):
+        return 50
+    frac = d["open"] / d["total"]
+    if frac >= 1.0:
+        return 100
+    if frac >= 0.75:
+        return 80
+    if frac >= 0.50:
+        return 50
+    return 20
+
+
+def _avalanche_score(avy: dict) -> int:
+    """Inverse avalanche danger score."""
+    if not avy or "danger_level" not in avy:
+        return 80  # neutral when unavailable
+    level = avy.get("danger_level", 0) or 0
+    return {0: 80, 1: 100, 2: 80, 3: 40, 4: 10, 5: 0}.get(level, 50)
+
+
+def _chain_score(chains: list) -> int:
+    """Score chain controls. No chains = 100, more restrictions = lower."""
+    if not chains:
+        return 100
+    # Count active restrictions
+    n = len(chains)
+    # Check for R3 (chains required all vehicles)
+    for c in chains:
+        status = (c.get("status") or "").upper()
+        if "R3" in status or "ALL VEHICLES" in status.upper():
+            return 10
+        if "R2" in status or "4WD" in status.upper():
+            return 40
+    if n >= 3:
+        return 30
+    if n >= 2:
+        return 50
+    return 60
+
+
+def _crowd_factor() -> float:
+    """Weekend/holiday crowd multiplier."""
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+    weekday = now.weekday()
+    # Major ski holidays (approx)
+    month_day = (now.month, now.day)
+    holiday_windows = [
+        (12, 24), (12, 25), (12, 26), (12, 27), (12, 28), (12, 29), (12, 30), (12, 31),
+        (1, 1), (1, 2),
+        (2, 14), (2, 15), (2, 16), (2, 17), (2, 18), (2, 19),  # Presidents week
+    ]
+    if month_day in holiday_windows:
+        return 0.75
+    if weekday >= 5:  # Sat/Sun
+        return 0.85
+    return 1.0
+
+
+def _model_agreement_bonus(model_spread: list) -> int:
+    """Bonus/penalty based on model agreement for near-term forecast."""
+    if not model_spread:
+        return 0
+    # Look at first 3 days
+    spreads = [d.get("snow_spread", 0) for d in model_spread[:3]]
+    if not spreads:
+        return 0
+    avg_spread = sum(spreads) / len(spreads)
+    if avg_spread < 1.5:
+        return 10  # high agreement bonus
+    if avg_spread > 5.0:
+        return -10  # high disagreement penalty
+    return 0
+
+
+def compute_ski_decision(analysis: dict) -> dict:
+    """Synthesize all data sources into a go/no-go ski decision.
+
+    Computes per-resort scores and picks the best option.
+    Also scans next 5 days to find the optimal ski day.
+
+    Returns:
+        {
+            "score": int (0-100),
+            "label": str,
+            "factors": {"snow": int, "quality": int, "lifts": int,
+                        "avalanche": int, "chains": int,
+                        "crowd": float, "agreement": int},
+            "best_resort": str,
+            "best_day": str,
+            "reasoning": str,
+        }
+    """
+    if not analysis or "resorts" not in analysis:
+        return {
+            "score": 0, "label": "Stay home -- save your gas money",
+            "factors": {}, "best_resort": None, "best_day": None,
+            "reasoning": "Insufficient data to compute decision.",
+        }
+
+    avy = analysis.get("avalanche", {})
+    chains = analysis.get("chains", [])
+    lifts = analysis.get("lifts", {})
+
+    avy_s = _avalanche_score(avy)
+    chain_s = _chain_score(chains or [])
+    crowd = _crowd_factor()
+
+    best_score = -1
+    best_resort = None
+    best_factors = {}
+
+    for rn, rd in analysis.get("resorts", {}).items():
+        peak = rd.get("zones", {}).get("peak", {})
+        if not peak or "error" in peak:
+            continue
+
+        snow_24h = peak.get("snow_24h", 0) or 0
+        snow_72h = 0
+        spread = peak.get("model_spread", [])
+        for d in spread[:3]:
+            for mname, md in d.get("models", {}).items():
+                s = md.get("snow_in", 0) or 0
+                if s > snow_72h:
+                    snow_72h = s
+                    break
+            # Use blended/GFS 72h from timeline
+        timeline = peak.get("timeline_48h", [])
+        if len(timeline) >= 48:
+            snow_72h = max(snow_72h,
+                           sum(h.get("snowfall_in", 0) for h in timeline[:48]))
+        # Also check 72h from model_spread
+        spread_72h = sum(
+            max((md.get("snow_in", 0) for md in d.get("models", {}).values()), default=0)
+            for d in spread[:3]
+        )
+        snow_72h = max(snow_72h, spread_72h)
+
+        snap = peak.get("current", {})
+        slr = snap.get("slr")
+        snow_s = _snow_score(snow_24h, snow_72h)
+        qual_s = _quality_score(slr)
+        lift_s = _lift_score(lifts, rn)
+        agreement = _model_agreement_bonus(spread)
+
+        raw = (snow_s * 0.35 + qual_s * 0.20 + lift_s * 0.15 +
+               avy_s * 0.15 + chain_s * 0.10 + agreement * 0.05)
+        final = int(raw * crowd)
+        final = max(0, min(100, final))
+
+        if final > best_score:
+            best_score = final
+            best_resort = rn
+            best_factors = {
+                "snow": snow_s, "quality": qual_s, "lifts": lift_s,
+                "avalanche": avy_s, "chains": chain_s,
+                "crowd": crowd, "agreement": agreement,
+            }
+
+    # Find best day in next 5 days by scanning model_spread
+    best_day = None
+    best_day_score = -1
+    if best_resort:
+        peak = analysis["resorts"][best_resort]["zones"].get("peak", {})
+        spread = peak.get("model_spread", [])
+        for d in spread[:5]:
+            day_snow = max(
+                (md.get("snow_in", 0) for md in d.get("models", {}).values()),
+                default=0,
+            )
+            day_score = _snow_score(day_snow, day_snow)
+            if day_score > best_day_score:
+                best_day_score = day_score
+                best_day = d.get("date", "")
+
+    # Format best_day as readable string
+    best_day_str = None
+    if best_day:
+        try:
+            dt = datetime.strptime(best_day, "%Y-%m-%d")
+            best_day_str = dt.strftime("%A")
+        except (ValueError, TypeError):
+            best_day_str = best_day
+
+    # Decision label
+    if best_score >= 90:
+        label = "Epic day -- drop everything and go"
+    elif best_score >= 75:
+        label = "Strong go -- conditions are excellent"
+    elif best_score >= 60:
+        label = "Worth it -- good conditions"
+    elif best_score >= 45:
+        label = "Marginal -- check again tomorrow"
+    elif best_score >= 30:
+        label = "Probably skip -- conditions are subpar"
+    else:
+        label = "Stay home -- save your gas money"
+
+    # Build reasoning
+    reasons = []
+    snow_s = best_factors.get("snow", 0)
+    if snow_s >= 80:
+        reasons.append("significant snowfall expected")
+    elif snow_s >= 50:
+        reasons.append("moderate snow in forecast")
+    elif snow_s > 0:
+        reasons.append("light snow possible")
+    else:
+        reasons.append("no new snow expected")
+
+    qual_s = best_factors.get("quality", 50)
+    if qual_s >= 80:
+        reasons.append("powder quality looks excellent")
+    elif qual_s <= 30:
+        reasons.append("heavy/wet snow expected")
+
+    avy_s_val = best_factors.get("avalanche", 80)
+    if avy_s_val <= 40:
+        reasons.append("elevated avalanche danger")
+
+    chain_s_val = best_factors.get("chains", 100)
+    if chain_s_val <= 40:
+        reasons.append("significant chain controls active")
+
+    if crowd < 0.85:
+        reasons.append("expect holiday crowds")
+    elif crowd < 1.0:
+        reasons.append("weekend crowds likely")
+
+    reasoning = "; ".join(reasons).capitalize() + "."
+
+    return {
+        "score": best_score if best_score >= 0 else 0,
+        "label": label,
+        "factors": best_factors,
+        "best_resort": best_resort,
+        "best_day": best_day_str,
+        "reasoning": reasoning,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Storm Timeline Narrative
+# ---------------------------------------------------------------------------
+
+def generate_storm_narrative(analysis: dict) -> str:
+    """Generate a meteorologist-style storm briefing from forecast data.
+
+    Analyzes the next 7 days across all resorts and produces a 3-6 sentence
+    natural-language briefing covering:
+    - Next system timing
+    - Snow level evolution
+    - Peak snowfall timing and rates
+    - Wind impacts
+    - Transition/clearing timing
+    - Model confidence
+    """
+    if not analysis or "resorts" not in analysis:
+        return "Insufficient data for storm narrative."
+
+    # Collect data from the best resort (Heavenly preferred, or first available)
+    resort_name = "Heavenly"
+    if resort_name not in analysis["resorts"]:
+        resort_name = next(iter(analysis["resorts"]), None)
+    if not resort_name:
+        return "No resort data available."
+
+    rd = analysis["resorts"][resort_name]
+    peak = rd.get("zones", {}).get("peak", {})
+    if not peak or "error" in peak:
+        return "No peak zone data available for narrative."
+
+    timeline = peak.get("timeline_48h", [])
+    spread = peak.get("model_spread", [])
+
+    # --- Analyze next 7 days from model_spread ---
+    storm_days = []  # days with meaningful snow
+    dry_days = []
+    total_7d_snow = 0
+    for d in spread[:7]:
+        models = d.get("models", {})
+        day_snows = [md.get("snow_in", 0) or 0 for md in models.values()]
+        avg_snow = sum(day_snows) / len(day_snows) if day_snows else 0
+        max_snow = max(day_snows) if day_snows else 0
+        date = d.get("date", "")
+        total_7d_snow += avg_snow
+        if avg_snow >= 1.0:
+            storm_days.append({
+                "date": date,
+                "avg_snow": round(avg_snow, 1),
+                "max_snow": round(max_snow, 1),
+                "spread": d.get("snow_spread", 0),
+                "confidence": d.get("confidence", "Medium"),
+            })
+        else:
+            dry_days.append(date)
+
+    # --- Analyze timeline for hourly details ---
+    peak_rate = 0  # inches per hour
+    peak_rate_hour = None
+    heavy_snow_start = None
+    heavy_snow_end = None
+    max_wind = 0
+    max_wind_hour = None
+    snow_levels = []
+    freezing_levels = []
+
+    for h in timeline:
+        snow_in = h.get("snowfall_in", 0) or 0
+        wind = h.get("wind_mph", 0) or 0
+        gust = h.get("wind_gust_mph", 0) or 0
+        fl = h.get("freezing_level_ft")
+        time_str = h.get("time", "")
+
+        if snow_in > peak_rate:
+            peak_rate = snow_in
+            peak_rate_hour = time_str
+
+        if snow_in >= 0.5 and heavy_snow_start is None:
+            heavy_snow_start = time_str
+        if snow_in >= 0.5:
+            heavy_snow_end = time_str
+
+        effective_wind = max(wind, gust)
+        if effective_wind > max_wind:
+            max_wind = effective_wind
+            max_wind_hour = time_str
+
+        if fl is not None:
+            snow_levels.append((time_str, fl))
+        freezing = h.get("freezing_level_ft")
+        if freezing is not None:
+            freezing_levels.append((time_str, freezing))
+
+    # --- Build narrative ---
+    sentences = []
+
+    # 1. System timing
+    if not storm_days:
+        sentences.append("Dry pattern continues through the 7-day forecast period with "
+                         "no significant precipitation expected across the Tahoe basin.")
+    elif len(storm_days) == 1:
+        sd = storm_days[0]
+        try:
+            dt = datetime.strptime(sd["date"], "%Y-%m-%d")
+            day_name = dt.strftime("%A")
+        except (ValueError, TypeError):
+            day_name = sd["date"]
+        sentences.append(f"A weather system is expected to bring snow to the region on "
+                         f"{day_name}, with {sd['avg_snow']}-{sd['max_snow']}\" forecast "
+                         f"at upper elevations.")
+    else:
+        first = storm_days[0]
+        last = storm_days[-1]
+        try:
+            first_dt = datetime.strptime(first["date"], "%Y-%m-%d")
+            last_dt = datetime.strptime(last["date"], "%Y-%m-%d")
+            first_name = first_dt.strftime("%A")
+            last_name = last_dt.strftime("%A")
+        except (ValueError, TypeError):
+            first_name = first["date"]
+            last_name = last["date"]
+        sentences.append(f"An active pattern brings snow from {first_name} through "
+                         f"{last_name}, with {round(total_7d_snow)}\" total expected "
+                         f"at upper elevations over the period.")
+
+    # 2. Snow level evolution
+    if snow_levels and len(snow_levels) >= 2:
+        first_sl = snow_levels[0][1]
+        last_sl = snow_levels[-1][1]
+        min_sl = min(sl for _, sl in snow_levels)
+        max_sl = max(sl for _, sl in snow_levels)
+        if abs(max_sl - min_sl) > 500:
+            # Find when min occurs
+            min_time = None
+            for t, sl in snow_levels:
+                if sl == min_sl:
+                    min_time = t
+                    break
+            min_label = ""
+            if min_time:
+                try:
+                    dt = datetime.fromisoformat(min_time)
+                    min_label = f" by {dt.strftime('%A %I%p').strip('0').lower()}"
+                except (ValueError, TypeError):
+                    pass
+            if first_sl > last_sl:
+                sentences.append(f"Snow levels start at {int(first_sl)}' dropping to "
+                                 f"{int(min_sl)}'{min_label}.")
+            else:
+                sentences.append(f"Snow levels rise from {int(first_sl)}' to "
+                                 f"{int(max_sl)}' through the period.")
+
+    # 3. Peak snowfall timing
+    if peak_rate >= 0.3 and peak_rate_hour:
+        try:
+            dt = datetime.fromisoformat(peak_rate_hour)
+            time_label = dt.strftime("%A overnight" if dt.hour < 6 or dt.hour >= 22
+                                     else "%A %I%p").strip("0").lower()
+        except (ValueError, TypeError):
+            time_label = "during the storm"
+        sentences.append(f"Heaviest accumulation expected {time_label}, "
+                         f"{round(peak_rate, 1)}-{round(peak_rate * 1.5, 1)}\"/hr "
+                         f"above 8000'.")
+
+    # 4. Wind impacts
+    if max_wind >= 30:
+        wind_desc = "gusty" if max_wind < 45 else "strong"
+        sentences.append(f"{wind_desc.capitalize()} ridgetop winds "
+                         f"{int(max_wind - 10)}-{int(max_wind)} mph may impact "
+                         f"upper mountain operations.")
+
+    # 5. Clearing timing
+    if storm_days and dry_days:
+        # Find first dry day after last storm day
+        last_storm_date = storm_days[-1]["date"]
+        clearing_day = None
+        for dd in sorted(dry_days):
+            if dd > last_storm_date:
+                clearing_day = dd
+                break
+        if clearing_day:
+            try:
+                dt = datetime.strptime(clearing_day, "%Y-%m-%d")
+                day_name = dt.strftime("%A")
+                sentences.append(f"Clearing expected {day_name} with cold overnight "
+                                 f"temperatures preserving snow quality.")
+            except (ValueError, TypeError):
+                pass
+
+    # 6. Model confidence
+    if storm_days:
+        confidences = [d["confidence"] for d in storm_days]
+        low_count = confidences.count("Low")
+        high_count = confidences.count("High")
+        avg_spread = sum(d["spread"] for d in storm_days) / len(storm_days)
+        if high_count == len(storm_days):
+            sentences.append("Models are in excellent agreement on timing and amounts.")
+        elif low_count >= len(storm_days) // 2:
+            sentences.append(f"Models show significant disagreement with "
+                             f"{round(avg_spread)}\" spread between solutions -- "
+                             f"amounts could vary substantially.")
+        else:
+            sentences.append(f"Models in reasonable agreement on timing; "
+                             f"amounts range {storm_days[0]['avg_snow']}-"
+                             f"{storm_days[0]['max_snow']}\" showing moderate uncertainty.")
+
+    return " ".join(sentences) if sentences else "No significant weather expected in the extended forecast."
+
+
+# ---------------------------------------------------------------------------
+# Storm Archive
+# ---------------------------------------------------------------------------
+
+def log_storm_event(analysis: dict) -> dict | None:
+    """Log a completed storm event to the archive.
+
+    Called when pressure-based storm detection transitions from active to inactive.
+    Saves storm totals, duration, model performance, and conditions.
+
+    Returns the logged event or None if not applicable.
+    """
+    storm = analysis.get("storm", {})
+    if not storm:
+        return None
+
+    event = {
+        "start_date": storm.get("storm_start"),
+        "end_date": datetime.now(timezone.utc).isoformat(),
+        "duration_hours": storm.get("duration_hours"),
+        "total_precip_in": 0,
+        "peak_snow_rate": 0,
+        "max_wind": 0,
+        "snow_level_range": [None, None],
+        "resort_totals": {},
+        "snotel_totals": storm.get("station_totals", {}),
+        "model_performance": {},
+        "conditions_summary": "",
+    }
+
+    # Gather resort peak snow totals
+    for rn, rd in analysis.get("resorts", {}).items():
+        peak = rd.get("zones", {}).get("peak", {})
+        event["resort_totals"][rn] = round(peak.get("snow_24h", 0), 1)
+
+    # Total precip from best SNOTEL
+    snotel_totals = storm.get("station_totals", {})
+    if snotel_totals:
+        event["total_precip_in"] = round(max(snotel_totals.values(), default=0), 1)
+
+    # Peak snow rate and wind from timeline
+    for rn, rd in analysis.get("resorts", {}).items():
+        peak = rd.get("zones", {}).get("peak", {})
+        for h in peak.get("timeline_48h", []):
+            sr = h.get("snowfall_in", 0) or 0
+            if sr > event["peak_snow_rate"]:
+                event["peak_snow_rate"] = round(sr, 1)
+            w = max(h.get("wind_mph", 0) or 0, h.get("wind_gust_mph", 0) or 0)
+            if w > event["max_wind"]:
+                event["max_wind"] = round(w)
+            fl = h.get("freezing_level_ft")
+            if fl is not None:
+                if event["snow_level_range"][0] is None or fl < event["snow_level_range"][0]:
+                    event["snow_level_range"][0] = int(fl)
+                if event["snow_level_range"][1] is None or fl > event["snow_level_range"][1]:
+                    event["snow_level_range"][1] = int(fl)
+        break  # Only need one resort for timeline
+
+    # Build conditions summary
+    parts = []
+    if event["total_precip_in"] > 0:
+        parts.append(f"{event['total_precip_in']}\" total")
+    if event["duration_hours"]:
+        parts.append(f"{event['duration_hours']}h duration")
+    if event["max_wind"] > 30:
+        parts.append(f"gusts to {event['max_wind']} mph")
+    event["conditions_summary"] = ", ".join(parts) if parts else "Minor event"
+
+    # Model performance: compare forecast vs observed for each model
+    for rn, rd in analysis.get("resorts", {}).items():
+        peak = rd.get("zones", {}).get("peak", {})
+        spread = peak.get("model_spread", [])
+        if spread:
+            for mname, md in spread[0].get("models", {}).items():
+                forecast_snow = md.get("snow_in", 0)
+                event["model_performance"][mname] = {
+                    "forecast": round(forecast_snow, 1),
+                    "actual": event["total_precip_in"],
+                    "error": round(abs(forecast_snow - event["total_precip_in"]), 1),
+                }
+        break
+
+    # Save to archive
+    archive = get_storm_history()
+    archive.append(event)
+    # Keep last 50 events
+    archive = archive[-50:]
+    try:
+        tmp = STORM_ARCHIVE_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(archive, f, indent=2)
+        os.replace(tmp, STORM_ARCHIVE_FILE)
+    except Exception:
+        pass
+
+    return event
+
+
+def get_storm_history() -> list:
+    """Load storm archive from disk. Returns list of past storm events."""
+    try:
+        with open(STORM_ARCHIVE_FILE) as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Summary Generator (rule-based, no LLM needed)
 # ---------------------------------------------------------------------------
 
@@ -2386,6 +2987,9 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
 
     # Generate summary
     result["summary"] = generate_summary(result)
+
+    # Storm narrative (meteorologist-style briefing)
+    result["storm_narrative"] = generate_storm_narrative(result)
 
     return result
 
