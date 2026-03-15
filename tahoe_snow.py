@@ -6,14 +6,30 @@ Features:
   P0: Multi-day forecast (15-day), hourly timeline (48h), powder alerts
   P1: Day/night accumulation, multi-model comparison, historical snow, wind chill
   P2: AI-style summary, avalanche conditions
+  P3: HRRR model data, RWIS road weather, radar nowcast, CSSL enhanced
+  P4: Terrain-aware downscaling, snow settling (Kojima 1967), precip phase
+      probability (logistic transition), lake effect parameterization
 
-Data sources (all free, public, no API keys):
+Data sources (all free, public, no API keys except where noted):
   - Open-Meteo (GFS, ECMWF, ICON models — 15-day hourly forecasts)
-  - NWS API (current observations, forecast, hourly forecast)
+  - NWS API (current observations, forecast, hourly forecast, gridpoints)
   - SNOTEL/NRCS (snowpack depth, SWE, temperature — current + historical)
+  - CSSL/CDEC (Central Sierra Snow Lab — hourly snow, wind at Donner Summit)
   - Avalanche.org (Sierra Avalanche Center danger ratings)
   - NWS Reno WFO (Area Forecast Discussion)
-  - HRRR via Herbie (optional, --hrrr flag)
+  - HRRR via Herbie (optional, --hrrr flag — requires herbie-data package)
+  - RWIS road weather via Synoptic API (requires SYNOPTIC_TOKEN env var)
+  - Open-Meteo ensemble forecasts (GFS 30-member, ECMWF 50-member)
+  - Radar nowcast via Open-Meteo current conditions
+
+Physics models:
+  - SLR: Roebber (2003) temperature-dependent with wind/humidity corrections
+  - Wet-bulb: Stull (2011) approximation for precip type classification
+  - Precip phase: Logistic transition probability (snow/mix/rain)
+  - Terrain: Aspect-based diurnal temperature correction (N/S/E/W facing)
+  - Settling: Kojima (1967) exponential compaction model
+  - Lake effect: Tahoe fetch-based snowfall enhancement (NW wind + cold air)
+  - Orographic: Aspect + elevation + wind + CAPE enhancement factor
 
 Usage:
   python tahoe_snow.py              # full report
@@ -38,25 +54,28 @@ import requests
 
 RESORTS = {
     "Heavenly": {
-        "base": {"label": "California Lodge", "lat": 38.9353, "lon": -119.9406, "elev_ft": 6540},
-        "mid":  {"label": "Sky Deck / Tamarack", "lat": 38.9310, "lon": -119.9250, "elev_ft": 8500},
-        "peak": {"label": "Monument Peak", "lat": 38.9280, "lon": -119.9070, "elev_ft": 10067},
+        "base": {"label": "California Lodge", "lat": 38.9353, "lon": -119.9406, "elev_ft": 6540, "aspect_deg": 180},
+        "mid":  {"label": "Sky Deck / Tamarack", "lat": 38.9310, "lon": -119.9250, "elev_ft": 8500, "aspect_deg": 20},
+        "peak": {"label": "Monument Peak", "lat": 38.9280, "lon": -119.9070, "elev_ft": 10067, "aspect_deg": 350},
         "aspect": "NE",
         "nearest_snotel": ["Fallen Leaf", "Hagan's Meadow"],
+        "east_shore": True,  # Subject to lake effect enhancement
     },
     "Northstar": {
-        "base": {"label": "Village", "lat": 39.2744, "lon": -120.1210, "elev_ft": 6330},
-        "mid":  {"label": "Vista Express", "lat": 39.2680, "lon": -120.1150, "elev_ft": 7600},
-        "peak": {"label": "Mt Pluto", "lat": 39.2630, "lon": -120.1100, "elev_ft": 8610},
+        "base": {"label": "Village", "lat": 39.2744, "lon": -120.1210, "elev_ft": 6330, "aspect_deg": 200},
+        "mid":  {"label": "Vista Express", "lat": 39.2680, "lon": -120.1150, "elev_ft": 7600, "aspect_deg": 340},
+        "peak": {"label": "Mt Pluto", "lat": 39.2630, "lon": -120.1100, "elev_ft": 8610, "aspect_deg": 10},
         "aspect": "SW",
         "nearest_snotel": ["Independence Lake", "Independence Camp", "Tahoe City Cross"],
+        "east_shore": False,
     },
     "Kirkwood": {
-        "base": {"label": "Lodge", "lat": 38.6850, "lon": -120.0650, "elev_ft": 7800},
-        "mid":  {"label": "Sunrise / Solitude", "lat": 38.6820, "lon": -120.0720, "elev_ft": 8800},
-        "peak": {"label": "Thimble Peak", "lat": 38.6790, "lon": -120.0780, "elev_ft": 9800},
+        "base": {"label": "Lodge", "lat": 38.6850, "lon": -120.0650, "elev_ft": 7800, "aspect_deg": 170},
+        "mid":  {"label": "Sunrise / Solitude", "lat": 38.6820, "lon": -120.0720, "elev_ft": 8800, "aspect_deg": 350},
+        "peak": {"label": "Thimble Peak", "lat": 38.6790, "lon": -120.0780, "elev_ft": 9800, "aspect_deg": 5},
         "aspect": "N",
         "nearest_snotel": ["CSS Lab", "Hagan's Meadow"],
+        "east_shore": False,
     },
 }
 
@@ -311,6 +330,227 @@ def precip_type(temp_c: float, has_precip: bool,
         return "Mix"
     else:
         return "Rain"
+
+
+def precip_phase_probability(wet_bulb_c: float, elevation_m: float,
+                              freezing_level_m: float | None) -> dict:
+    """Return probability of snow/mix/rain using logistic transition.
+
+    Instead of hard cutoffs (Snow/Mix/Rain), returns a continuous probability
+    distribution across precipitation phases. Uses logistic sigmoid centered
+    at 0.5C wet-bulb with width 1.5C, plus elevation corrections relative
+    to the freezing level.
+
+    Args:
+        wet_bulb_c: Wet-bulb temperature in Celsius
+        elevation_m: Station elevation in meters
+        freezing_level_m: Freezing level height in meters (or None)
+
+    Returns:
+        dict with p_snow, p_mix, p_rain (0-1), and dominant_type string
+    """
+    # Logistic sigmoid for snow probability
+    # Center at 0.5C, width 1.5C — transition zone roughly -1C to 2C
+    k = 1.0 / 1.5  # steepness
+    center = 0.5
+    # p_snow decreases as wet_bulb increases
+    logistic = 1.0 / (1.0 + math.exp(k * (wet_bulb_c - center)))
+
+    # Base probabilities from logistic
+    if wet_bulb_c < -2.0:
+        p_snow = 0.95
+        p_rain = 0.01
+    elif wet_bulb_c > 3.0:
+        p_snow = 0.01
+        p_rain = 0.95
+    else:
+        p_snow = logistic * 0.95
+        p_rain = (1.0 - logistic) * 0.95
+
+    # Elevation correction relative to freezing level
+    if freezing_level_m is not None:
+        elev_diff = elevation_m - freezing_level_m
+        if elev_diff > 300:
+            # Well above freezing level — boost snow
+            p_snow = min(1.0, p_snow + 0.1)
+            p_rain = max(0.0, p_rain - 0.1)
+        elif elev_diff < -300:
+            # Well below freezing level — boost rain
+            p_rain = min(1.0, p_rain + 0.1)
+            p_snow = max(0.0, p_snow - 0.1)
+
+    # Mix gets the remainder
+    p_mix = max(0.0, 1.0 - p_snow - p_rain)
+
+    # Normalize to sum to 1.0
+    total = p_snow + p_mix + p_rain
+    if total > 0:
+        p_snow /= total
+        p_mix /= total
+        p_rain /= total
+
+    # Determine dominant type
+    if p_snow >= p_mix and p_snow >= p_rain:
+        dominant = "Snow"
+    elif p_rain >= p_snow and p_rain >= p_mix:
+        dominant = "Rain"
+    else:
+        dominant = "Mix"
+
+    return {
+        "p_snow": round(p_snow, 3),
+        "p_mix": round(p_mix, 3),
+        "p_rain": round(p_rain, 3),
+        "dominant_type": dominant,
+    }
+
+
+def terrain_adjusted_temperature(base_temp_c: float, elevation_m: float,
+                                  aspect_degrees: float, hour_of_day: int,
+                                  cloud_cover_pct: float = 50.0) -> float:
+    """Apply diurnal temperature correction based on slope aspect.
+
+    Terrain aspect significantly affects micro-climate temperatures:
+    - South-facing slopes receive more solar radiation (warmer days)
+    - North-facing slopes retain cold air and snow (cooler days)
+    - East/west aspects shift the diurnal temperature peak
+
+    Corrections are scaled by (1 - cloud_cover/100) since overcast
+    conditions eliminate aspect-driven solar heating differences.
+
+    Args:
+        base_temp_c: Base temperature at this elevation (C)
+        elevation_m: Elevation in meters (unused, reserved for future)
+        aspect_degrees: Slope aspect in degrees (0=N, 90=E, 180=S, 270=W)
+        hour_of_day: Hour of day (0-23, local time)
+        cloud_cover_pct: Cloud cover percentage (0-100)
+
+    Returns:
+        Adjusted temperature in Celsius
+    """
+    # Normalize aspect to 0-360
+    aspect = aspect_degrees % 360
+    cloud_factor = max(0.0, 1.0 - cloud_cover_pct / 100.0)
+
+    # Determine if it's daytime (6am-6pm) and solar peak (noon-3pm)
+    is_day = 6 <= hour_of_day < 18
+    is_morning = 6 <= hour_of_day < 12
+    is_afternoon = 12 <= hour_of_day < 18
+    is_peak_solar = 12 <= hour_of_day < 15
+
+    correction = 0.0
+
+    # South-facing (135-225 degrees)
+    if 135 <= aspect <= 225:
+        if is_peak_solar:
+            correction = 2.0
+        elif is_day:
+            correction = 1.0
+        else:
+            correction = -0.5
+    # North-facing (315-360 or 0-45 degrees)
+    elif aspect >= 315 or aspect <= 45:
+        if is_day:
+            correction = -1.0
+        else:
+            correction = 0.5  # radiative cooling trapped in valleys
+    # East-facing (45-135 degrees)
+    elif 45 < aspect < 135:
+        if is_morning:
+            correction = 1.0
+        elif is_afternoon:
+            correction = -0.5
+        else:
+            correction = 0.0
+    # West-facing (225-315 degrees)
+    elif 225 < aspect < 315:
+        if is_morning:
+            correction = -0.5
+        elif is_afternoon:
+            correction = 1.5
+        else:
+            correction = 0.0
+
+    # Scale by cloud factor — clouds eliminate aspect effects
+    correction *= cloud_factor
+
+    return base_temp_c + correction
+
+
+def settled_snow_depth(fresh_snow_inches: float, hours_since_fall: float,
+                       temp_f: float, wind_mph: float) -> float:
+    """Estimate settled snow depth using Kojima (1967) exponential decay.
+
+    Fresh snow compacts under its own weight. The rate depends on:
+    - Temperature: warmer snow settles faster (metamorphism + melt)
+    - Wind: wind packs and densifies surface snow
+    - Time: exponential decay — fastest settling in first hours
+
+    Args:
+        fresh_snow_inches: Initial fresh snowfall in inches
+        hours_since_fall: Hours since the snow fell
+        temp_f: Current temperature in Fahrenheit
+        wind_mph: Wind speed in mph
+
+    Returns:
+        Estimated remaining snow depth in inches
+    """
+    if fresh_snow_inches <= 0 or hours_since_fall <= 0:
+        return fresh_snow_inches
+
+    # Compaction rate: base 0.08/day, increases with warmth
+    compaction_rate = 0.08 + 0.005 * max(0, temp_f - 15)
+
+    # Wind factor: wind packing increases compaction
+    wind_factor = 1.0 + 0.02 * min(wind_mph, 30)
+
+    # Exponential decay (Kojima 1967)
+    remaining_fraction = math.exp(-compaction_rate * wind_factor * hours_since_fall / 24.0)
+
+    # Clamp: can't settle more than 40% in first 24h typically
+    remaining_fraction = max(0.60, remaining_fraction)
+
+    return round(fresh_snow_inches * remaining_fraction, 1)
+
+
+def lake_effect_enhancement(wind_dir_deg: float, wind_speed_mph: float,
+                             air_temp_c: float,
+                             lake_temp_c: float = 4.5) -> float:
+    """Compute Lake Tahoe lake-effect snowfall enhancement factor.
+
+    Lake Tahoe (mean winter surface ~4.5C/39F) can enhance snowfall on
+    its east shore when cold NW-N winds blow across the lake's ~12-mile
+    fetch. This is a modest effect compared to Great Lakes lake-effect
+    but measurable in cold outbreaks.
+
+    Conditions for lake effect:
+    - Wind direction: NW to N (300-360, 0-30) — fetch across the lake
+    - Lake-air temperature difference > 10C
+    - Wind speed 10-30 mph (calm=no flux, strong=mechanical mixing)
+
+    Returns:
+        Enhancement factor (1.0 = no effect, up to 1.3 = 30% more snow)
+    """
+    # Temperature difference factor (requires >10C lake-air diff)
+    temp_diff = lake_temp_c - air_temp_c
+    temp_factor = min(1.0, max(0.0, (temp_diff - 10.0) / 10.0))
+
+    # Direction factor: cosine alignment to optimal NNW fetch (345 degrees)
+    # Full width at half max ~40 degrees
+    optimal_dir = 345.0
+    dir_diff = abs(wind_dir_deg - optimal_dir)
+    if dir_diff > 180:
+        dir_diff = 360 - dir_diff
+    # Gaussian-like: sigma ~40 degrees
+    dir_factor = math.exp(-(dir_diff ** 2) / (2 * 40.0 ** 2))
+
+    # Wind speed factor: bell curve centered at 20 mph, sigma 8 mph
+    speed_factor = math.exp(-((wind_speed_mph - 20.0) ** 2) / (2 * 8.0 ** 2))
+
+    # Combined enhancement: up to 30% more snow
+    enhancement = 1.0 + 0.3 * temp_factor * dir_factor * speed_factor
+
+    return round(enhancement, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -825,6 +1065,58 @@ def fetch_cssl_snow() -> dict:
             if valid2:
                 result["swe_in"] = valid2[-1]["value"]
 
+        # Sensor 3 (Hourly) — Snow Depth at hourly resolution for storm tracking
+        try:
+            resp_h = requests.get(
+                "https://cdec.water.ca.gov/dynamicapp/req/JSONDataServlet",
+                params={
+                    "Stations": "CSL",
+                    "SensorNums": "3",
+                    "dur_code": "H",
+                    "Start": start,
+                    "End": today,
+                }, timeout=15)
+            if resp_h.status_code == 200:
+                data_h = resp_h.json()
+                valid_h = [d for d in data_h if d.get("value") is not None and d["value"] != -9999]
+                if valid_h:
+                    result["hourly_snow_depth"] = [
+                        {"time": d.get("obsDate", ""), "depth_in": d["value"]}
+                        for d in valid_h[-48:]  # last 48 hours
+                    ]
+                    # Calculate hourly new snow accumulation
+                    hourly_new = []
+                    for i in range(1, len(valid_h)):
+                        delta = valid_h[i]["value"] - valid_h[i-1]["value"]
+                        if delta > 0:
+                            hourly_new.append({
+                                "time": valid_h[i].get("obsDate", ""),
+                                "new_snow_in": round(delta, 1),
+                            })
+                    result["hourly_new_snow"] = hourly_new[-24:]  # last 24 entries
+        except Exception:
+            pass  # hourly data is optional enhancement
+
+        # Sensor 9 = Wind Speed, Sensor 10 = Wind Direction at Donner Summit
+        for sensor_num, key in [("9", "wind_mph"), ("10", "wind_dir_deg")]:
+            try:
+                resp_w = requests.get(
+                    "https://cdec.water.ca.gov/dynamicapp/req/JSONDataServlet",
+                    params={
+                        "Stations": "CSL",
+                        "SensorNums": sensor_num,
+                        "dur_code": "H",
+                        "Start": (datetime.now(timezone.utc) - timedelta(hours=6)).strftime("%Y-%m-%d"),
+                        "End": today,
+                    }, timeout=15)
+                if resp_w.status_code == 200:
+                    data_w = resp_w.json()
+                    valid_w = [d for d in data_w if d.get("value") is not None and d["value"] != -9999]
+                    if valid_w:
+                        result[key] = valid_w[-1]["value"]
+            except Exception:
+                pass
+
         result["source"] = "CDEC/CSSL"
         result["elev_ft"] = 6890
         return result
@@ -1224,45 +1516,386 @@ def fetch_forecast_discussion() -> str:
 
 
 def fetch_hrrr(lat: float, lon: float) -> dict:
-    """Optional HRRR model data via Herbie."""
+    """Fetch HRRR model data via Herbie for 0-18h lead time.
+
+    HRRR (High-Resolution Rapid Refresh) is NOAA's 3km convection-allowing
+    model, updated hourly. Best model for 0-18h precipitation timing and type.
+
+    Variables fetched:
+    - TMP:2m — 2-meter temperature (K -> C)
+    - UGRD+VGRD:10m — 10-meter wind components (m/s -> mph + direction)
+    - APCP:surface — accumulated precipitation (mm)
+    - CSNOW:surface — categorical snow flag (0/1)
+    - CRAIN:surface — categorical rain flag (0/1)
+    - REFC:entire atmosphere — composite reflectivity (dBZ)
+    - CAPE:surface — convective available potential energy (J/kg)
+
+    For each resort coordinate, finds nearest HRRR grid point.
+    Returns dict matching existing model format for BMA integration.
+    """
     try:
         from herbie import Herbie
         now = datetime.now(timezone.utc)
+        # Use run from 2 hours ago (latest available usually delayed ~90min)
         mt = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
-        results = {"model_run": mt.isoformat(), "forecasts": []}
+        results = {"model_run": mt.isoformat(), "forecasts": [], "source": "herbie"}
+
+        # Try multiple model runs if the latest isn't available
+        for run_offset in [2, 3, 4, 5]:
+            mt = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=run_offset)
+            try:
+                # Test if this run exists
+                H_test = Herbie(mt.strftime("%Y-%m-%d %H:00"), model="hrrr",
+                                product="sfc", fxx=1, verbose=False)
+                results["model_run"] = mt.isoformat()
+                break
+            except Exception:
+                continue
+        else:
+            return {"error": "No recent HRRR run available"}
+
         for fxx in range(1, 19):
             try:
                 H = Herbie(mt.strftime("%Y-%m-%d %H:00"), model="hrrr",
                            product="sfc", fxx=fxx, verbose=False)
-                hd = {"fxx": fxx, "valid": (mt + timedelta(hours=fxx)).isoformat()}
+                valid_time = mt + timedelta(hours=fxx)
+                hd = {"fxx": fxx, "valid": valid_time.isoformat()}
+
+                # Herbie uses longitude in 0-360 for some GRIB projections
+                # Try both conventions
+                lon_360 = lon + 360 if lon < 0 else lon
+
+                # Temperature (TMP:2m) — Kelvin to Celsius
                 try:
                     ds = H.xarray(":TMP:2 m above ground", verbose=False)
-                    hd["temp_c"] = float(ds["t2m"].sel(latitude=lat, longitude=lon+360, method="nearest").values) - 273.15
-                except Exception: pass
+                    var_names = [v for v in ds.data_vars]
+                    if var_names:
+                        val = float(ds[var_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values)
+                        hd["temp_c"] = round(val - 273.15, 1)
+                        hd["temp_f"] = round(hd["temp_c"] * 9/5 + 32, 1)
+                except Exception:
+                    pass
+
+                # Accumulated Precipitation (APCP:surface)
                 try:
                     ds = H.xarray(":APCP:surface", verbose=False)
-                    vn = [v for v in ds.data_vars if "apcp" in v.lower() or "tp" in v.lower()]
-                    if vn: hd["precip_mm"] = float(ds[vn[0]].sel(latitude=lat, longitude=lon+360, method="nearest").values)
-                except Exception: pass
+                    var_names = [v for v in ds.data_vars if "apcp" in v.lower() or "tp" in v.lower()]
+                    if var_names:
+                        hd["precip_mm"] = round(float(ds[var_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values), 2)
+                except Exception:
+                    pass
+
+                # Wind (UGRD + VGRD at 10m)
                 try:
                     du = H.xarray(":UGRD:10 m above ground", verbose=False)
                     dv = H.xarray(":VGRD:10 m above ground", verbose=False)
-                    un = [v for v in du.data_vars if "u" in v.lower()]
-                    vn = [v for v in dv.data_vars if "v" in v.lower()]
-                    if un and vn:
-                        u = float(du[un[0]].sel(latitude=lat, longitude=lon+360, method="nearest").values)
-                        v = float(dv[vn[0]].sel(latitude=lat, longitude=lon+360, method="nearest").values)
-                        hd["wind_mph"] = math.sqrt(u**2 + v**2) * 2.237
-                        hd["wind_dir"] = (math.degrees(math.atan2(-u, -v)) + 360) % 360
-                except Exception: pass
+                    u_names = [v for v in du.data_vars if "u" in v.lower()]
+                    v_names = [v for v in dv.data_vars if "v" in v.lower()]
+                    if u_names and v_names:
+                        u = float(du[u_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values)
+                        v = float(dv[v_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values)
+                        hd["wind_mph"] = round(math.sqrt(u**2 + v**2) * 2.237, 1)
+                        hd["wind_dir"] = round((math.degrees(math.atan2(-u, -v)) + 360) % 360)
+                except Exception:
+                    pass
+
+                # Categorical Snow (CSNOW:surface) — 0 or 1
+                try:
+                    ds = H.xarray(":CSNOW:surface", verbose=False)
+                    var_names = [v for v in ds.data_vars]
+                    if var_names:
+                        hd["is_snow"] = int(float(ds[var_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values))
+                except Exception:
+                    pass
+
+                # Categorical Rain (CRAIN:surface) — 0 or 1
+                try:
+                    ds = H.xarray(":CRAIN:surface", verbose=False)
+                    var_names = [v for v in ds.data_vars]
+                    if var_names:
+                        hd["is_rain"] = int(float(ds[var_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values))
+                except Exception:
+                    pass
+
+                # Composite Reflectivity (REFC)
+                try:
+                    ds = H.xarray(":REFC:entire atmosphere", verbose=False)
+                    var_names = [v for v in ds.data_vars]
+                    if var_names:
+                        hd["reflectivity_dbz"] = round(float(ds[var_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values), 1)
+                except Exception:
+                    pass
+
+                # CAPE (surface)
+                try:
+                    ds = H.xarray(":CAPE:surface", verbose=False)
+                    var_names = [v for v in ds.data_vars]
+                    if var_names:
+                        hd["cape_jkg"] = round(float(ds[var_names[0]].sel(
+                            latitude=lat, longitude=lon_360, method="nearest").values))
+                except Exception:
+                    pass
+
+                # Derive snowfall from precip + temp + precip type flags
+                if "precip_mm" in hd and "temp_c" in hd:
+                    tc = hd["temp_c"]
+                    pmm = hd["precip_mm"]
+                    is_snow = hd.get("is_snow", 0)
+                    is_rain = hd.get("is_rain", 0)
+                    if is_snow and not is_rain and pmm > 0:
+                        slr = compute_slr(tc, wind_mph=hd.get("wind_mph", 0))
+                        hd["snowfall_cm"] = round(pmm / 10.0 * slr, 1)
+                    elif is_snow and is_rain and pmm > 0:
+                        slr = compute_slr(tc, wind_mph=hd.get("wind_mph", 0))
+                        hd["snowfall_cm"] = round(pmm / 10.0 * slr * 0.5, 1)
+                    else:
+                        hd["snowfall_cm"] = 0
+
                 results["forecasts"].append(hd)
             except Exception as e:
                 results["forecasts"].append({"fxx": fxx, "error": str(e)})
         return results
     except ImportError:
-        return {"error": "Herbie not installed"}
+        return {"error": "Herbie not installed — pip install herbie-data"}
     except Exception as e:
         return {"error": str(e)}
+
+
+def fetch_rwis_stations(lat: float = 39.17, lon: float = -120.145) -> list[dict]:
+    """Fetch RWIS (Road Weather Information System) data via Synoptic/MesoWest.
+
+    Targets Caltrans road weather stations on I-80 (Donner Summit, Kingvale)
+    and US-50 (Echo Summit). These stations report pavement temperature,
+    visibility, and precipitation type — key indicators for chain controls
+    before official announcements.
+
+    Uses the same Synoptic API as fetch_synoptic_stations but filters
+    specifically for DOT/RWIS network stations on the two main Tahoe corridors.
+
+    Returns:
+        List of station dicts with road weather data.
+    """
+    token = os.environ.get("SYNOPTIC_TOKEN", "")
+    if not token:
+        return []
+    try:
+        # Fetch DOT/RWIS-class stations within 40 miles of Tahoe
+        resp = requests.get("https://api.synopticdata.com/v2/stations/latest", params={
+            "token": token,
+            "radius": f"{lat},{lon},40",
+            "vars": "air_temp,road_temp,road_surface_condition,visibility,"
+                    "wind_speed,wind_direction,precip_accum,road_subsurface_tmp",
+            "network": "1,2,71,96,162",  # ASOS, RAWS, Caltrans DOT, MADIS, RWIS
+            "units": "english",
+            "status": "active",
+            "limit": "30",
+        }, timeout=15)
+        if resp.status_code != 200:
+            return []
+
+        data = resp.json()
+        if data.get("SUMMARY", {}).get("RESPONSE_CODE") != 1:
+            return []
+
+        # Known RWIS station IDs or name patterns for I-80 and US-50
+        i80_keywords = ["donner", "kingvale", "soda springs", "truckee", "i-80",
+                        "i80", "norden", "boreal", "blue canyon", "emigrant"]
+        us50_keywords = ["echo summit", "echo pass", "meyers", "us-50", "us50",
+                         "twin bridges", "strawberry", "kyburz", "pollock"]
+        corridor_keywords = i80_keywords + us50_keywords
+
+        stations = []
+        for stn in data.get("STATION", []):
+            name = (stn.get("NAME", "") or "").lower()
+            stid = (stn.get("STID", "") or "").lower()
+            network = (stn.get("MNET_SHORTNAME", "") or "").lower()
+
+            # Filter for corridor stations (DOT/RWIS or near corridor)
+            is_dot = "dot" in network or "rwis" in network or "caltrans" in network
+            is_corridor = any(kw in name or kw in stid for kw in corridor_keywords)
+
+            if not (is_dot or is_corridor):
+                continue
+
+            obs = stn.get("OBSERVATIONS", {})
+            elev_m = stn.get("ELEVATION")
+            elev_ft = round(float(elev_m) * 3.28084) if elev_m else None
+
+            def _val(key):
+                v = obs.get(key)
+                if isinstance(v, dict):
+                    return v.get("value")
+                return v
+
+            station_data = {
+                "id": stn.get("STID", ""),
+                "name": stn.get("NAME", ""),
+                "network": stn.get("MNET_SHORTNAME", ""),
+                "lat": float(stn.get("LATITUDE", 0)),
+                "lon": float(stn.get("LONGITUDE", 0)),
+                "elev_ft": elev_ft,
+                "temp_f": _val("air_temp_value_1"),
+                "pavement_temp_f": _val("road_temp_value_1"),
+                "road_condition": _val("road_surface_condition_value_1"),
+                "visibility_mi": _val("visibility_value_1"),
+                "wind_mph": _val("wind_speed_value_1"),
+                "wind_dir_deg": _val("wind_direction_value_1"),
+                "precip_accum_in": _val("precip_accum_value_1"),
+            }
+
+            # Determine corridor
+            if any(kw in name or kw in stid for kw in i80_keywords):
+                station_data["corridor"] = "I-80"
+            elif any(kw in name or kw in stid for kw in us50_keywords):
+                station_data["corridor"] = "US-50"
+            else:
+                station_data["corridor"] = "unknown"
+
+            stations.append(station_data)
+
+        return stations
+    except Exception:
+        return []
+
+
+def fetch_radar_nowcast(lat: float, lon: float,
+                         upstream_lat: float | None = None,
+                         upstream_lon: float | None = None) -> dict:
+    """Fetch current precipitation status for radar-like nowcasting.
+
+    Uses Open-Meteo's current-weather API for real-time conditions, then
+    compares local conditions with upstream stations to estimate if
+    precipitation is approaching.
+
+    For Oakland: upstream is Pacific coast / west
+    For Tahoe: upstream is Sacramento Valley / west
+
+    Args:
+        lat, lon: Location to check
+        upstream_lat, upstream_lon: Optional upstream check point (west of target)
+
+    Returns:
+        Dict with precip_now, precip_approaching, estimated_arrival_minutes, etc.
+    """
+    result = {
+        "precip_now": False,
+        "precip_approaching": False,
+        "estimated_arrival_minutes": None,
+        "current_precip_mm": 0.0,
+        "current_weather_code": None,
+        "radar_source": "open-meteo",
+    }
+
+    try:
+        # Fetch current conditions at target location
+        resp = requests.get("https://api.open-meteo.com/v1/forecast", params={
+            "latitude": lat,
+            "longitude": lon,
+            "current": "precipitation,rain,showers,snowfall,weather_code,is_day",
+            "timezone": "America/Los_Angeles",
+        }, timeout=10)
+        if resp.status_code == 200:
+            current = resp.json().get("current", {})
+            precip = (current.get("precipitation") or 0)
+            rain = (current.get("rain") or 0)
+            snow = (current.get("snowfall") or 0)
+            result["precip_now"] = (precip + rain + snow) > 0.1
+            result["current_precip_mm"] = round(precip, 2)
+            result["current_weather_code"] = current.get("weather_code")
+
+        # Check upstream location if provided
+        if upstream_lat is not None and upstream_lon is not None:
+            resp2 = requests.get("https://api.open-meteo.com/v1/forecast", params={
+                "latitude": upstream_lat,
+                "longitude": upstream_lon,
+                "current": "precipitation,rain,showers,snowfall,weather_code",
+                "hourly": "precipitation",
+                "forecast_days": 1,
+                "timezone": "America/Los_Angeles",
+            }, timeout=10)
+            if resp2.status_code == 200:
+                up_current = resp2.json().get("current", {})
+                up_precip = (up_current.get("precipitation") or 0)
+                up_rain = (up_current.get("rain") or 0)
+                up_snow = (up_current.get("snowfall") or 0)
+                upstream_wet = (up_precip + up_rain + up_snow) > 0.1
+
+                if upstream_wet and not result["precip_now"]:
+                    result["precip_approaching"] = True
+                    # Rough estimate: typical storm speed ~30mph
+                    # Distance approximation between upstream and target
+                    dlat = abs(lat - upstream_lat)
+                    dlon = abs(lon - upstream_lon)
+                    dist_deg = math.sqrt(dlat**2 + dlon**2)
+                    dist_miles = dist_deg * 69.0  # rough lat-degree to miles
+                    storm_speed_mph = 30
+                    result["estimated_arrival_minutes"] = round(
+                        dist_miles / storm_speed_mph * 60
+                    )
+
+    except Exception:
+        pass
+
+    return result
+
+
+def fetch_webcam_conditions() -> list[dict]:
+    """Placeholder for future webcam image analysis via vision API.
+
+    Defines the interface for webcam-based condition detection at key
+    Tahoe locations. Requires a vision model API (e.g., Claude vision)
+    to analyze images for snow conditions, visibility, and precipitation.
+
+    This is a Tier 6 feature — returns None for all condition fields
+    until a vision model is integrated.
+
+    Returns:
+        List of webcam station dicts with None condition fields.
+    """
+    webcams = [
+        {
+            "station": "Heavenly Base (California Lodge)",
+            "url": "https://www.skiheavenly.com/the-mountain/webcams/california-lodge.aspx",
+            "conditions": None,
+            "visibility": None,
+            "snowing": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "station": "Heavenly Gondola Top",
+            "url": "https://www.skiheavenly.com/the-mountain/webcams/gondola-top.aspx",
+            "conditions": None,
+            "visibility": None,
+            "snowing": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "station": "Kirkwood Base",
+            "url": "https://www.kirkwood.com/the-mountain/webcams.aspx",
+            "conditions": None,
+            "visibility": None,
+            "snowing": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "station": "I-80 Donner Summit (Caltrans)",
+            "url": "https://cwwp2.dot.ca.gov/vm/loc/d3/hwy80atdonnerpass.htm",
+            "conditions": None,
+            "visibility": None,
+            "snowing": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+    # Future: pass each URL to a vision model API for analysis
+    # Example: conditions = vision_model.analyze(url, prompt="Describe snow conditions")
+    return webcams
 
 
 # ---------------------------------------------------------------------------
@@ -1953,7 +2586,10 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 nws_grids: dict | None = None,
                 sounding: dict | None = None,
                 ensemble: dict | None = None,
-                synoptic: dict | None = None) -> dict:
+                synoptic: dict | None = None,
+                rwis: list | None = None,
+                radar_nowcast: dict | None = None,
+                cssl: dict | None = None) -> dict:
     now = datetime.now(timezone.utc)
 
     # --- Load model skill weights and bias corrections ---
@@ -2103,6 +2739,47 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 # Current zone snapshot (first available hour)
                 snap = primary[0] if primary else {}
 
+                # Apply terrain-adjusted temperature to snapshot
+                aspect_deg = loc.get("aspect_deg")
+                if snap and aspect_deg is not None:
+                    snap_temp_c = snap.get("temp_c")
+                    snap_cc = snap.get("cloud_cover_pct", 50) or 50
+                    if snap_temp_c is not None:
+                        try:
+                            snap_time = datetime.fromisoformat(snap.get("time", ""))
+                            hour_of_day = snap_time.hour
+                        except (ValueError, TypeError):
+                            hour_of_day = now.hour
+                        adj_temp_c = terrain_adjusted_temperature(
+                            snap_temp_c, loc["elev_ft"] * 0.3048,
+                            aspect_deg, hour_of_day, snap_cc
+                        )
+                        snap["temp_c_terrain_adj"] = round(adj_temp_c, 1)
+                        snap["temp_f_terrain_adj"] = round(adj_temp_c * 9/5 + 32, 1)
+
+                # Compute precip phase probability for current conditions
+                if snap and snap.get("temp_c") is not None:
+                    wb = wet_bulb_temp_c(
+                        snap.get("temp_c_terrain_adj", snap["temp_c"]),
+                        snap.get("humidity_pct")
+                    )
+                    fl_m = (snap.get("freezing_level_ft") or 0) * 0.3048 if snap.get("freezing_level_ft") else None
+                    snap["precip_phase"] = precip_phase_probability(
+                        wb, loc["elev_ft"] * 0.3048, fl_m
+                    )
+
+                # Apply lake effect enhancement for east-shore resorts
+                is_east_shore = RESORTS[rn].get("east_shore", False)
+                lake_effect_factor = 1.0
+                if is_east_shore and snap:
+                    wind_dir = snap.get("wind_dir_deg", 0) or 0
+                    wind_spd = snap.get("wind_mph", 0) or 0
+                    air_tc = snap.get("temp_c_terrain_adj", snap.get("temp_c", 0)) or 0
+                    lake_effect_factor = lake_effect_enhancement(
+                        wind_dir, wind_spd, air_tc
+                    )
+                    snap["lake_effect_factor"] = lake_effect_factor
+
                 # 48h hourly timeline
                 timeline_48h = primary[:48]
 
@@ -2112,8 +2789,19 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 # 24h snow total (forecast) from blended model
                 snow_24h = sum(h["snowfall_in"] for h in primary[:24])
 
+                # Apply lake effect enhancement to snow totals
+                if lake_effect_factor > 1.0:
+                    snow_24h *= lake_effect_factor
+
                 # 7-day forecast snow total from blended model
                 snow_7d_forecast = sum(h["snowfall_in"] for h in primary[:168])
+                if lake_effect_factor > 1.0:
+                    snow_7d_forecast *= lake_effect_factor
+
+                # Apply snow settling to 24h total for "settled depth" estimate
+                avg_temp_f = snap.get("temp_f", 32) or 32
+                avg_wind = snap.get("wind_mph", 5) or 5
+                settled_24h = settled_snow_depth(snow_24h, 12.0, avg_temp_f, avg_wind)
 
                 # Blend with NWS forecaster-edited gridpoint data
                 nws_blend = blend_nws_grids(
@@ -2135,11 +2823,13 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                     "timeline_48h": timeline_48h,
                     "day_night_buckets": buckets,
                     "snow_24h": round(nws_blend["snow_24h"], 1),
+                    "snow_24h_settled": round(settled_24h, 1),
                     "snow_7d_forecast": round(nws_blend["snow_7d"], 1),
                     "model_spread": model_spread,
                     "nws_blend": nws_blend,
                     "blend_method": "skill_weighted" if blended else "gfs_fallback",
                     "model_weights_used": model_weights or {},
+                    "lake_effect_factor": round(lake_effect_factor, 3),
                 }
             else:
                 zones_out[zk] = {"label": zd["label"], "elev_ft": zd["elev_ft"], "error": p["error"]}
@@ -2238,6 +2928,10 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "bias_corrections": bias_corrections,
         "ensemble": ensemble,
         "sounding": sounding,
+        "rwis": rwis or [],
+        "radar_nowcast": radar_nowcast or {},
+        "cssl": cssl or {},
+        "hrrr": hrrr or {},
     }
 
     # Rankings
@@ -2676,8 +3370,8 @@ def format_report(a: dict, compact: bool = False) -> str:
     # Footer
     L.append("")
     L.append("=" * W)
-    L.append("Blend: Skill-weighted GFS+ECMWF+ICON+NWS grids | Ensemble: GFS-31+ECMWF-51")
-    L.append("Physics: Wet-bulb precip type (Stull 2011), SLR (Roebber 2003), BMA blending")
+    L.append("Blend: Skill-weighted GFS+ECMWF+ICON+NWS grids+HRRR | Ensemble: GFS-31+ECMWF-51")
+    L.append("Physics: Wet-bulb precip (Stull 2011), SLR (Roebber 2003), BMA, terrain, settling")
     L.append("=" * W)
 
     return "\n".join(L)
@@ -2731,11 +3425,26 @@ def main():
     print("  [+] Synoptic/MesoWest stations (high-elevation obs)...")
     synoptic = fetch_synoptic_stations(39.17, -120.145, radius_miles=30)
 
+    print("  [+] RWIS road weather stations (I-80, US-50)...")
+    rwis = fetch_rwis_stations(39.17, -120.145)
+
+    print("  [+] Radar nowcast (precipitation tracking)...")
+    # For Tahoe, upstream is Sacramento Valley (~100mi west)
+    radar_nowcast = fetch_radar_nowcast(39.17, -120.145,
+                                         upstream_lat=38.58, upstream_lon=-121.49)
+
+    print("  [+] CSSL enhanced (hourly snow, wind at Donner Summit)...")
+    cssl = fetch_cssl_snow()
+
     print("\nAnalyzing conditions + building forecasts...")
     print("  Using skill-weighted multi-model blend (BMA-style)")
+    print("  + terrain downscaling, snow settling, precip phase probability")
+    print("  + lake effect enhancement for east-shore resorts")
     analysis = analyze_all(obs, nws, om, snotel, afd, avy, hrrr,
                            nws_grids=nws_grids, sounding=sounding,
-                           ensemble=ensemble, synoptic=synoptic)
+                           ensemble=ensemble, synoptic=synoptic,
+                           rwis=rwis, radar_nowcast=radar_nowcast,
+                           cssl=cssl)
 
     if json_out:
         print(json.dumps(analysis, indent=2, default=str))
