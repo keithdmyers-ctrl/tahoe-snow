@@ -23,9 +23,12 @@ sys.path.insert(0, os.path.dirname(__file__))
 from tahoe_snow import (
     compute_slr, wind_chill_f, orographic_multiplier, estimate_temp_c,
     snow_quality_str, wind_dir_str, precip_type, water_year_start,
+    precip_phase_probability, terrain_adjusted_temperature,
+    settled_snow_depth, lake_effect_enhancement,
     fetch_nws_observations, fetch_nws_forecast, fetch_open_meteo,
     fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
     fetch_avalanche, fetch_forecast_discussion,
+    fetch_radar_nowcast, fetch_webcam_conditions,
     parse_open_meteo, aggregate_daily, multi_model_spread,
     generate_summary, analyze_all, format_report,
     RESORTS, SNOTEL_STATIONS, MODELS, MODEL_LABELS,
@@ -460,7 +463,250 @@ class TestDataProcessing(TestCase):
 
 
 # ===================================================================
-# 5. Alerts System Tests
+# 5. New Physics Unit Tests (Tier 4)
+# ===================================================================
+
+class TestPrecipPhaseProbability(TestCase):
+    """Test probabilistic precipitation phase classification."""
+
+    def test_very_cold_is_snow(self):
+        """Well below freezing should be nearly certain snow."""
+        result = precip_phase_probability(-5.0, 2500, 2000)
+        self.assertGreater(result["p_snow"], 0.90)
+        self.assertLess(result["p_rain"], 0.05)
+        self.assertEqual(result["dominant_type"], "Snow")
+
+    def test_warm_is_rain(self):
+        """Well above freezing should be nearly certain rain."""
+        result = precip_phase_probability(5.0, 1500, 2500)
+        self.assertGreater(result["p_rain"], 0.90)
+        self.assertLess(result["p_snow"], 0.05)
+        self.assertEqual(result["dominant_type"], "Rain")
+
+    def test_transition_zone_has_mix(self):
+        """Near 0.5C wet-bulb should have significant mix probability."""
+        result = precip_phase_probability(0.5, 2000, 2000)
+        self.assertGreater(result["p_mix"], 0.01)
+        # Should sum to 1.0
+        total = result["p_snow"] + result["p_mix"] + result["p_rain"]
+        self.assertAlmostEqual(total, 1.0, places=2)
+
+    def test_probabilities_sum_to_one(self):
+        """Probabilities should always sum to 1.0."""
+        for wb in [-10, -5, -2, -1, 0, 0.5, 1, 1.5, 2, 3, 5, 10]:
+            for elev in [1500, 2000, 2500, 3000]:
+                result = precip_phase_probability(wb, elev, 2000)
+                total = result["p_snow"] + result["p_mix"] + result["p_rain"]
+                self.assertAlmostEqual(total, 1.0, places=2,
+                    msg=f"Sum != 1.0 at wb={wb}, elev={elev}: {result}")
+
+    def test_elevation_boost_snow(self):
+        """Being well above freezing level should boost p_snow."""
+        # Near transition: 1.0C wet-bulb
+        low = precip_phase_probability(1.0, 1500, 2000)  # below freezing level
+        high = precip_phase_probability(1.0, 2500, 2000)  # above freezing level
+        self.assertGreater(high["p_snow"], low["p_snow"])
+
+    def test_no_freezing_level(self):
+        """Should work with None freezing level."""
+        result = precip_phase_probability(-3.0, 2500, None)
+        self.assertGreater(result["p_snow"], 0.90)
+
+    def test_dominant_type_matches(self):
+        """dominant_type should match the highest probability."""
+        result = precip_phase_probability(-5.0, 2500, 2000)
+        probs = {"Snow": result["p_snow"], "Mix": result["p_mix"], "Rain": result["p_rain"]}
+        expected = max(probs, key=probs.get)
+        self.assertEqual(result["dominant_type"], expected)
+
+
+class TestTerrainAdjustedTemperature(TestCase):
+    """Test aspect-based temperature correction."""
+
+    def test_south_facing_peak_solar(self):
+        """South-facing slope at peak solar should be warmer."""
+        base = 0.0
+        adj = terrain_adjusted_temperature(base, 2500, 180, 13, cloud_cover_pct=0)
+        self.assertGreater(adj, base)
+        self.assertAlmostEqual(adj, base + 2.0, places=1)
+
+    def test_north_facing_daytime(self):
+        """North-facing slope during day should be cooler."""
+        base = 0.0
+        adj = terrain_adjusted_temperature(base, 2500, 0, 12, cloud_cover_pct=0)
+        self.assertLess(adj, base)
+
+    def test_clouds_eliminate_aspect_effect(self):
+        """Full cloud cover should eliminate aspect correction."""
+        base = 0.0
+        adj = terrain_adjusted_temperature(base, 2500, 180, 13, cloud_cover_pct=100)
+        self.assertAlmostEqual(adj, base, places=5)
+
+    def test_east_morning_warm(self):
+        """East-facing slope in morning should be warmer."""
+        base = 0.0
+        adj = terrain_adjusted_temperature(base, 2500, 90, 9, cloud_cover_pct=0)
+        self.assertGreater(adj, base)
+
+    def test_west_afternoon_warm(self):
+        """West-facing slope in afternoon should be warmer."""
+        base = 0.0
+        adj = terrain_adjusted_temperature(base, 2500, 270, 14, cloud_cover_pct=0)
+        self.assertGreater(adj, base)
+
+    def test_night_south_facing_cooler(self):
+        """South-facing slope at night should be slightly cooler."""
+        base = 0.0
+        adj = terrain_adjusted_temperature(base, 2500, 180, 2, cloud_cover_pct=0)
+        self.assertLess(adj, base)
+
+    def test_partial_clouds_scale_linearly(self):
+        """50% clouds should produce half the aspect correction."""
+        base = 0.0
+        clear = terrain_adjusted_temperature(base, 2500, 180, 13, cloud_cover_pct=0)
+        half = terrain_adjusted_temperature(base, 2500, 180, 13, cloud_cover_pct=50)
+        full_effect = clear - base
+        half_effect = half - base
+        self.assertAlmostEqual(half_effect, full_effect * 0.5, places=3)
+
+
+class TestSnowSettling(TestCase):
+    """Test Kojima (1967) snow settling model."""
+
+    def test_no_settling_at_time_zero(self):
+        """No settling should occur at t=0."""
+        result = settled_snow_depth(12.0, 0, 20, 10)
+        self.assertEqual(result, 12.0)
+
+    def test_settling_reduces_depth(self):
+        """Depth should decrease over time."""
+        fresh = 12.0
+        after_12h = settled_snow_depth(fresh, 12, 25, 5)
+        self.assertLess(after_12h, fresh)
+        self.assertGreater(after_12h, 0)
+
+    def test_warm_settles_faster(self):
+        """Warmer temperatures should produce more settling."""
+        cold = settled_snow_depth(12.0, 12, 10, 5)
+        warm = settled_snow_depth(12.0, 12, 35, 5)
+        self.assertGreater(cold, warm)
+
+    def test_wind_settles_faster(self):
+        """Higher wind should produce more settling."""
+        calm = settled_snow_depth(12.0, 12, 20, 0)
+        windy = settled_snow_depth(12.0, 12, 20, 25)
+        self.assertGreater(calm, windy)
+
+    def test_minimum_60_percent(self):
+        """Should never settle below 60% of original."""
+        result = settled_snow_depth(10.0, 100, 40, 30)
+        self.assertGreaterEqual(result, 6.0)
+
+    def test_zero_snow(self):
+        """Zero snowfall should return zero."""
+        result = settled_snow_depth(0, 12, 25, 10)
+        self.assertEqual(result, 0)
+
+    def test_negative_input(self):
+        """Negative snowfall should return the input unchanged."""
+        result = settled_snow_depth(-1.0, 12, 25, 10)
+        self.assertEqual(result, -1.0)
+
+
+class TestLakeEffectEnhancement(TestCase):
+    """Test Lake Tahoe lake-effect snowfall parameterization."""
+
+    def test_no_effect_warm_air(self):
+        """Warm air (small lake-air diff) should produce no enhancement."""
+        factor = lake_effect_enhancement(345, 20, 0.0, lake_temp_c=4.5)
+        self.assertAlmostEqual(factor, 1.0, places=1)
+
+    def test_enhancement_cold_nw(self):
+        """Cold NNW wind should produce enhancement on east shore."""
+        factor = lake_effect_enhancement(345, 20, -15.0, lake_temp_c=4.5)
+        self.assertGreater(factor, 1.05)
+        self.assertLessEqual(factor, 1.3)
+
+    def test_no_effect_east_wind(self):
+        """East wind should produce minimal enhancement (wrong fetch)."""
+        factor = lake_effect_enhancement(90, 20, -15.0, lake_temp_c=4.5)
+        self.assertLess(factor, 1.05)
+
+    def test_no_effect_calm(self):
+        """Very calm winds should produce minimal enhancement."""
+        factor = lake_effect_enhancement(345, 0, -15.0, lake_temp_c=4.5)
+        self.assertLess(factor, 1.05)
+
+    def test_always_gte_one(self):
+        """Enhancement factor should never be less than 1.0."""
+        for wd in range(0, 360, 30):
+            for ws in [0, 5, 15, 25, 40]:
+                for tc in [-20, -10, 0, 5]:
+                    factor = lake_effect_enhancement(wd, ws, tc)
+                    self.assertGreaterEqual(factor, 1.0,
+                        f"Factor < 1.0 at wd={wd}, ws={ws}, tc={tc}")
+
+    def test_optimal_conditions(self):
+        """Optimal conditions (NNW wind, 20mph, -15C) should give max effect."""
+        factor = lake_effect_enhancement(345, 20, -15.0, lake_temp_c=4.5)
+        # This should be close to the theoretical maximum
+        self.assertGreater(factor, 1.15)
+
+    def test_direction_symmetry(self):
+        """345 and 350 degrees should produce similar enhancement."""
+        f1 = lake_effect_enhancement(345, 20, -15.0)
+        f2 = lake_effect_enhancement(350, 20, -15.0)
+        self.assertAlmostEqual(f1, f2, places=1)
+
+
+class TestResortConfig(TestCase):
+    """Test that resort configuration includes new fields."""
+
+    def test_all_zones_have_aspect_deg(self):
+        """All resort zones should have aspect_deg field."""
+        for rn, resort in RESORTS.items():
+            for zk in ("base", "mid", "peak"):
+                self.assertIn("aspect_deg", resort[zk],
+                    f"{rn}.{zk} missing aspect_deg")
+                self.assertIsInstance(resort[zk]["aspect_deg"], (int, float))
+                self.assertGreaterEqual(resort[zk]["aspect_deg"], 0)
+                self.assertLess(resort[zk]["aspect_deg"], 360)
+
+    def test_all_resorts_have_east_shore(self):
+        """All resorts should have east_shore flag."""
+        for rn, resort in RESORTS.items():
+            self.assertIn("east_shore", resort,
+                f"{rn} missing east_shore flag")
+
+    def test_heavenly_is_east_shore(self):
+        """Heavenly should be flagged as east shore."""
+        self.assertTrue(RESORTS["Heavenly"]["east_shore"])
+
+    def test_kirkwood_not_east_shore(self):
+        """Kirkwood should not be flagged as east shore."""
+        self.assertFalse(RESORTS["Kirkwood"]["east_shore"])
+
+
+class TestWebcamStub(TestCase):
+    """Test webcam conditions placeholder."""
+
+    def test_returns_list(self):
+        result = fetch_webcam_conditions()
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+
+    def test_fields_are_none(self):
+        """All condition fields should be None (placeholder)."""
+        for cam in fetch_webcam_conditions():
+            self.assertIsNone(cam["conditions"])
+            self.assertIsNone(cam["visibility"])
+            self.assertIsNone(cam["snowing"])
+            self.assertIsNotNone(cam["station"])
+            self.assertIsNotNone(cam["url"])
+
+
+# ===================================================================
+# 6. Alerts System Tests
 # ===================================================================
 
 class TestAlerts(TestCase):
@@ -495,7 +741,7 @@ class TestAlerts(TestCase):
 
 
 # ===================================================================
-# 6. Edge Cases
+# 7. Edge Cases
 # ===================================================================
 
 class TestEdgeCases(TestCase):

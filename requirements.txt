@@ -1,3 +1,4 @@
 flask>=3.0
 requests>=2.31
 numpy>=1.26
+herbie-data>=2024.1  # optional: HRRR model data via Herbie
