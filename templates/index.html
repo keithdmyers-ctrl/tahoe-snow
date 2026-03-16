@@ -100,9 +100,20 @@ body {
 .header .meta .time.stale-danger { color: var(--danger); }
 .header .header-solar { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 @media (max-width: 420px) {
-  .header { padding: 10px 14px; flex-wrap: wrap; gap: 6px; }
+  .header { padding: 10px 12px; gap: 6px; }
   .header h1 { font-size: 16px; gap: 6px; }
   .header h1 .icon { font-size: 20px; }
+  .header .meta { font-size: 11px; }
+  .header .header-solar { font-size: 10px; }
+}
+@media (max-width: 500px) {
+  .refresh-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-height: 40px;
+    border-radius: 16px;
+    opacity: 0.85;
+  }
 }
 .refresh-btn {
   background: rgba(255,255,255,0.08);
@@ -276,17 +287,17 @@ body {
   align-items: center;
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s;
+  transition: background 0.2s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 .section-header:hover { background: var(--card-hover); }
-.section-header:active { opacity: 0.7; }
+.section-header:active { transform: scale(0.99); opacity: 0.85; }
 .section-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 button.section-header {
   background: none; border: none; color: inherit; font: inherit;
   width: 100%; text-align: left; -webkit-appearance: none; appearance: none;
 }
 .resort-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.resort-tab:active { transform: scale(0.97); }
 .refresh-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .refresh-btn:active { transform: scale(0.96); }
 .section-header .toggle {
@@ -367,8 +378,9 @@ button.section-header {
   border: 1px solid transparent;
   background: rgba(255,255,255,0.06);
   color: var(--text-dim);
-  transition: all 0.2s ease;
+  transition: all 0.2s ease, transform 0.15s ease;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
 }
 .resort-tab:hover { background: rgba(255,255,255,0.1); color: var(--text); }
 .resort-tab.active {
@@ -376,11 +388,13 @@ button.section-header {
   color: #fff;
   box-shadow: 0 2px 8px rgba(25, 118, 210, 0.4);
 }
+.resort-tab:active { transform: scale(0.95); }
 .resort-tab.all-tab { border: 1px solid rgba(255,255,255,0.12); background: transparent; }
 .resort-tab.all-tab.active { border: none; }
 
-.resort-panel { display: none; }
-.resort-panel.active { display: block; }
+.resort-panel { display: none; opacity: 0; }
+.resort-panel.active { display: block; animation: fadeIn 0.25s ease forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
 /* -- Zone cards -- */
 .zones-row {
@@ -474,7 +488,7 @@ button.section-header {
 }
 .abr-label { color: var(--text-dim); font-size: 10px; text-align: right; white-space: nowrap; }
 .abr-bar { height: 14px; background: rgba(255,255,255,0.04); border-radius: 3px; overflow: hidden; }
-.abr-fill { display: block; height: 100%; background: var(--snow); opacity: 0.3; border-radius: 3px; transition: width 0.3s; }
+.abr-fill { display: block; height: 100%; background: var(--snow); opacity: 0.3; border-radius: 3px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
 .abr-fill.snow-active { opacity: 0.7; }
 .abr-val { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .abr-temp { color: var(--text-dim); font-size: 10px; text-align: right; }
@@ -489,13 +503,15 @@ button.section-header {
   padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
   border: 1.5px solid var(--pill-color, var(--accent));
   background: transparent; color: var(--text-dim); cursor: pointer;
-  transition: all 0.15s; line-height: 1.3;
+  transition: all 0.2s ease, transform 0.15s ease; line-height: 1.3;
+  -webkit-tap-highlight-color: transparent;
 }
 .resort-pill.active {
   background: var(--pill-color, var(--accent));
   color: #fff; border-color: var(--pill-color, var(--accent));
 }
 .resort-pill:hover:not(.active) { background: rgba(255,255,255,0.05); }
+.resort-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pill-snow { font-weight: 800; margin-left: 2px; }
 @media (max-width: 500px) {
   .compare-chart-header { flex-direction: column; align-items: flex-start; }
@@ -554,19 +570,20 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .compare-row .cr-value { font-weight: 600; }
 .compare-detail {
   max-height: 0; overflow: hidden; opacity: 0;
-  transition: max-height 0.3s ease, opacity 0.2s ease;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
 }
 .compare-detail.open { opacity: 1; }
 .compare-toggle {
   color: var(--accent); font-size: 13px; font-weight: 500;
   cursor: pointer; padding: 12px 0 4px; text-align: center;
-  transition: opacity 0.15s;
+  transition: opacity 0.2s ease, transform 0.15s ease;
   display: block; width: 100%;
   background: none; border: none; font-family: inherit;
   min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
 }
 .compare-toggle:hover { opacity: 0.7; }
-.compare-toggle:active { opacity: 0.5; }
+.compare-toggle:active { transform: scale(0.97); opacity: 0.6; }
 .rank-row { display: inline-flex; gap: 6px; font-size: 13px; }
 .rank-label { color: var(--text-dim); }
 .rank-value { font-weight: 700; }
@@ -588,7 +605,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .snotel-station .bar {
   height: 100%; background: linear-gradient(90deg, var(--cold), var(--snow));
   border-radius: 4px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  min-width: 2px;
+  min-width: 2px; will-change: width;
 }
 .snotel-station .depth { width: 60px; text-align: right; font-weight: 600; color: var(--snow); font-variant-numeric: tabular-nums; }
 .snotel-station .swe { width: 70px; text-align: right; color: var(--text-dim); font-size: 12px; }
@@ -643,8 +660,9 @@ table.data-table tr:hover td { background: var(--card-hover); }
 }
 .avy-info .avy-label { font-weight: 700; font-size: 15px; }
 .avy-info .avy-advice { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
-.avy-info a { color: var(--accent); text-decoration: none; font-size: 12px; }
+.avy-info a { color: var(--accent); text-decoration: none; font-size: 12px; padding: 4px 0; display: inline-block; transition: opacity 0.15s; }
 .avy-info a:hover { text-decoration: underline; }
+.avy-info a:active { opacity: 0.6; }
 @media (max-width: 500px) {
   .avy-banner { gap: 12px; padding: 12px 14px; }
   .avy-level { font-size: 28px; width: 44px; height: 44px; border-radius: 10px; }
@@ -708,6 +726,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .skeleton:not(.hidden) .skel-block {
   animation: shimmer 1.5s ease-in-out infinite;
 }
+.skel-decision { height: 100px; margin-bottom: 16px; }
 .skel-hero-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
 @media (max-width: 900px) { .skel-hero-row { grid-template-columns: repeat(2, 1fr); } }
 .skel-hero { height: 110px; }
@@ -986,9 +1005,10 @@ table.data-table tr:hover td { background: var(--card-hover); }
   display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
 }
 .decision-factor {
-  font-size: 11px; padding: 4px 10px; border-radius: 4px;
-  background: rgba(255,255,255,0.10); color: var(--text-dim);
-  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 11px; padding: 4px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.08); color: var(--text-dim);
+  border: 1px solid rgba(255,255,255,0.10);
+  transition: transform 0.15s ease;
 }
 .decision-factor .df-val { color: var(--accent); font-weight: 700; }
 @media (max-width: 600px) {
@@ -1051,7 +1071,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .footer {
   text-align: center; padding: 32px 20px; color: var(--text-dim);
   font-size: 11px; letter-spacing: 0.3px;
-  border-top: 1px solid rgba(255,255,255,0.04); margin-top: 40px;
+  border-top: 1px solid rgba(255,255,255,0.06); margin-top: 32px;
   line-height: 1.6;
   padding-bottom: max(32px, env(safe-area-inset-bottom));
 }
@@ -1102,10 +1122,15 @@ table.data-table tr:hover td { background: var(--card-hover); }
 /* Loading status text */
 .loading-status {
   text-align: center;
-  padding: var(--sp-3) 0 var(--sp-5);
+  padding: var(--sp-5) 0 var(--sp-6);
   color: var(--text-dim);
   font-size: 14px;
   font-weight: 500;
+  animation: pulse-text 2s ease-in-out infinite;
+}
+@keyframes pulse-text {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 
 /* Error/empty state container */
@@ -1143,12 +1168,12 @@ table.data-table tr:hover td { background: var(--card-hover); }
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(13, 27, 42, 0.92);
-  border-top: 1px solid rgba(255,255,255,0.06);
-  padding: 8px 0 env(safe-area-inset-bottom, 8px);
+  background: rgba(10, 20, 32, 0.94);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 6px 0 env(safe-area-inset-bottom, 6px);
   z-index: 1000;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
 @media (max-width: 768px) {
   .bottom-nav { display: flex; justify-content: space-around; }
@@ -1163,23 +1188,44 @@ table.data-table tr:hover td { background: var(--card-hover); }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   color: var(--text-dim);
   font-size: 10px;
-  padding: 8px 12px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  padding: 6px 12px 4px;
   min-height: 50px;
-  min-width: 48px;
+  min-width: 56px;
   cursor: pointer;
   text-decoration: none;
   border: none;
   background: none;
-  transition: color 0.2s;
+  position: relative;
+  transition: color 0.2s ease, transform 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.bottom-nav-item.active,
+.bottom-nav-item.active {
+  color: var(--accent);
+  font-weight: 600;
+}
 .bottom-nav-item:hover { color: var(--accent); }
-.bottom-nav-item:active { opacity: 0.7; }
-.bottom-nav-icon { font-size: 20px; }
+.bottom-nav-item:active { transform: scale(0.92); opacity: 0.8; }
+.bottom-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+/* Active indicator dot */
+.bottom-nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.bottom-nav-icon { font-size: 22px; line-height: 1; }
+/* Emoji icons render larger than Unicode dingbats -- normalize */
+.bottom-nav-icon--emoji { font-size: 18px; }
 
 /* -- Pull-to-refresh indicator -- */
 .pull-indicator {
@@ -1301,8 +1347,24 @@ table.data-table tr:hover td { background: var(--card-hover); }
 /* -- AQI/UV accessible badges -- */
 .env-badge[role="status"] { position: relative; }
 
+/* -- Universal tap feedback for interactive elements -- */
+.resort-pill:active { transform: scale(0.95); opacity: 0.8; }
+.env-badge:active { transform: scale(0.97); opacity: 0.85; }
+.alert-card:active { opacity: 0.8; }
+.decision-factor:active { transform: scale(0.95); opacity: 0.8; }
+.chains-compact:active { opacity: 0.85; }
+.storm-banner:active { opacity: 0.85; }
+.hero-card { transition: transform 0.15s ease; }
+.hero-card:active { transform: scale(0.97); }
+.sf-card { transition: transform 0.15s ease; }
+.sf-card:active { transform: scale(0.97); }
+.compare-col { transition: transform 0.15s ease; }
+.compare-col:active { transform: scale(0.98); }
+.stat-card { transition: transform 0.15s ease; }
+.stat-card:active { transform: scale(0.97); }
+
 /* =============================================
-   MOBILE POLISH (iPhone 393px target viewport)
+   MOBILE POLISH (iPhone 14 Pro 393px viewport)
    ============================================= */
 
 /* 1. Tighter container padding on small screens */
@@ -1310,13 +1372,13 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .container {
     padding-left: max(12px, env(safe-area-inset-left));
     padding-right: max(12px, env(safe-area-inset-right));
-    padding-top: 14px;
+    padding-top: 12px;
   }
 }
 
 /* 2. Hero cards: tighter 2x2 on mobile */
 @media (max-width: 500px) {
-  .hero-row { gap: 8px; margin-bottom: 16px; }
+  .hero-row { gap: 8px; margin-bottom: 12px; }
   .hero-card {
     padding: 14px 10px 12px;
   }
@@ -1330,7 +1392,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .decision-banner {
     padding: 14px 12px;
     gap: 12px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     flex-direction: row;
     text-align: left;
   }
@@ -1365,7 +1427,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
   }
 }
 
-/* 4. Comparison grid: horizontal scroll on mobile instead of vertical stack */
+/* 4. Comparison grid: horizontal scroll with snap on mobile */
 @media (max-width: 600px) {
   .compare-grid {
     grid-template-columns: none;
@@ -1375,6 +1437,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
     scrollbar-width: none;
     gap: 10px;
     padding-bottom: 4px;
+    scroll-snap-type: x mandatory;
     /* Scroll fade hint */
     -webkit-mask-image: linear-gradient(to right, black 88%, transparent);
     mask-image: linear-gradient(to right, black 88%, transparent);
@@ -1384,6 +1447,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
     min-width: 260px;
     flex-shrink: 0;
     padding: 14px 12px;
+    scroll-snap-align: start;
   }
   .compare-col .resort-name { font-size: 14px; margin-bottom: 8px; }
   .compare-row { font-size: 12px; padding: 3px 0; }
@@ -1406,16 +1470,16 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .storm-banner { padding: 10px 12px; margin-bottom: 6px; }
   .storm-banner .storm-total { font-size: 17px; }
   .avy-banner { padding: 10px 12px; gap: 10px; margin-bottom: 12px; }
-  .aqi-uv-row { gap: 8px; margin-bottom: 12px; }
-  .env-badge { padding: 6px 12px; font-size: 12px; }
-  .env-badge .env-val { font-size: 16px; }
+  .aqi-uv-row { gap: 6px; margin-bottom: 12px; }
+  .env-badge { padding: 6px 10px; font-size: 12px; }
+  .env-badge .env-val { font-size: 15px; }
   .env-badge .env-label { font-size: 10px; }
 }
 
-/* 7. Resort tabs: tighter on mobile */
+/* 7. Resort tabs: tighter but still touch-friendly on mobile */
 @media (max-width: 500px) {
   .resort-tabs { gap: 6px; margin-bottom: 12px; }
-  .resort-tab { padding: 8px 14px; font-size: 13px; min-height: 40px; }
+  .resort-tab { padding: 8px 14px; font-size: 13px; min-height: 44px; }
 }
 
 /* 8. Map: tighter margin */
@@ -1444,7 +1508,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
 /* 12. Footer: tighter on mobile */
 @media (max-width: 500px) {
-  .footer { margin-top: 24px; padding: 20px 12px; font-size: 10px; line-height: 1.5; }
+  .footer { margin-top: 16px; padding: 20px 12px; font-size: 10px; line-height: 1.5; }
 }
 
 /* 13. Sounding row tighter */
@@ -1452,11 +1516,12 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .sounding-row { font-size: 11px; gap: 8px; }
 }
 
-/* 14. Skeleton loading: match 2x2 hero on mobile */
+/* 14. Skeleton loading: match actual layout dimensions on mobile */
 @media (max-width: 500px) {
-  .skel-hero-row { gap: 8px; margin-bottom: 16px; }
-  .skel-hero { height: 85px; }
-  .skel-banner { height: 65px; margin-bottom: 14px; }
+  .skel-decision { height: 80px; margin-bottom: 12px; }
+  .skel-hero-row { gap: 8px; margin-bottom: 12px; }
+  .skel-hero { height: 78px; }
+  .skel-banner { height: 56px; margin-bottom: 12px; }
 }
 
 /* 15. Accumulation bars tighter on mobile */
@@ -1490,6 +1555,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 <div class="skeleton" id="loading">
   <div class="container">
     <div class="loading-status" id="loading-status">Loading weather data&hellip;</div>
+    <div class="skel-block skel-decision"></div>
     <div class="skel-hero-row">
       <div class="skel-block skel-hero"></div>
       <div class="skel-block skel-hero"></div>
@@ -2020,7 +2086,7 @@ function renderCurrent() {
   const hum = obs.humidity_pct;
   const cond = obs.conditions || '';
   const stn = obs.station || 'NWS Tahoe';
-  let html = `<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Source: ${esc(stn)} (lake level, ~6,225 ft)</div>`;
+  let html = `<div class="text-xs color-dim mb-4">Source: ${esc(stn)} (lake level, ~6,225 ft)</div>`;
   html += statCard('Temperature', f(temp, '\u00B0F'), feels != null ? `Feels ${feels}\u00B0F` : '', 'accent');
   html += statCard('Conditions', esc(cond) || 'N/A', '', '');
   const windStr = wind > 0 ? `${esc(wdir)} ${wind} mph` : 'Calm';
@@ -3785,7 +3851,7 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
     <span>Snowpack</span>
   </button>
   <button class="bottom-nav-item" data-section="model-comparison" data-scroll-target="model-comparison-body">
-    <span class="bottom-nav-icon">&#128202;</span>
+    <span class="bottom-nav-icon bottom-nav-icon--emoji">&#128202;</span>
     <span>Models</span>
   </button>
   <button class="bottom-nav-item" data-section="verify" data-scroll-target="verify-body">
