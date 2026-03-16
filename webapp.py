@@ -28,6 +28,91 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+
+def _build_oakland_summary(oakland: dict) -> dict:
+    """Build a compact Oakland weather summary for the web API from raw data."""
+    obs = oakland.get("home_obs", {})
+    fc = oakland.get("home_fc", {})
+    om = oakland.get("home_om", {})
+    aqi = oakland.get("home_aqi", {})
+
+    summary = {
+        "current": {},
+        "forecast": [],
+        "aqi": {},
+        "uv": {},
+        "hourly_rain": [],
+    }
+
+    # Current conditions from NWS observation
+    if obs and not obs.get("error"):
+        summary["current"] = {
+            "temp_f": obs.get("temp_f"),
+            "feels_like_f": obs.get("feels_like_f"),
+            "conditions": obs.get("conditions", ""),
+            "humidity_pct": obs.get("humidity_pct"),
+            "wind_mph": obs.get("wind_mph", 0),
+            "wind_gust_mph": obs.get("wind_gust_mph", 0),
+            "wind_dir": obs.get("wind_dir", ""),
+            "visibility_mi": obs.get("visibility_mi"),
+            "barometer_inhg": obs.get("barometer_inhg"),
+            "station": obs.get("station", ""),
+        }
+
+    # NWS 7-day forecast periods (today/tonight + next 6)
+    periods = fc.get("periods", [])
+    for p in periods[:8]:
+        summary["forecast"].append({
+            "name": p.get("name", ""),
+            "temp": p.get("temperature"),
+            "unit": p.get("temperatureUnit", "F"),
+            "short": p.get("shortForecast", ""),
+            "detail": p.get("detailedForecast", ""),
+            "wind_speed": p.get("windSpeed", ""),
+            "wind_dir": p.get("windDirection", ""),
+            "is_daytime": p.get("isDaytime", True),
+            "rain_pct": p.get("probabilityOfPrecipitation", {}).get("value"),
+        })
+
+    # AQI
+    if aqi and not aqi.get("error"):
+        summary["aqi"] = {
+            "aqi": aqi.get("aqi"),
+            "category": aqi.get("category", ""),
+            "pm2_5": aqi.get("pm2_5"),
+        }
+
+    # UV and solar from Open-Meteo
+    if om and not om.get("error"):
+        daily = om.get("daily", {})
+        uv_max_list = daily.get("uv_index_max", [])
+        sunrise_list = daily.get("sunrise", [])
+        sunset_list = daily.get("sunset", [])
+        if uv_max_list:
+            summary["uv"] = {"max": uv_max_list[0]}
+        if sunrise_list and sunset_list:
+            # Extract just time portion
+            try:
+                sr = sunrise_list[0].split("T")[1] if "T" in str(sunrise_list[0]) else sunrise_list[0]
+                ss = sunset_list[0].split("T")[1] if "T" in str(sunset_list[0]) else sunset_list[0]
+                summary["sunrise"] = sr
+                summary["sunset"] = ss
+            except (IndexError, AttributeError):
+                pass
+
+        # Hourly rain probability for next 24h from Open-Meteo
+        hourly = om.get("hourly", {})
+        times = hourly.get("time", [])
+        precip = hourly.get("precipitation", [])
+        for i in range(min(24, len(times), len(precip))):
+            summary["hourly_rain"].append({
+                "time": times[i],
+                "precip_mm": precip[i] if precip[i] is not None else 0,
+            })
+
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # In-memory cache
 # ---------------------------------------------------------------------------
@@ -54,9 +139,12 @@ def get_analysis(force: bool = False) -> dict:
         analysis = fetch_tahoe_analysis()
 
         # Daily forecast verification logging (best-effort)
+        # Also include Oakland data in the API response for the web dashboard
         try:
             oakland = fetch_oakland_data()
             log_daily_verification(oakland["home_obs"], oakland["home_fc"], analysis)
+            # Expose Oakland data for the web UI
+            analysis["oakland"] = _build_oakland_summary(oakland)
         except Exception:
             pass  # verification is best-effort, never break main flow
 

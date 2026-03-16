@@ -1099,6 +1099,145 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .faq-a { font-size: 11px; }
 }
 
+/* -- Oakland section -- */
+.oakland-card {
+  background: linear-gradient(135deg, #1a2634, #1e3a5f);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.oakland-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.oakland-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+.oakland-station {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.oakland-hero {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.oakland-temp {
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.oakland-temp-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.oakland-conditions {
+  font-size: 14px;
+  font-weight: 600;
+}
+.oakland-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.oakland-detail {
+  background: var(--card-inset);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  text-align: center;
+}
+.oakland-detail .od-val {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.oakland-detail .od-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+.oakland-rain-bars {
+  display: flex;
+  gap: 1px;
+  height: 40px;
+  align-items: flex-end;
+  margin-bottom: 4px;
+}
+.oakland-rain-bar {
+  flex: 1;
+  background: var(--rain);
+  opacity: 0.6;
+  border-radius: 2px 2px 0 0;
+  min-height: 1px;
+  transition: height 0.3s ease;
+}
+.oakland-rain-bar.active { opacity: 1; }
+.oakland-rain-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.oakland-forecast-row {
+  display: flex;
+  overflow-x: auto;
+  gap: 8px;
+  padding: 4px 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.oakland-forecast-row::-webkit-scrollbar { display: none; }
+.oakland-fc-card {
+  background: var(--card-inset);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  text-align: center;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+.oakland-fc-card .ofc-name {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.oakland-fc-card .ofc-temp {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.oakland-fc-card .ofc-desc {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+.oakland-fc-card .ofc-rain {
+  font-size: 10px;
+  color: var(--rain);
+  font-weight: 600;
+  margin-top: 2px;
+}
+@media (max-width: 500px) {
+  .oakland-card { padding: 14px 12px; }
+  .oakland-temp { font-size: 36px; }
+  .oakland-hero { gap: 14px; }
+  .oakland-detail .od-val { font-size: 16px; }
+  .oakland-detail-grid { gap: 6px; }
+}
+
 /* -- Utility classes (replace inline styles in JS) -- */
 .flex-between { display: flex; justify-content: space-between; align-items: baseline; }
 .flex-center { display: flex; align-items: center; }
@@ -1215,9 +1354,9 @@ table.data-table tr:hover td { background: var(--card-hover); }
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.1px;
-  padding: 6px 12px 4px;
+  padding: 6px 8px 4px;
   min-height: 50px;
-  min-width: 56px;
+  min-width: 48px;
   cursor: pointer;
   text-decoration: none;
   border: none;
@@ -1281,10 +1420,14 @@ table.data-table tr:hover td { background: var(--card-hover); }
 /* -- Map layer toggles -- */
 .map-layer-toggles { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
 .map-layer-btn {
-  padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;
+  padding: 8px 14px; border-radius: 16px; font-size: 11px; font-weight: 600;
+  min-height: 36px;
   border: 1px solid rgba(255,255,255,0.15); background: transparent;
   color: var(--text-dim); cursor: pointer; transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
+.map-layer-btn:active { transform: scale(0.95); opacity: 0.8; }
+.map-layer-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .map-layer-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .map-layer-btn:hover:not(.active) { background: rgba(255,255,255,0.05); }
 
@@ -1484,6 +1627,27 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .compare-col .resort-name { font-size: 14px; margin-bottom: 8px; }
   .compare-row { font-size: 12px; padding: 3px 0; }
 }
+/* Comparison page dots (mobile scroll indicator) */
+.compare-dots {
+  display: none;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+@media (max-width: 600px) {
+  .compare-dots { display: flex; }
+}
+.compare-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.compare-dot.active {
+  background: var(--accent);
+  transform: scale(1.3);
+}
 
 /* 5. Section headers: tighter vertical spacing on mobile */
 @media (max-width: 500px) {
@@ -1514,10 +1678,12 @@ table.data-table tr:hover td { background: var(--card-hover); }
   .resort-tab { padding: 8px 14px; font-size: 13px; min-height: 44px; }
 }
 
-/* 8. Map: tighter margin */
+/* 8. Map: tighter margin + touch-friendly layer buttons */
 @media (max-width: 500px) {
   .map-container { height: 240px; }
   #map-section { margin-bottom: 12px; }
+  .map-layer-toggles { gap: 6px; }
+  .map-layer-btn { min-height: 40px; padding: 9px 14px; font-size: 12px; }
 }
 
 /* 9. Snowfall cards tighter */
@@ -1625,6 +1791,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div class="aqi-uv-row" id="aqi-uv-row"></div>
   <div id="alerts-section"></div>
   <div id="narrative-section"></div>
+  <div id="oakland-section"></div>
 
   <div id="map-section" class="section mb-4">
     <div class="map-layer-toggles" id="map-layer-toggles">
@@ -1950,6 +2117,7 @@ function render() {
   renderHeader();
   renderAlerts();
   renderNarrative();
+  renderOakland();
   renderStorm();
   renderCurrent();
   renderAvalanche();
@@ -2855,8 +3023,19 @@ function renderComparison() {
   html += '</div>';
 
   html += '<div class="compare-grid">';
+  const liftsData = DATA.lifts || {};
   for (const rn of RESORT_NAMES) {
     const c = comp[rn] || {};
+    // Look up lift status (API keys are lowercase)
+    const liftKey = Object.keys(liftsData).find(k => k.toLowerCase() === rn.toLowerCase()) || rn.toLowerCase();
+    const liftInfo = liftsData[liftKey];
+    let liftStr = '\u2014';
+    let liftCls = '';
+    if (liftInfo && !liftInfo.error && liftInfo.total > 0) {
+      const pct = Math.round(liftInfo.open / liftInfo.total * 100);
+      liftCls = pct > 75 ? 'color-safe' : pct > 25 ? 'color-moderate' : 'color-danger';
+      liftStr = `<span class="${liftCls}">${liftInfo.open}/${liftInfo.total}</span> (${pct}%)`;
+    }
     html += `<div class="compare-col">
       <div class="resort-name resort-border-${rn.toLowerCase()}">${rn}</div>
       ${compareRow('Peak Temp', `<span class="${tempClass(c.peak_temp_f)}">${f(c.peak_temp_f, '\u00B0F')}</span>`)}
@@ -2864,6 +3043,7 @@ function renderComparison() {
       ${compareRow('Next 7 Days', `<span class="snow-val">${f(c.peak_7d_forecast_in, '"')}</span>`)}
       ${compareRow('Snowpack', `<span class="snow-val">${f(c.snowpack_depth_in, '"')}</span>`)}
       ${compareRow('Quality', esc(c.peak_quality || '\u2014'))}
+      ${compareRow('Lifts Open', liftStr)}
       <div class="compare-detail">
         ${compareRow('Elevation', `${f(c.base_elev_ft)}\u2014${f(c.peak_elev_ft)} ft`)}
         ${compareRow('Vert Drop', f(c.vert_ft, ' ft'))}
@@ -2878,6 +3058,12 @@ function renderComparison() {
       </div>
       <button class="compare-toggle" aria-expanded="false">More &#9662;</button>
     </div>`;
+  }
+  html += '</div>';
+  // Page dots for mobile horizontal scroll
+  html += '<div class="compare-dots" id="compare-dots">';
+  for (let i = 0; i < RESORT_NAMES.length; i++) {
+    html += `<span class="compare-dot${i === 0 ? ' active' : ''}"></span>`;
   }
   html += '</div>';
 
@@ -2895,7 +3081,25 @@ function renderComparison() {
 
   document.getElementById('comparison-panel').innerHTML = html;
   document.getElementById('comparison-panel').classList.add('active');
-  requestAnimationFrame(() => { buildCompareToggles(); buildCompareChart(); buildCompareTempChart(); });
+  requestAnimationFrame(() => {
+    buildCompareToggles(); buildCompareChart(); buildCompareTempChart();
+    // Wire up comparison page dots scroll observer
+    initCompareDots();
+  });
+}
+
+function initCompareDots() {
+  const grid = document.querySelector('#comparison-panel .compare-grid');
+  const dots = document.querySelectorAll('#compare-dots .compare-dot');
+  if (!grid || !dots.length) return;
+  grid.addEventListener('scroll', () => {
+    const cols = grid.querySelectorAll('.compare-col');
+    if (!cols.length) return;
+    const scrollLeft = grid.scrollLeft;
+    const colWidth = cols[0].offsetWidth + 10; // gap
+    const activeIdx = Math.round(scrollLeft / colWidth);
+    dots.forEach((dot, i) => dot.classList.toggle('active', i === activeIdx));
+  }, { passive: true });
 }
 
 function toggleCompareDetail(el) {
@@ -3299,6 +3503,103 @@ function renderNarrative() {
       <div class="narrative-title">Storm Briefing</div>
       ${esc(narrative)}
     </div>`;
+}
+
+// -- Oakland Local Weather --
+function renderOakland() {
+  const oak = DATA.oakland;
+  const el = document.getElementById('oakland-section');
+  if (!el) return;
+  if (!oak || !oak.current || !oak.current.temp_f) {
+    el.innerHTML = '';
+    return;
+  }
+  const c = oak.current;
+  const aqi = oak.aqi || {};
+  const uv = oak.uv || {};
+
+  let html = '<div class="oakland-card">';
+  html += '<div class="oakland-header">';
+  html += '<span class="oakland-title">Oakland Weather</span>';
+  if (c.station) html += `<span class="oakland-station">${esc(c.station)}</span>`;
+  html += '</div>';
+
+  // Hero: temp + conditions
+  html += '<div class="oakland-hero">';
+  html += `<div>
+    <div class="oakland-temp ${tempClass(c.temp_f)}">${Math.round(c.temp_f)}\u00B0</div>
+    <div class="oakland-temp-sub">Feels ${c.feels_like_f != null ? Math.round(c.feels_like_f) + '\u00B0' : '\u2014'}</div>
+  </div>`;
+  html += `<div>
+    <div class="oakland-conditions">${esc(c.conditions || '')}</div>
+  </div>`;
+  html += '</div>';
+
+  // Detail grid: wind, humidity, AQI, UV, visibility
+  html += '<div class="oakland-detail-grid">';
+  const windStr = c.wind_mph > 0 ? `${esc(c.wind_dir)} ${Math.round(c.wind_mph)}` : 'Calm';
+  html += `<div class="oakland-detail"><div class="od-val">${windStr}</div><div class="od-label">Wind (mph)</div></div>`;
+  if (c.wind_gust_mph > 0) {
+    html += `<div class="oakland-detail"><div class="od-val">${Math.round(c.wind_gust_mph)}</div><div class="od-label">Gusts (mph)</div></div>`;
+  }
+  if (c.humidity_pct != null) {
+    html += `<div class="oakland-detail"><div class="od-val">${c.humidity_pct}%</div><div class="od-label">Humidity</div></div>`;
+  }
+  if (aqi.aqi != null) {
+    const aqiCls = aqiBadgeClass(aqi.aqi);
+    html += `<div class="oakland-detail"><div class="od-val ${aqiCls === 'aqi-good' ? 'color-safe' : aqiCls === 'aqi-moderate' ? 'color-moderate' : 'color-danger'}">${aqi.aqi}</div><div class="od-label">AQI</div></div>`;
+  }
+  if (uv.max != null) {
+    const uvLvl = uvLevelName(uv.max);
+    html += `<div class="oakland-detail"><div class="od-val">${Math.round(uv.max)}</div><div class="od-label">UV (${uvLvl})</div></div>`;
+  }
+  if (c.visibility_mi != null && c.visibility_mi > 0) {
+    html += `<div class="oakland-detail"><div class="od-val">${c.visibility_mi}mi</div><div class="od-label">Visibility</div></div>`;
+  }
+  html += '</div>';
+
+  // 24-hour rain bar chart
+  const hourlyRain = oak.hourly_rain || [];
+  if (hourlyRain.length > 0) {
+    const maxPrecip = Math.max(...hourlyRain.map(h => h.precip_mm || 0), 0.1);
+    const hasRain = hourlyRain.some(h => (h.precip_mm || 0) > 0);
+    if (hasRain) {
+      html += '<div class="panel-label" style="margin-top:8px">Next 24 Hours - Rain</div>';
+      html += '<div class="oakland-rain-bars">';
+      for (const h of hourlyRain) {
+        const pct = Math.round(((h.precip_mm || 0) / maxPrecip) * 100);
+        const active = (h.precip_mm || 0) > 0 ? ' active' : '';
+        html += `<div class="oakland-rain-bar${active}" style="height:${Math.max(pct, 2)}%"></div>`;
+      }
+      html += '</div>';
+      // Time labels
+      const firstTime = hourlyRain[0]?.time || '';
+      const lastTime = hourlyRain[hourlyRain.length - 1]?.time || '';
+      const fmtTime = (t) => { try { return new Date(t).toLocaleTimeString('en-US', {hour:'numeric'}); } catch(e) { return ''; } };
+      html += `<div class="oakland-rain-labels"><span>${fmtTime(firstTime)}</span><span>${fmtTime(lastTime)}</span></div>`;
+    }
+  }
+
+  // NWS forecast periods (scrollable row)
+  const forecast = oak.forecast || [];
+  if (forecast.length > 0) {
+    html += '<div class="panel-label" style="margin-top:12px">Forecast</div>';
+    html += '<div class="oakland-forecast-row">';
+    for (const p of forecast.slice(0, 6)) {
+      const rainStr = p.rain_pct != null && p.rain_pct > 0 ? `<div class="ofc-rain">${p.rain_pct}% rain</div>` : '';
+      const tempCls = tempClass(p.temp);
+      html += `<div class="oakland-fc-card">
+        <div class="ofc-name">${esc(p.name || '')}</div>
+        <div class="ofc-temp ${tempCls}">${p.temp != null ? p.temp + '\u00B0' : '\u2014'}</div>
+        <div class="ofc-desc">${esc(p.short || '')}</div>
+        ${rainStr}
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 // -- Model Comparison Panel --
@@ -3931,7 +4232,6 @@ document.addEventListener('click', function(e) {
   }
 
   // Resort comparison pill toggle
-  // Resort comparison pill toggle
   const pill = e.target.closest('.resort-pill[data-resort]');
   if (pill) {
     toggleCompareResort(pill.dataset.resort);
@@ -4048,12 +4348,82 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
     }
   }, {passive: true});
 }
+
+// --- Bottom nav: IntersectionObserver for scroll-aware active state ---
+(function initNavObserver() {
+  // Map each bottom-nav section key to the DOM element it should observe
+  const sectionMap = {
+    top: document.getElementById('decision-section'),
+    oakland: document.getElementById('oakland-section'),
+    resort: document.getElementById('resort-tabs'),
+    snotel: document.getElementById('snotel-body'),
+    'model-comparison': document.getElementById('model-comparison-body'),
+    verify: document.getElementById('verify-body'),
+  };
+  let _navUserClicked = false;
+  let _navClickTimer = null;
+
+  // Debounce: when user clicks a nav item, suppress observer updates briefly
+  document.querySelectorAll('.bottom-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      _navUserClicked = true;
+      clearTimeout(_navClickTimer);
+      _navClickTimer = setTimeout(() => { _navUserClicked = false; }, 800);
+    });
+  });
+
+  function updateActiveNav(sectionKey) {
+    if (_navUserClicked) return;
+    document.querySelectorAll('.bottom-nav-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.section === sectionKey);
+    });
+  }
+
+  // Use IntersectionObserver with rootMargin to trigger when section enters top 40% of viewport
+  const observer = new IntersectionObserver(entries => {
+    // Find the entry closest to the top of the viewport that is intersecting
+    let bestKey = null;
+    let bestTop = Infinity;
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        const key = entry.target.dataset.navSection;
+        const rect = entry.boundingClientRect;
+        if (rect.top < bestTop) {
+          bestTop = rect.top;
+          bestKey = key;
+        }
+      }
+    }
+    if (bestKey) updateActiveNav(bestKey);
+  }, { rootMargin: '-10% 0px -50% 0px', threshold: 0 });
+
+  // Tag elements and observe
+  for (const [key, el] of Object.entries(sectionMap)) {
+    if (el) {
+      el.dataset.navSection = key;
+      observer.observe(el);
+    }
+  }
+
+  // Handle scroll to very top -> activate "Decision" tab
+  let _scrollTimer = null;
+  window.addEventListener('scroll', () => {
+    clearTimeout(_scrollTimer);
+    _scrollTimer = setTimeout(() => {
+      if (window.scrollY < 100) updateActiveNav('top');
+    }, 100);
+  }, { passive: true });
+})();
 </script>
 
 <nav class="bottom-nav" id="bottom-nav" role="navigation" aria-label="Quick navigation">
   <button class="bottom-nav-item active" data-section="top" data-scroll-target="top">
     <span class="bottom-nav-icon">&#9729;</span>
     <span>Decision</span>
+  </button>
+  <button class="bottom-nav-item" data-section="oakland" data-scroll-target="oakland-section">
+    <span class="bottom-nav-icon">&#9748;</span>
+    <span>Oakland</span>
   </button>
   <button class="bottom-nav-item" data-section="resort" data-scroll-target="resort-tabs">
     <span class="bottom-nav-icon">&#9968;</span>
