@@ -962,9 +962,9 @@ table.data-table tr:hover td { background: var(--card-hover); }
   box-shadow: var(--shadow-card);
 }
 .decision-score {
-  font-size: 64px; font-weight: 900; line-height: 1;
+  font-size: 48px; font-weight: 900; line-height: 1;
   width: 100px; height: 100px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   border-radius: 16px;
   background: rgba(255,255,255,0.04);
   border: 2px solid;
@@ -973,8 +973,11 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .decision-score.green { color: var(--safe); border-color: var(--safe); }
 .decision-score.yellow { color: var(--moderate); border-color: var(--moderate); }
 .decision-score.red { color: var(--danger); border-color: var(--danger); }
-.score-max { font-size: 18px; font-weight: 400; opacity: 0.4; }
-@media (max-width: 600px) { .score-max { font-size: 14px; } }
+.score-max { font-size: 12px; font-weight: 500; opacity: 0.5; margin-top: 2px; }
+@media (max-width: 600px) {
+  .decision-score { width: 80px; height: 80px; font-size: 36px; }
+  .score-max { font-size: 10px; }
+}
 .decision-info { flex: 1; min-width: 0; }
 .decision-label { font-size: 20px; font-weight: 700; }
 .decision-best { font-size: 14px; color: var(--accent); margin-top: 4px; }
@@ -990,7 +993,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .decision-factor .df-val { color: var(--accent); font-weight: 700; }
 @media (max-width: 600px) {
   .decision-banner { flex-direction: column; text-align: center; padding: 18px 14px; gap: 14px; }
-  .decision-score { width: 80px; height: 80px; font-size: 48px; }
+  .decision-score { width: 80px; height: 80px; font-size: 36px; }
   .decision-label { font-size: 17px; }
   .decision-factors { justify-content: center; }
 }
@@ -2436,11 +2439,15 @@ function renderComparison() {
       <div class="resort-toggles" id="resort-toggles"></div>
     </div>
     <div class="chart-container chart-container--extra"><canvas id="chart-compare-all"></canvas></div>
+    <div class="compare-chart-header mt-3">
+      <div class="panel-label">7-Day Temperature (Peak)</div>
+    </div>
+    <div class="chart-container chart-container--extra"><canvas id="chart-compare-temp"></canvas></div>
   </div>`;
 
   document.getElementById('comparison-panel').innerHTML = html;
   document.getElementById('comparison-panel').classList.add('active');
-  requestAnimationFrame(() => { buildCompareToggles(); buildCompareChart(); });
+  requestAnimationFrame(() => { buildCompareToggles(); buildCompareChart(); buildCompareTempChart(); });
 }
 
 function toggleCompareDetail(el) {
@@ -2503,6 +2510,7 @@ function toggleCompareResort(name) {
   }
   buildCompareToggles();
   buildCompareChart();
+  buildCompareTempChart();
 }
 
 function buildCompareChart() {
@@ -2547,6 +2555,70 @@ function buildCompareChart() {
       scales: {
         x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 0, font: { size: 12, weight: 'bold' } } },
         y: { ...SCALE_SNOW, grid: { color: '#1a263422' } },
+      },
+    },
+  });
+}
+
+function buildCompareTempChart() {
+  const canvas = document.getElementById('chart-compare-temp');
+  if (!canvas) return;
+  destroyChart('compare-temp');
+
+  const MAX_DAYS = 7;
+  const datasets = [];
+  let labels = [];
+
+  for (const rn of RESORT_NAMES) {
+    if (!_compareActiveResorts.has(rn)) continue;
+    const spread = (DATA.resorts[rn]?.zones?.peak?.model_spread || []).slice(0, MAX_DAYS);
+    if (labels.length === 0) {
+      labels = spread.map(d => {
+        try { return new Date(d.date).toLocaleDateString('en-US', {weekday: 'short'}); }
+        catch(e) { return formatDateLabel(d.date); }
+      });
+    }
+    const highs = spread.map(d => (d.models?.GFS||{}).temp_high_f ?? null);
+    datasets.push({
+      label: rn + ' High',
+      data: highs,
+      borderColor: RESORT_COLORS[rn],
+      backgroundColor: RESORT_COLORS[rn] + '22',
+      borderWidth: 2.5,
+      tension: 0.3,
+      pointRadius: 4,
+      pointBackgroundColor: RESORT_COLORS[rn],
+      fill: false,
+    });
+  }
+
+  // Add 32F freezing line
+  if (labels.length > 0) {
+    datasets.push({
+      label: '32\u00B0F',
+      data: Array(labels.length).fill(32),
+      borderColor: '#7ec8e344',
+      borderWidth: 1,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+    });
+  }
+
+  charts['compare-temp'] = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { ...CHART_TOOLTIP, callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}\u00B0F` } },
+      },
+      scales: {
+        x: { ...SCALE_X, ticks: { ...SCALE_X.ticks, maxRotation: 0, font: { size: 12, weight: 'bold' } } },
+        y: { ...SCALE_TEMP, grid: { color: '#1a263422' } },
       },
     },
   });
