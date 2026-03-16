@@ -1544,7 +1544,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
   <div class="section">
     <button class="section-header" aria-expanded="false">
-      <span>Current Observation Detail <span class="section-preview" id="preview-current"></span></span> <span class="toggle">&#9662;</span>
+      <span>Tahoe Basin Conditions <span class="section-preview" id="preview-current"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed">
       <div class="current-row" id="current-row"></div>
@@ -1556,6 +1556,10 @@ table.data-table tr:hover td { background: var(--card-hover); }
       <span>Snowpack History &amp; Season Stats <span class="section-preview" id="preview-history"></span></span> <span class="toggle">&#9662;</span>
     </button>
     <div class="section-body collapsed" id="history-body">
+      <div class="compare-chart-header">
+        <div class="panel-label">10-Day Snow Depth Trend</div>
+        <div class="resort-toggles" id="snotel-toggles"></div>
+      </div>
       <div class="chart-container chart-container--extra"><canvas id="chart-snotel-history"></canvas></div>
       <div id="season-stats-row"></div>
     </div>
@@ -2015,7 +2019,8 @@ function renderCurrent() {
   const wdir = obs.wind_dir || c.wind_dir || '';
   const hum = obs.humidity_pct;
   const cond = obs.conditions || '';
-  let html = '';
+  const stn = obs.station || 'NWS Tahoe';
+  let html = `<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Source: ${esc(stn)} (lake level, ~6,225 ft)</div>`;
   html += statCard('Temperature', f(temp, '\u00B0F'), feels != null ? `Feels ${feels}\u00B0F` : '', 'accent');
   html += statCard('Conditions', esc(cond) || 'N/A', '', '');
   const windStr = wind > 0 ? `${esc(wdir)} ${wind} mph` : 'Calm';
@@ -2839,11 +2844,36 @@ function renderSnotel() {
 }
 
 // -- History --
+let _snotelActiveStations = new Set();
+let _snotelAllStations = []; // cached for toggle rebuilds
+
+function buildSnotelToggles() {
+  const container = document.getElementById('snotel-toggles');
+  if (!container || !_snotelAllStations.length) return;
+
+  container.innerHTML = _snotelAllStations.map((s, i) => {
+    const active = _snotelActiveStations.has(s.name);
+    const color = SNOTEL_COLORS[i % SNOTEL_COLORS.length];
+    const short = s.name.length > 12 ? s.name.slice(0, 11) + '\u2026' : s.name;
+    return `<button class="resort-pill ${active ? 'active' : ''}" data-snotel="${esc(s.name)}"
+      style="--pill-color:${color}">${esc(short)} <span class="pill-snow">${s.maxDepth}"</span></button>`;
+  }).join('');
+}
+
+function toggleSnotelStation(name) {
+  if (_snotelActiveStations.has(name)) {
+    if (_snotelActiveStations.size > 1) _snotelActiveStations.delete(name);
+  } else {
+    _snotelActiveStations.add(name);
+  }
+  buildSnotelToggles();
+  buildSnotelHistoryChart();
+}
+
 function renderHistory() {
   const hist = DATA.snotel_history || {};
   const season = DATA.season_stats || {};
 
-  // Build line chart of 10-day snow depth trends
   destroyChart('snotel-history');
   const canvas = document.getElementById('chart-snotel-history');
   const stationNames = Object.keys(hist).filter(n => {
@@ -2853,10 +2883,32 @@ function renderHistory() {
 
   if (!canvas || !stationNames.length) return;
 
-  // Collect all dates for x-axis
+  // Rank stations by max depth and cache for toggles
+  _snotelAllStations = stationNames.map((name, i) => {
+    const depths = (hist[name].SNWD || []).map(([d,v]) => v).filter(v => v != null);
+    return { name, maxDepth: Math.max(...depths, 0), idx: i };
+  }).sort((a, b) => b.maxDepth - a.maxDepth);
+
+  // Auto-select top 3 on first load
+  if (_snotelActiveStations.size === 0) {
+    _snotelAllStations.slice(0, 3).forEach(s => _snotelActiveStations.add(s.name));
+  }
+
+  buildSnotelToggles();
+  buildSnotelHistoryChart();
+}
+
+function buildSnotelHistoryChart() {
+  const hist = DATA.snotel_history || {};
+  const canvas = document.getElementById('chart-snotel-history');
+  if (!canvas) return;
+  destroyChart('snotel-history');
+
+  // Collect dates from active stations
   const allDates = new Set();
-  for (const sname of stationNames) {
-    for (const [date] of (hist[sname].SNWD || [])) allDates.add(date);
+  for (const s of _snotelAllStations) {
+    if (!_snotelActiveStations.has(s.name)) continue;
+    for (const [date] of (hist[s.name]?.SNWD || [])) allDates.add(date);
   }
   const sortedDates = [...allDates].sort();
   const labels = sortedDates.map(d => {
@@ -2864,43 +2916,35 @@ function renderHistory() {
     return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
   });
 
-  const datasets = stationNames.map((sname, i) => {
-    const depthMap = {};
-    for (const [date, val] of (hist[sname].SNWD || [])) depthMap[date] = val;
-    return {
-      label: sname,
-      data: sortedDates.map(d => depthMap[d] ?? null),
-      borderColor: SNOTEL_COLORS[i % SNOTEL_COLORS.length],
-      backgroundColor: SNOTEL_COLORS[i % SNOTEL_COLORS.length] + '22',
-      borderWidth: 2,
-      tension: 0.3,
-      pointRadius: 3,
-      pointBackgroundColor: SNOTEL_COLORS[i % SNOTEL_COLORS.length],
-      fill: false,
-      spanGaps: true,
-    };
-  });
-
-  // On mobile, limit to top 4 stations by max depth to keep legend manageable
-  const isMobile = window.innerWidth < 600;
-  let finalDatasets = datasets;
-  if (isMobile && datasets.length > 4) {
-    finalDatasets = datasets
-      .map(ds => ({ ds, max: Math.max(...ds.data.filter(v => v != null)) }))
-      .sort((a, b) => b.max - a.max)
-      .slice(0, 4)
-      .map(x => x.ds);
-  }
+  const datasets = _snotelAllStations
+    .filter(s => _snotelActiveStations.has(s.name))
+    .map(s => {
+      const depthMap = {};
+      for (const [date, val] of (hist[s.name]?.SNWD || [])) depthMap[date] = val;
+      const color = SNOTEL_COLORS[s.idx % SNOTEL_COLORS.length];
+      return {
+        label: s.name,
+        data: sortedDates.map(d => depthMap[d] ?? null),
+        borderColor: color,
+        backgroundColor: color + '22',
+        borderWidth: 2.5,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: color,
+        fill: false,
+        spanGaps: true,
+      };
+    });
 
   charts['snotel-history'] = new Chart(canvas, {
     type: 'line',
-    data: { labels, datasets: finalDatasets },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { ...CHART_LEGEND, position: 'bottom', labels: { ...CHART_LEGEND.labels, boxWidth: 10, padding: 6, font: { size: 10 } } },
+        legend: { display: false },
         tooltip: {
           ...CHART_TOOLTIP,
           callbacks: {
@@ -3626,9 +3670,17 @@ document.addEventListener('click', function(e) {
   }
 
   // Resort comparison pill toggle
+  // Resort comparison pill toggle
   const pill = e.target.closest('.resort-pill[data-resort]');
   if (pill) {
     toggleCompareResort(pill.dataset.resort);
+    return;
+  }
+
+  // SNOTEL station pill toggle
+  const snotelPill = e.target.closest('.resort-pill[data-snotel]');
+  if (snotelPill) {
+    toggleSnotelStation(snotelPill.dataset.snotel);
     return;
   }
 
