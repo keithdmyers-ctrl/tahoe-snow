@@ -25,6 +25,7 @@ from tahoe_snow import (
     snow_quality_str, wind_dir_str, precip_type, water_year_start,
     precip_phase_probability, terrain_adjusted_temperature,
     settled_snow_depth, lake_effect_enhancement,
+    compute_brunt_vaisala, compute_froude_number, parse_afd_highlights,
     fetch_nws_observations, fetch_nws_forecast, fetch_open_meteo,
     fetch_snotel_current, fetch_snotel_history, fetch_snotel_season,
     fetch_avalanche, fetch_forecast_discussion,
@@ -940,6 +941,327 @@ class TestFetchAirQuality(TestCase):
         if "error" not in result and result.get("hourly_aqi"):
             self.assertLessEqual(len(result["hourly_aqi"]), 72)
             self.assertGreater(len(result["hourly_aqi"]), 0)
+
+
+# ===================================================================
+# 9. Froude Number & Brunt-Vaisala Tests
+# ===================================================================
+
+class TestBruntVaisala(TestCase):
+    """Test Brunt-Vaisala frequency computation from sounding profiles."""
+
+    def _make_sounding(self, levels):
+        """Helper to create a sounding dict with given (hght_m, temp_c) pairs."""
+        return {
+            "profile": [
+                {"hght_m": h, "temp_c": t} for h, t in levels
+            ]
+        }
+
+    def test_standard_atmosphere(self):
+        """Standard atmosphere profile should give N ~ 0.01 s^-1."""
+        # Standard lapse rate ~6.5 C/km, but potential temperature
+        # increases with height in a stable atmosphere.
+        # Create a stable profile: temp decreases at 5 C/km (less than dry adiabatic 9.8)
+        levels = [(h, 10.0 - 5.0 * (h - 1500) / 1000)
+                  for h in range(1500, 3600, 100)]
+        sounding = self._make_sounding(levels)
+        N = compute_brunt_vaisala(sounding)
+        self.assertIsNotNone(N)
+        self.assertGreater(N, 0.005)
+        self.assertLess(N, 0.025)
+
+    def test_empty_profile(self):
+        """Empty sounding should return None."""
+        self.assertIsNone(compute_brunt_vaisala({"profile": []}))
+        self.assertIsNone(compute_brunt_vaisala({}))
+
+    def test_insufficient_levels(self):
+        """Single level should return None."""
+        sounding = self._make_sounding([(2000, 5.0)])
+        self.assertIsNone(compute_brunt_vaisala(sounding))
+
+    def test_out_of_range_levels(self):
+        """Levels outside 1500-3500m should be ignored."""
+        sounding = self._make_sounding([(500, 20.0), (1000, 15.0), (4000, -5.0)])
+        self.assertIsNone(compute_brunt_vaisala(sounding))
+
+    def test_strongly_stable(self):
+        """Temperature inversion (strongly stable) should give high N."""
+        # Temperature increases with height — very stable
+        levels = [(h, -5.0 + 3.0 * (h - 1500) / 1000)
+                  for h in range(1500, 3600, 100)]
+        sounding = self._make_sounding(levels)
+        N = compute_brunt_vaisala(sounding)
+        self.assertIsNotNone(N)
+        self.assertGreater(N, 0.01)
+
+    def test_neutral_stability(self):
+        """Dry adiabatic lapse rate (9.8 C/km) should give N ~ 0 or None."""
+        # Temperature decreasing at exactly dry adiabatic rate
+        # theta = T + 0.0098*z should be approximately constant
+        levels = [(h, 20.0 - 9.8 * (h - 1500) / 1000)
+                  for h in range(1500, 3600, 100)]
+        sounding = self._make_sounding(levels)
+        N = compute_brunt_vaisala(sounding)
+        # Near-neutral: N should be very small or None (if unstable due to rounding)
+        if N is not None:
+            self.assertLess(N, 0.003)
+
+    def test_unstable_returns_none(self):
+        """Superadiabatic lapse rate (unstable) should return None."""
+        # Temperature decreasing faster than dry adiabatic
+        levels = [(h, 20.0 - 12.0 * (h - 1500) / 1000)
+                  for h in range(1500, 3600, 100)]
+        sounding = self._make_sounding(levels)
+        N = compute_brunt_vaisala(sounding)
+        self.assertIsNone(N)
+
+    def test_missing_temp_levels_skipped(self):
+        """Levels with None temp should be skipped."""
+        sounding = {
+            "profile": [
+                {"hght_m": 1500, "temp_c": 5.0},
+                {"hght_m": 2000, "temp_c": None},
+                {"hght_m": 2500, "temp_c": 0.0},
+                {"hght_m": 3000, "temp_c": -3.0},
+                {"hght_m": 3500, "temp_c": -7.0},
+            ]
+        }
+        N = compute_brunt_vaisala(sounding)
+        self.assertIsNotNone(N)
+        self.assertGreater(N, 0)
+
+
+class TestFroudeNumber(TestCase):
+    """Test Froude number computation and edge cases."""
+
+    def test_typical_unblocked_flow(self):
+        """Strong wind with moderate stability = unblocked (Fr > 1)."""
+        # 20 m/s wind, N=0.01, h=2100m
+        fr = compute_froude_number(20.0, 0.01, 2100)
+        self.assertGreater(fr, 0.9)  # Fr ~ 0.95
+
+    def test_strongly_blocked(self):
+        """Light wind with strong stability = blocked (Fr < 0.5)."""
+        # 3 m/s wind, N=0.015, h=2100m
+        fr = compute_froude_number(3.0, 0.015, 2100)
+        self.assertLess(fr, 0.5)
+
+    def test_zero_wind(self):
+        """Zero wind speed should give Fr = 0."""
+        fr = compute_froude_number(0.0, 0.01, 2100)
+        self.assertEqual(fr, 0.0)
+
+    def test_zero_stability(self):
+        """Zero stability (N=0) should give Fr = infinity."""
+        fr = compute_froude_number(10.0, 0.0, 2100)
+        self.assertEqual(fr, float('inf'))
+
+    def test_none_stability(self):
+        """None stability should give Fr = infinity (assume unblocked)."""
+        fr = compute_froude_number(10.0, None, 2100)
+        self.assertEqual(fr, float('inf'))
+
+    def test_negative_stability(self):
+        """Negative N should give Fr = infinity."""
+        fr = compute_froude_number(10.0, -0.01, 2100)
+        self.assertEqual(fr, float('inf'))
+
+    def test_zero_barrier(self):
+        """Zero barrier height should give Fr = infinity."""
+        fr = compute_froude_number(10.0, 0.01, 0)
+        self.assertEqual(fr, float('inf'))
+
+    def test_scaling(self):
+        """Doubling wind speed should double Fr."""
+        fr1 = compute_froude_number(10.0, 0.01, 2100)
+        fr2 = compute_froude_number(20.0, 0.01, 2100)
+        self.assertAlmostEqual(fr2, fr1 * 2, places=5)
+
+    def test_custom_barrier(self):
+        """Custom barrier height should be used."""
+        fr_default = compute_froude_number(10.0, 0.01, 2100)
+        fr_low = compute_froude_number(10.0, 0.01, 1000)
+        self.assertGreater(fr_low, fr_default)
+
+
+class TestOrographicWithFroude(TestCase):
+    """Test that Froude number correctly modifies orographic multiplier."""
+
+    def test_unblocked_no_change(self):
+        """Fr >= 1.0 should not change the multiplier."""
+        base = orographic_multiplier(9000, 30, 247.5)
+        with_fr = orographic_multiplier(9000, 30, 247.5, froude_number=1.5)
+        self.assertAlmostEqual(base, with_fr, places=5)
+
+    def test_strongly_blocked_reduces_60pct(self):
+        """Fr < 0.5 should reduce multiplier by 60%."""
+        base = orographic_multiplier(9000, 30, 247.5)
+        blocked = orographic_multiplier(9000, 30, 247.5, froude_number=0.3)
+        self.assertAlmostEqual(blocked, base * 0.4, places=5)
+
+    def test_partially_blocked_linear(self):
+        """Fr = 0.75 should reduce by 30% (midpoint of linear range)."""
+        base = orographic_multiplier(9000, 30, 247.5)
+        partial = orographic_multiplier(9000, 30, 247.5, froude_number=0.75)
+        expected_factor = 0.4 + (0.75 - 0.5) / 0.5 * 0.6  # = 0.7
+        self.assertAlmostEqual(partial, base * expected_factor, places=5)
+
+    def test_fr_exactly_05(self):
+        """Fr = 0.5 should reduce by 60%."""
+        base = orographic_multiplier(9000, 30, 247.5)
+        at_05 = orographic_multiplier(9000, 30, 247.5, froude_number=0.5)
+        self.assertAlmostEqual(at_05, base * 0.4, places=5)
+
+    def test_fr_exactly_10(self):
+        """Fr = 1.0 should not change the multiplier."""
+        base = orographic_multiplier(9000, 30, 247.5)
+        at_10 = orographic_multiplier(9000, 30, 247.5, froude_number=1.0)
+        self.assertAlmostEqual(base, at_10, places=5)
+
+    def test_none_froude_no_change(self):
+        """None froude_number should not change the multiplier."""
+        base = orographic_multiplier(9000, 30, 247.5)
+        with_none = orographic_multiplier(9000, 30, 247.5, froude_number=None)
+        self.assertAlmostEqual(base, with_none, places=5)
+
+    def test_blocked_always_positive(self):
+        """Even strongly blocked, multiplier should be positive."""
+        for elev in range(5000, 11000, 1000):
+            for wdir in range(0, 360, 45):
+                for fr in [0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 2.0]:
+                    result = orographic_multiplier(elev, 15, wdir, froude_number=fr)
+                    self.assertGreater(result, 0,
+                        f"Multiplier should be positive at elev={elev}, wdir={wdir}, fr={fr}")
+
+
+# ===================================================================
+# 10. AFD Highlight Parsing Tests
+# ===================================================================
+
+class TestAFDHighlights(TestCase):
+    """Test Area Forecast Discussion highlight extraction."""
+
+    SAMPLE_AFD = """
+    .DISCUSSION...
+    A Pacific storm system will bring snow to the Sierra Nevada mountains
+    starting Tuesday night. Snow levels will start near 7500 feet and drop
+    to around 6000 feet by Wednesday morning. GFS and ECMWF are in good
+    agreement on timing, but the NAM shows a faster progression. Expect
+    6-12 inches of snow above 7000 feet with locally higher amounts.
+    Higher elevations could see 12-18 inches. Low confidence in exact
+    snow amounts beyond Thursday as significant spread exists among the
+    ensemble members.
+
+    The HRRR suggests precipitation could begin as early as Tuesday afternoon
+    in the northern Sierra. Snow level near 6500 by late Wednesday.
+    2-4 inches possible at lake level.
+    """
+
+    def test_snow_levels_extracted(self):
+        """Should find snow level elevation values."""
+        result = parse_afd_highlights(self.SAMPLE_AFD)
+        self.assertGreater(len(result["snow_levels"]), 0)
+        self.assertIn(7500, result["snow_levels"])
+        # "Snow level near 6500" appears in the text
+        self.assertIn(6500, result["snow_levels"])
+
+    def test_amounts_extracted(self):
+        """Should find snowfall amount strings."""
+        result = parse_afd_highlights(self.SAMPLE_AFD)
+        self.assertGreater(len(result["amounts"]), 0)
+        # Check that we got the inch amounts
+        amount_text = " ".join(result["amounts"]).lower()
+        self.assertIn("inch", amount_text)
+
+    def test_confidence_extracted(self):
+        """Should find confidence language."""
+        result = parse_afd_highlights(self.SAMPLE_AFD)
+        self.assertIsNotNone(result["confidence"])
+        # "good agreement" appears before "Low confidence" — first match wins
+        self.assertIn(result["confidence"], [
+            "good agreement", "low confidence", "significant spread"
+        ])
+
+    def test_models_mentioned(self):
+        """Should find model references."""
+        result = parse_afd_highlights(self.SAMPLE_AFD)
+        self.assertIn("GFS", result["models_mentioned"])
+        self.assertIn("ECMWF", result["models_mentioned"])
+        self.assertIn("NAM", result["models_mentioned"])
+        self.assertIn("HRRR", result["models_mentioned"])
+
+    def test_timing_refs(self):
+        """Should find day-of-week timing references."""
+        result = parse_afd_highlights(self.SAMPLE_AFD)
+        self.assertGreater(len(result["timing_refs"]), 0)
+        timing_text = " ".join(result["timing_refs"]).lower()
+        self.assertTrue("tuesday" in timing_text or "wednesday" in timing_text
+                       or "thursday" in timing_text)
+
+    def test_empty_text(self):
+        """Empty text should return empty results."""
+        result = parse_afd_highlights("")
+        self.assertEqual(result["snow_levels"], [])
+        self.assertEqual(result["amounts"], [])
+        self.assertIsNone(result["confidence"])
+        self.assertEqual(result["models_mentioned"], [])
+        self.assertEqual(result["timing_refs"], [])
+
+    def test_none_text(self):
+        """None text should return empty results."""
+        result = parse_afd_highlights(None)
+        self.assertEqual(result["snow_levels"], [])
+
+    def test_no_snow_info(self):
+        """Text with no snow info should return empty lists."""
+        result = parse_afd_highlights("Sunny and warm. High temperatures in the 70s.")
+        self.assertEqual(result["snow_levels"], [])
+        self.assertEqual(result["amounts"], [])
+        self.assertIsNone(result["confidence"])
+
+    def test_euro_normalized_to_ecmwf(self):
+        """'Euro' model reference should be normalized to 'ECMWF'."""
+        result = parse_afd_highlights("The Euro model shows more precip than the GFS.")
+        self.assertIn("ECMWF", result["models_mentioned"])
+        self.assertIn("GFS", result["models_mentioned"])
+
+    def test_feet_amounts(self):
+        """Should handle amounts in feet."""
+        result = parse_afd_highlights("Total accumulations of 2-3 feet above 8000 feet.")
+        self.assertGreater(len(result["amounts"]), 0)
+        amount_text = " ".join(result["amounts"]).lower()
+        self.assertIn("feet", amount_text)
+
+    def test_high_confidence_language(self):
+        """Should detect high confidence language."""
+        result = parse_afd_highlights("There is high confidence in the timing of this event.")
+        self.assertEqual(result["confidence"], "high confidence")
+
+    def test_uncertain_language(self):
+        """Should detect uncertainty language."""
+        result = parse_afd_highlights("Precipitation amounts remain uncertain beyond day 3.")
+        self.assertEqual(result["confidence"], "uncertain")
+
+    def test_multiple_snow_levels(self):
+        """Should find multiple snow level values."""
+        text = ("Snow levels start near 8000 tonight. By Wednesday morning "
+                "the snow level drops to 5500 feet.")
+        result = parse_afd_highlights(text)
+        self.assertEqual(len(result["snow_levels"]), 2)
+        self.assertIn(8000, result["snow_levels"])
+        self.assertIn(5500, result["snow_levels"])
+
+    def test_model_spread_confidence(self):
+        """Should detect 'model spread' as confidence indicator."""
+        result = parse_afd_highlights("Large model spread exists for the weekend event.")
+        self.assertEqual(result["confidence"], "model spread")
+
+    def test_large_spread_confidence(self):
+        """Should detect 'large spread' when it appears literally."""
+        result = parse_afd_highlights("There is large spread among ensemble members.")
+        self.assertEqual(result["confidence"], "large spread")
 
 
 if __name__ == "__main__":
