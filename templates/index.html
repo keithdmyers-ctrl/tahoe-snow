@@ -3772,10 +3772,21 @@ document.addEventListener('click', function(e) {
     return;
   }
 });
-// --- PWA: Register service worker ---
+// --- PWA: Service worker with forced update ---
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
-    .then(reg => console.log('SW registered:', reg.scope))
+  // Clear any stale caches from old SW versions before registering
+  caches.keys().then(keys => {
+    keys.filter(k => !k.includes('-v3')).forEach(k => {
+      caches.delete(k);
+      console.log('Deleted stale cache:', k);
+    });
+  });
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+    .then(reg => {
+      console.log('SW registered:', reg.scope);
+      // Force update check
+      reg.update();
+    })
     .catch(err => console.log('SW registration failed:', err));
 }
 

@@ -125,7 +125,30 @@ def api_decision():
 
 @app.route('/sw.js')
 def service_worker():
-    return app.send_static_file('sw.js')
+    resp = app.send_static_file('sw.js')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Service-Worker-Allowed'] = '/'
+    return resp
+
+@app.route('/clear-cache')
+def clear_cache():
+    """Emergency cache clear — serves a page that unregisters SW and clears caches."""
+    return '''<!DOCTYPE html><html><body style="background:#0a1420;color:white;font-family:system-ui;padding:40px;text-align:center">
+    <h2>Clearing cache...</h2><p id="status">Working...</p>
+    <script>
+    (async () => {
+        const s = document.getElementById('status');
+        try {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const r of regs) { await r.unregister(); }
+            s.textContent = 'Unregistered ' + regs.length + ' service worker(s). ';
+            const keys = await caches.keys();
+            for (const k of keys) { await caches.delete(k); }
+            s.textContent += 'Deleted ' + keys.length + ' cache(s). Redirecting...';
+            setTimeout(() => window.location.href = '/', 1500);
+        } catch(e) { s.textContent = 'Error: ' + e.message; }
+    })();
+    </script></body></html>''', 200, {'Content-Type': 'text/html'}
 
 
 @app.route('/manifest.json')
