@@ -1077,6 +1077,28 @@ table.data-table tr:hover td { background: var(--card-hover); }
 }
 @media (max-width: 500px) { .footer { font-size: 11px; padding: 24px 14px; } }
 
+/* -- FAQ -- */
+.faq-list { display: flex; flex-direction: column; gap: 12px; }
+.faq-item { background: var(--card-inset, rgba(15,25,35,0.6)); border-radius: var(--radius-sm); padding: 12px 14px; }
+.faq-q { font-weight: 700; font-size: 13px; margin-bottom: 4px; color: var(--text); }
+.faq-a { font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+
+/* -- Science tab -- */
+.science-content { font-size: 13px; line-height: 1.7; color: var(--text-dim); }
+.science-content h3 { color: var(--text); font-size: 15px; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.science-content h3:first-child { margin-top: 0; }
+.science-content p { margin: 8px 0; }
+.science-content ul, .science-content ol { margin: 8px 0; padding-left: 20px; }
+.science-content li { margin: 4px 0; }
+.science-content table { margin: 8px 0 16px; }
+.science-content strong { color: var(--text); }
+@media (max-width: 500px) {
+  .science-content { font-size: 12px; }
+  .science-content h3 { font-size: 14px; }
+  .faq-q { font-size: 12px; }
+  .faq-a { font-size: 11px; }
+}
+
 /* -- Utility classes (replace inline styles in JS) -- */
 .flex-between { display: flex; justify-content: space-between; align-items: baseline; }
 .flex-center { display: flex; align-items: center; }
@@ -1256,6 +1278,16 @@ table.data-table tr:hover td { background: var(--card-hover); }
 }
 
 /* -- Leaflet map overrides (dark theme) -- */
+/* -- Map layer toggles -- */
+.map-layer-toggles { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.map-layer-btn {
+  padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.15); background: transparent;
+  color: var(--text-dim); cursor: pointer; transition: all 0.15s;
+}
+.map-layer-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.map-layer-btn:hover:not(.active) { background: rgba(255,255,255,0.05); }
+
 #tahoe-map {
   background: var(--bg);
 }
@@ -1595,6 +1627,12 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div id="narrative-section"></div>
 
   <div id="map-section" class="section mb-4">
+    <div class="map-layer-toggles" id="map-layer-toggles">
+      <button class="map-layer-btn active" data-layer="snow">Snow</button>
+      <button class="map-layer-btn" data-layer="temp">Temp</button>
+      <button class="map-layer-btn" data-layer="wind">Wind</button>
+      <button class="map-layer-btn" data-layer="snowpack">Snowpack</button>
+    </div>
     <div id="tahoe-map" class="map-container"></div>
   </div>
 
@@ -1672,10 +1710,125 @@ table.data-table tr:hover td { background: var(--card-hover); }
     </div>
   </div>
 
+  <div class="section">
+    <button class="section-header" aria-expanded="false">
+      <span>FAQ</span> <span class="toggle">&#9662;</span>
+    </button>
+    <div class="section-body collapsed">
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q">What does the score mean?</div>
+          <div class="faq-a">The score (0-100) answers "should I drive to Tahoe?" It weighs snowfall (35%), snow quality (20%), lift availability (15%), avalanche danger (15%), chain controls (10%), and model agreement (5%), with a weekend/holiday crowd penalty. 75+ = strong go, 45-74 = marginal, below 45 = save your gas.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Why does this show different snow amounts than my iPhone?</div>
+          <div class="faq-a">iPhone Weather uses a single model (usually Apple's WeatherKit). This system runs 4 models (GFS, ECMWF, ICON, HRRR) side by side and shows you when they agree and when they don't. It also applies snow physics &mdash; the same 10mm of liquid precipitation produces 8" of powder in a cold storm vs. 2" of cement in a warm storm. Phone apps skip this step.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What do the confidence ratings mean?</div>
+          <div class="faq-a"><strong>High</strong>: All models agree within 2" &mdash; you can plan around this number. <strong>Medium</strong>: Models spread up to 5" apart &mdash; the trend is right but the exact amount is uncertain. <strong>Low</strong>: Models disagree by 5"+ &mdash; could go either way, check back tomorrow.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What's the difference between base, mid, and peak?</div>
+          <div class="faq-a">Temperature drops ~3.5&deg;F per 1,000 feet of elevation. At Heavenly, the base (6,540') might be getting rain while the peak (10,067') gets a foot of powder. Each zone gets its own temperature, wind, precipitation type, and snow quality forecast.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What is SLR?</div>
+          <div class="faq-a">Snow-to-Liquid Ratio. It's how fluffy or dense the snow is. SLR 20:1 means 20 inches of snow per 1 inch of water &mdash; cold, dry blower powder. SLR 5:1 means 5 inches per 1 inch of water &mdash; heavy Sierra cement. Temperature is the main driver.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">How often does the data update?</div>
+          <div class="faq-a">The web dashboard caches data for 15 minutes. Weather models update every 1-12 hours depending on the model. SNOTEL stations report daily. Lift status and chain controls update every few minutes. Use the Refresh button to force a fresh fetch.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What is SNOTEL?</div>
+          <div class="faq-a">USDA automated snow monitoring stations. They measure snow depth (ultrasonic sensor), snow water equivalent (pressure pillow), and temperature at remote mountain locations. This system pulls from 10 stations across the Tahoe basin.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What does the AQI number mean?</div>
+          <div class="faq-a">Air Quality Index (EPA standard). 0-50 Good (green), 51-100 Moderate (yellow), 101-150 Unhealthy for Sensitive Groups (orange), 151-200 Unhealthy (red), 201+ Very Unhealthy/Hazardous (purple). Important for outdoor activities especially during fire season.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <button class="section-header" aria-expanded="false">
+      <span>How It Works &mdash; Science &amp; Methods</span> <span class="toggle">&#9662;</span>
+    </button>
+    <div class="section-body collapsed">
+      <div class="science-content">
+        <h3>Weather Models</h3>
+        <p>Four numerical weather prediction models run in parallel, each with different strengths:</p>
+        <table class="data-table">
+          <thead><tr><th>Model</th><th>Resolution</th><th>Updates</th><th>Horizon</th><th>Best For</th></tr></thead>
+          <tbody>
+            <tr><td><strong>GFS</strong></td><td>13 km</td><td>Every 6h</td><td>16 days</td><td>Reliable baseline, good beyond day 3</td></tr>
+            <tr><td><strong>ECMWF</strong></td><td>25 km</td><td>Every 12h</td><td>15 days</td><td>Highest global skill, best synoptic patterns</td></tr>
+            <tr><td><strong>ICON</strong></td><td>13 km</td><td>Every 12h</td><td>7 days</td><td>Independent 3rd perspective</td></tr>
+            <tr><td><strong>HRRR</strong></td><td>3 km</td><td>Hourly</td><td>18h</td><td>Best short-term, convective features</td></tr>
+            <tr><td><strong>NBM</strong></td><td>2.5 km</td><td>Hourly</td><td>7 days</td><td>NWS bias-corrected blend of 31 models</td></tr>
+          </tbody>
+        </table>
+        <p>Models are blended using <strong>Bayesian Model Averaging</strong> (Raftery et al. 2005) with skill weights that adapt over time based on forecast verification. Models that have been more accurate recently get more weight.</p>
+
+        <h3>Snow Physics</h3>
+        <p><strong>Snow-to-Liquid Ratio (Roebber 2003)</strong>: Temperature determines crystal structure. Cold storms (-18&deg;C) produce fluffy 20:1 powder. Warm storms (0&deg;C) produce dense 5:1 Sierra cement. Wind speed (Judson &amp; Doesken 2000) and humidity further adjust the ratio.</p>
+        <p><strong>Orographic Enhancement</strong>: Mountains force air upward, squeezing out more precipitation on windward slopes. A peak in strong WSW flow can get ~2x the precipitation of the base. Based on wind direction alignment, elevation gain, and wind speed, with CAPE coupling (Kirshbaum &amp; Smith 2008).</p>
+        <p><strong>Precipitation Type (Stull 2011)</strong>: Uses wet-bulb temperature (not dry-bulb) to classify Snow/Mix/Rain. This matches NWS operational methodology. A logistic probability function provides smooth transitions instead of hard cutoffs.</p>
+        <p><strong>Snow Settling (Kojima 1967)</strong>: Fresh snow compresses 15-40% in the first 24 hours depending on temperature and wind. Warmer = faster settling.</p>
+        <p><strong>Lake Effect</strong>: Lake Tahoe's relatively warm surface (4.5&deg;C in winter) enhances snowfall on the east shore during NW-N wind events when the lake-air temperature difference exceeds 10&deg;C.</p>
+
+        <h3>Elevation Adjustment</h3>
+        <p>Temperature drops ~5.5-6.5&deg;C per km of elevation gain. The lapse rate is computed from three sources in priority order:</p>
+        <ol>
+          <li><strong>Reno radiosonde</strong> (twice daily) &mdash; actual measured atmosphere profile</li>
+          <li><strong>SNOTEL surface regression</strong> &mdash; real-time linear fit across 10 stations at different elevations</li>
+          <li><strong>Standard lapse rate</strong> &mdash; 5.5&deg;C/km (moist) or 6.5&deg;C/km (dry)</li>
+        </ol>
+        <p>Terrain-adjusted temperature also accounts for slope aspect: south-facing slopes warm more during the day, north-facing slopes preserve snow longer.</p>
+
+        <h3>Oakland Rain Prediction</h3>
+        <p>Seven sources fused with weighted averaging: NBM (35%), NWS POP (30%), Open-Meteo model agreement (20%), Zambretti barometer (15%), plus dewpoint and PWS ground truth modifiers. The <strong>Zambretti Forecaster</strong> (1920, Negretti &amp; Zambra) uses local barometric pressure trends to detect approaching weather systems 2-6 hours before models update.</p>
+
+        <h3>Forecast Verification</h3>
+        <p>Every day, forecasts are compared to observations. Per-model MAE (Mean Absolute Error), RMSE, and bias are tracked. After 14+ days, bias corrections are applied automatically. Model weights adapt with a 14-day exponential half-life &mdash; models that performed well recently get more influence.</p>
+
+        <h3>Strengths</h3>
+        <ul>
+          <li>Multi-model blending with honest uncertainty (shows when models disagree)</li>
+          <li>Real snow physics (SLR, orographic, wet-bulb) instead of raw model output</li>
+          <li>Per-elevation forecasts (base/mid/peak) for each resort</li>
+          <li>Self-correcting: verification loop adapts model weights over time</li>
+          <li>14+ independent data sources cross-referenced</li>
+        </ul>
+
+        <h3>Limitations</h3>
+        <ul>
+          <li>All models share similar biases for the Sierra (e.g., underpredicting upslope enhancement)</li>
+          <li>No radar integration &mdash; storm timing relies on model forecasts, not real-time observation</li>
+          <li>Orographic multiplier is simplified (no Froude number, no barrier-relative flow)</li>
+          <li>Forecast verification needs a full season (~50+ storms) to be statistically meaningful</li>
+          <li>Snow settling model uses simplified exponential decay, not full metamorphism physics</li>
+          <li>Local sensors required for Oakland barometric prediction (system degrades gracefully without them)</li>
+        </ul>
+
+        <h3>References</h3>
+        <ul>
+          <li>Roebber, P.J. (2003). Using model consensus for SLR forecasting. <em>Wea. Forecasting</em>, 18, 792&ndash;808.</li>
+          <li>Stull, R. (2011). Wet-bulb temperature from air temperature and humidity. <em>J. Appl. Meteor. Climatol.</em>, 50, 2267&ndash;2269.</li>
+          <li>Judson, A. &amp; Doesken, N. (2000). Density of freshly fallen snow in the central Rocky Mountains. <em>Bull. Amer. Meteor. Soc.</em>, 81, 1577&ndash;1587.</li>
+          <li>Kirshbaum, D.J. &amp; Smith, R.B. (2008). Temperature and moist instability effects on orographic precipitation. <em>Quart. J. Roy. Meteor. Soc.</em>, 134, 1183&ndash;1199.</li>
+          <li>Kojima, K. (1967). Densification of seasonal snow cover. <em>Physics of Snow and Ice</em>, 1, 929&ndash;952.</li>
+          <li>Raftery, A.E. et al. (2005). Using Bayesian Model Averaging to calibrate forecast ensembles. <em>Mon. Wea. Rev.</em>, 133, 1155&ndash;1174.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
   <div class="footer">
-    <div>Models: GFS + ECMWF + ICON via Open-Meteo</div>
-    <div>Observations: SNOTEL (NRCS) + NWS</div>
-    <div>Physics: Snow-to-Liquid Ratio (Roebber 2003), NWS Wind Chill</div>
+    <div>14+ data sources &middot; 5 resorts &middot; 4 NWP models &middot; Real snow physics</div>
+    <div>Open source &middot; No API keys required &middot; Runs on a Raspberry Pi</div>
   </div>
 </div>
 
@@ -1816,9 +1969,12 @@ function render() {
   requestAnimationFrame(initScrollWraps);
 }
 
+let _mapLayer = 'snow';
+let _mapMarkerLayer = null;
+
 function renderMap() {
   if (!DATA || !DATA.resorts) return;
-  if (window._tahoeMap) { window._tahoeMap.invalidateSize(); return; }
+  if (window._tahoeMap) { updateMapMarkers(); return; }
 
   const mapEl = document.getElementById('tahoe-map');
   if (!mapEl) return;
@@ -1828,58 +1984,92 @@ function renderMap() {
     attribution: '&copy; OpenStreetMap',
     maxZoom: 13,
   }).addTo(map);
+  window._tahoeMap = map;
+  updateMapMarkers();
 
-  // Resort markers with coordinates
+  // Invalidate on first visible
+  setTimeout(() => map.invalidateSize(), 100);
+}
+
+function updateMapMarkers() {
+  const map = window._tahoeMap;
+  if (!map || !DATA) return;
+
+  // Remove old marker layer
+  if (_mapMarkerLayer) { map.removeLayer(_mapMarkerLayer); }
+  _mapMarkerLayer = L.layerGroup().addTo(map);
+
   const resortCoords = {
-    'Heavenly': [38.9353, -119.9400],
-    'Northstar': [39.2746, -120.1210],
-    'Kirkwood': [38.6850, -120.0653],
-    'Palisades Tahoe': [39.1968, -120.2354],
-    'Sugar Bowl': [39.3048, -120.3333],
-    'Sierra-at-Tahoe': [38.7990, -120.0800],
-    'Boreal': [39.3320, -120.3480],
-    'Mt. Rose': [39.3150, -119.8850],
+    'Heavenly': [38.9353, -119.9400], 'Northstar': [39.2746, -120.1210],
+    'Kirkwood': [38.6850, -120.0653], 'Palisades Tahoe': [39.1968, -120.2354],
+    'Sugar Bowl': [39.3048, -120.3333], 'Sierra-at-Tahoe': [38.7990, -120.0800],
+    'Boreal': [39.3320, -120.3480], 'Mt. Rose': [39.3150, -119.8850],
   };
+  const abbrevs = {'Heavenly':'HVY','Northstar':'NSR','Kirkwood':'KRK','Palisades Tahoe':'PAL','Sugar Bowl':'SB','Sierra-at-Tahoe':'SAT','Boreal':'BRL','Mt. Rose':'MR'};
 
+  // Resort markers — content changes by active layer
   for (const [name, data] of Object.entries(DATA.resorts)) {
     const coords = resortCoords[name];
     if (!coords) continue;
     const peak = data.zones?.peak || {};
-    const snow24 = data.zones?.peak?.snow_24h || 0;
-    const lifts = DATA.lifts?.[name.toLowerCase().replace(/[^a-z]/g, '-')] || DATA.lifts?.[name.toLowerCase()] || {};
+    const snap = peak.current || {};
+    const snow24 = peak.snow_24h || 0;
+    const abbr = abbrevs[name] || name.slice(0, 3);
 
-    const snowCls = snow24 > 6 ? 'snow-hot' : snow24 > 0 ? 'snow-active' : '';
-    const abbrevs = {'Heavenly':'HVY','Northstar':'NSR','Kirkwood':'KRK','Palisades Tahoe':'PAL','Sugar Bowl':'SB','Sierra-at-Tahoe':'SAT','Boreal':'BRL','Mt. Rose':'MR'};
-    const displayName = snow24 > 0 ? snow24.toFixed(0) + '"' : (abbrevs[name] || name.slice(0, 3));
+    let display, cls;
+    switch (_mapLayer) {
+      case 'temp':
+        const t = snap.temp_f;
+        display = t != null ? Math.round(t) + '\u00b0' : abbr;
+        cls = t != null ? (t <= 32 ? 'snow-active' : t >= 50 ? 'snow-hot' : '') : '';
+        break;
+      case 'wind':
+        const w = snap.wind_mph || 0;
+        const dir = snap.wind_dir || '';
+        display = w > 0 ? Math.round(w) + 'mph' : abbr;
+        cls = w >= 30 ? 'snow-hot' : w >= 15 ? 'snow-active' : '';
+        break;
+      case 'snowpack':
+        const depth = peak.snowpack_depth_in || data.comparison?.snowpack_depth_in || 0;
+        display = depth > 0 ? Math.round(depth) + '"' : abbr;
+        cls = depth > 60 ? 'snow-hot' : depth > 0 ? 'snow-active' : '';
+        break;
+      default: // snow
+        display = snow24 > 0 ? snow24.toFixed(0) + '"' : abbr;
+        cls = snow24 > 6 ? 'snow-hot' : snow24 > 0 ? 'snow-active' : '';
+    }
+
     const icon = L.divIcon({
       className: 'resort-marker',
-      html: `<div class="marker-resort ${snowCls}">${displayName}</div>`,
+      html: `<div class="marker-resort ${cls}">${display}</div>`,
       iconSize: null,
     });
-
-    const peakTemp = peak.current?.temp_f;
-    const liftsOpen = lifts.open;
-    const liftsTotal = lifts.total;
-    L.marker(coords, {icon}).addTo(map)
-      .bindPopup(`<b>${esc(name)}</b><br>24h Snow: ${snow24.toFixed(1)}"<br>Peak Temp: ${peakTemp != null ? peakTemp + '\u00b0F' : '?'}<br>Lifts: ${liftsOpen != null ? liftsOpen : '?'}/${liftsTotal != null ? liftsTotal : '?'}`)
+    L.marker(coords, {icon}).addTo(_mapMarkerLayer)
+      .bindPopup(`<b>${esc(name)}</b><br>24h Snow: ${snow24.toFixed(1)}"<br>Peak: ${snap.temp_f != null ? snap.temp_f + '\u00b0F' : '?'}<br>Wind: ${snap.wind_mph || 0} mph ${snap.wind_dir || ''}`)
       .on('click', function() {
         const tab = document.querySelector(`.resort-tab[data-resort="${name}"]`);
-        if (tab) { tab.click(); tab.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }
+        if (tab) { tab.click(); tab.scrollIntoView({behavior:'smooth',block:'nearest'}); }
       });
   }
 
-  // SNOTEL station markers
+  // SNOTEL markers — show depth or SWE depending on layer
   if (DATA.snotel_current) {
     for (const [name, stn] of Object.entries(DATA.snotel_current)) {
       if (stn.error || !stn.lat || !stn.lon) continue;
       const depth = stn.snow_depth_in || 0;
+      let snotelDisplay;
+      if (_mapLayer === 'temp') {
+        snotelDisplay = stn.temp_f != null ? Math.round(stn.temp_f) + '\u00b0' : '--';
+      } else {
+        snotelDisplay = depth > 0 ? depth + '"' : '--';
+      }
       const icon = L.divIcon({
         className: 'snotel-marker',
-        html: `<div class="marker-snotel">${depth > 0 ? depth + '"' : '--'}</div>`,
+        html: `<div class="marker-snotel">${snotelDisplay}</div>`,
         iconSize: null,
       });
-      L.marker([stn.lat, stn.lon], {icon}).addTo(map)
-        .bindPopup(`<b>${esc(name)}</b><br>Depth: ${depth > 0 ? depth + '"' : 'N/A'}<br>SWE: ${stn.swe_in != null ? stn.swe_in + '"' : '?'}<br>Elev: ${stn.elev_ft || '?'} ft`);
+      L.marker([stn.lat, stn.lon], {icon}).addTo(_mapMarkerLayer)
+        .bindPopup(`<b>${esc(name)}</b><br>Depth: ${depth}"<br>SWE: ${stn.swe_in != null ? stn.swe_in + '"' : '?'}<br>Temp: ${stn.temp_f != null ? stn.temp_f + '\u00b0F' : '?'}`);
     }
   }
 
@@ -1898,13 +2088,17 @@ function renderMap() {
           html: `<div class="marker-chain ${chainCls}">${esc(level)}</div>`,
           iconSize: null,
         })
-      }).addTo(map).bindPopup(`<b>${esc(routeName || 'Chain Control')}</b><br>${esc(chain.status || chain.details || '')}`);
+      }).addTo(_mapMarkerLayer).bindPopup(`<b>${esc(routeName || 'Chain Control')}</b><br>${esc(chain.status || chain.details || '')}`);
     }
   }
+}
 
-  window._tahoeMap = map;
-  // Fix tile loading after container becomes visible
-  setTimeout(() => map.invalidateSize(), 200);
+function switchMapLayer(layer) {
+  _mapLayer = layer;
+  document.querySelectorAll('.map-layer-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.layer === layer);
+  });
+  updateMapMarkers();
 }
 
 function renderPreviews() {
@@ -3741,6 +3935,13 @@ document.addEventListener('click', function(e) {
   const pill = e.target.closest('.resort-pill[data-resort]');
   if (pill) {
     toggleCompareResort(pill.dataset.resort);
+    return;
+  }
+
+  // Map layer toggle
+  const mapBtn = e.target.closest('.map-layer-btn[data-layer]');
+  if (mapBtn) {
+    switchMapLayer(mapBtn.dataset.layer);
     return;
   }
 
