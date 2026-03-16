@@ -13,6 +13,7 @@ caching, locking, and presentation layers on top.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from tahoe_snow import (
     fetch_nws_observations, fetch_nws_forecast, fetch_nws_gridpoints,
     fetch_open_meteo_multi, fetch_open_meteo,
@@ -75,37 +76,68 @@ def fetch_tahoe_analysis():
     This is the single source of truth -- webapp, eink, alerts, and
     verify_cron should all call this instead of duplicating fetch logic.
     """
-    logger.info("Starting Tahoe analysis pipeline")
+    logger.info("Starting Tahoe analysis pipeline (parallel fetch)")
 
-    # Core data
-    obs = _safe_fetch(fetch_nws_observations, TAHOE["lat"], TAHOE["lon"])
-    nws = _safe_fetch(fetch_nws_forecast, TAHOE["lat"], TAHOE["lon"])
-
-    # Per-resort Open-Meteo (NOT single-point -- each resort gets its own grid)
+    lat, lon = TAHOE["lat"], TAHOE["lon"]
     resort_points = {rn: {"lat": r["base"]["lat"], "lon": r["base"]["lon"]}
                      for rn, r in RESORTS.items()}
-    om = _safe_fetch(fetch_open_meteo_multi, resort_points)
 
-    snotel = _safe_fetch(fetch_snotel_current)
-    avy = _safe_fetch(fetch_avalanche)
-    afd = _safe_fetch(fetch_forecast_discussion, default="")
+    # Parallel fetch all data sources — typically 20+ HTTP calls in ~15s instead of ~120s
+    results = {}
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        futures = {
+            pool.submit(_safe_fetch, fetch_nws_observations, lat, lon): "obs",
+            pool.submit(_safe_fetch, fetch_nws_forecast, lat, lon): "nws",
+            pool.submit(_safe_fetch, fetch_open_meteo_multi, resort_points): "om",
+            pool.submit(_safe_fetch, fetch_snotel_current): "snotel",
+            pool.submit(_safe_fetch, fetch_avalanche): "avy",
+            pool.submit(_safe_fetch, fetch_forecast_discussion, default=""): "afd",
+            pool.submit(_safe_fetch, fetch_nbm, lat, lon): "tahoe_nbm",
+            pool.submit(_safe_fetch, fetch_nws_gridpoints, lat, lon): "nws_grids",
+            pool.submit(_safe_fetch, fetch_cssl_snow): "cssl",
+            pool.submit(_safe_fetch, fetch_nws_alerts, lat, lon, default=[]): "tahoe_alerts",
+            pool.submit(_safe_fetch, fetch_sounding, SOUNDING_STATION): "sounding",
+            pool.submit(_safe_fetch, fetch_climate_normals, lat, lon): "normals",
+            pool.submit(_safe_fetch, fetch_ensemble, lat, lon): "ensemble",
+            pool.submit(_safe_fetch, fetch_synoptic_stations, lat, lon, radius_miles=30): "synoptic",
+            pool.submit(_safe_fetch, fetch_caltrans_chains): "chains",
+            pool.submit(_safe_fetch, fetch_all_lift_status): "lifts",
+            pool.submit(_safe_fetch, fetch_rwis_stations, lat, lon, default=[]): "rwis",
+            pool.submit(_safe_fetch, fetch_radar_nowcast, lat, lon): "radar",
+            pool.submit(_safe_fetch, fetch_air_quality, lat, lon): "tahoe_aqi",
+        }
+        for future in as_completed(futures):
+            key = futures[future]
+            try:
+                results[key] = future.result()
+            except Exception as e:
+                logger.warning("Parallel fetch %s failed: %s", key, e)
+                results[key] = {} if key not in ("rwis", "tahoe_alerts") else []
 
-    # Enrichment sources (all best-effort)
-    tahoe_nbm = _safe_fetch(fetch_nbm, TAHOE["lat"], TAHOE["lon"])
-    nws_grids = _safe_fetch(fetch_nws_gridpoints, TAHOE["lat"], TAHOE["lon"])
-    cssl = _safe_fetch(fetch_cssl_snow)
-    tahoe_alerts = _safe_fetch(fetch_nws_alerts, TAHOE["lat"], TAHOE["lon"], default=[])
-    sounding = _safe_fetch(fetch_sounding, SOUNDING_STATION)
-    normals = _safe_fetch(fetch_climate_normals, TAHOE["lat"], TAHOE["lon"])
-    ensemble = _safe_fetch(fetch_ensemble, TAHOE["lat"], TAHOE["lon"])
-    synoptic = _safe_fetch(fetch_synoptic_stations, TAHOE["lat"], TAHOE["lon"],
-                           radius_miles=30)
+    obs = results.get("obs", {})
+    nws = results.get("nws", {})
+    om = results.get("om", {})
+    snotel = results.get("snotel", {})
+    avy = results.get("avy", {})
+    afd = results.get("afd", "")
+    tahoe_nbm = results.get("tahoe_nbm", {})
+    nws_grids = results.get("nws_grids", {})
+    cssl = results.get("cssl", {})
+    tahoe_alerts = results.get("tahoe_alerts", [])
+    sounding = results.get("sounding", {})
+    normals = results.get("normals", {})
+    ensemble = results.get("ensemble", {})
+    synoptic = results.get("synoptic", {})
+    chains = results.get("chains", {})
+    lifts = results.get("lifts", {})
+    rwis = results.get("rwis", [])
+    radar = results.get("radar", {})
+    tahoe_aqi = results.get("tahoe_aqi", {})
+
+    # Storm total needs snotel data (sequential dependency)
     storm = _safe_fetch(get_storm_total, snotel)
-    chains = _safe_fetch(fetch_caltrans_chains)
-    lifts = _safe_fetch(fetch_all_lift_status)
-    rwis = _safe_fetch(fetch_rwis_stations, TAHOE["lat"], TAHOE["lon"], default=[])
-    radar = _safe_fetch(fetch_radar_nowcast, TAHOE["lat"], TAHOE["lon"])
-    tahoe_aqi = _safe_fetch(fetch_air_quality, TAHOE["lat"], TAHOE["lon"])
+
+    logger.info("All data fetched, running analysis")
 
     # Run analysis pipeline
     analysis = analyze_all(obs, nws, om, snotel, afd, avy, {},
@@ -158,25 +190,36 @@ def fetch_oakland_data():
     Returns dict with home_obs, home_fc, home_om, home_nbm, home_pws,
     home_alerts.
     """
-    logger.info("Fetching Oakland data")
+    logger.info("Fetching Oakland data (parallel)")
 
-    home_obs = _safe_fetch(fetch_nws_observations, OAKLAND["lat"], OAKLAND["lon"])
-    home_fc = _safe_fetch(fetch_nws_forecast, OAKLAND["lat"], OAKLAND["lon"])
-    home_om = _safe_fetch(fetch_open_meteo, OAKLAND["lat"], OAKLAND["lon"])
-    home_nbm = _safe_fetch(fetch_nbm, OAKLAND["lat"], OAKLAND["lon"])
-    home_pws = _safe_fetch(fetch_pws_nearby, OAKLAND["lat"], OAKLAND["lon"], default=[])
-    home_alerts = _safe_fetch(fetch_nws_alerts, OAKLAND["lat"], OAKLAND["lon"], default=[])
-    home_normals = _safe_fetch(fetch_climate_normals, OAKLAND["lat"], OAKLAND["lon"])
-    home_aqi = _safe_fetch(fetch_air_quality, OAKLAND["lat"], OAKLAND["lon"])
+    lat, lon = OAKLAND["lat"], OAKLAND["lon"]
+    r = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_safe_fetch, fetch_nws_observations, lat, lon): "obs",
+            pool.submit(_safe_fetch, fetch_nws_forecast, lat, lon): "fc",
+            pool.submit(_safe_fetch, fetch_open_meteo, lat, lon): "om",
+            pool.submit(_safe_fetch, fetch_nbm, lat, lon): "nbm",
+            pool.submit(_safe_fetch, fetch_pws_nearby, lat, lon, default=[]): "pws",
+            pool.submit(_safe_fetch, fetch_nws_alerts, lat, lon, default=[]): "alerts",
+            pool.submit(_safe_fetch, fetch_climate_normals, lat, lon): "normals",
+            pool.submit(_safe_fetch, fetch_air_quality, lat, lon): "aqi",
+        }
+        for future in as_completed(futures):
+            key = futures[future]
+            try:
+                r[key] = future.result()
+            except Exception:
+                r[key] = [] if key in ("pws", "alerts") else {}
 
     logger.info("Oakland data fetch complete")
     return {
-        "home_obs": home_obs,
-        "home_fc": home_fc,
-        "home_om": home_om,
-        "home_nbm": home_nbm,
-        "home_pws": home_pws,
-        "home_alerts": home_alerts,
-        "home_normals": _check_error(home_normals),
-        "home_aqi": _check_error(home_aqi),
+        "home_obs": r.get("obs", {}),
+        "home_fc": r.get("fc", {}),
+        "home_om": r.get("om", {}),
+        "home_nbm": r.get("nbm", {}),
+        "home_pws": r.get("pws", []),
+        "home_alerts": r.get("alerts", []),
+        "home_normals": _check_error(r.get("normals", {})),
+        "home_aqi": _check_error(r.get("aqi", {})),
     }
