@@ -2966,6 +2966,7 @@ function renderHistory() {
 
 function buildSnotelHistoryChart() {
   const hist = DATA.snotel_history || {};
+  const season = DATA.season_stats || {};
   const canvas = document.getElementById('chart-snotel-history');
   if (!canvas) return;
   destroyChart('snotel-history');
@@ -3031,7 +3032,7 @@ function buildSnotelHistoryChart() {
 
   // Season stats summary below the chart
   let statsHtml = '<div class="season-stats-row">';
-  for (const sname of stationNames) {
+  for (const { name: sname } of _snotelAllStations) {
     const s = season[sname] || {};
     const snwd = s.SNWD || {};
     const wteq = s.WTEQ || {};
