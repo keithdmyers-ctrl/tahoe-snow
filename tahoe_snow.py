@@ -142,16 +142,102 @@ def wind_chill_f(temp_f: float, wind_mph: float) -> float:
     return round(wc, 1)
 
 
+def compute_brunt_vaisala(sounding: dict) -> float | None:
+    """Compute Brunt-Vaisala frequency N from sounding profile.
+
+    Uses the 1500-3500m layer (Sierra crest zone) to compute static
+    stability N = sqrt((g/theta_mean) * (delta_theta/delta_z)).
+
+    Potential temperature approximated as theta = T + 0.0098*z (dry adiabatic
+    lapse rate correction — avoids needing pressure levels).
+
+    Args:
+        sounding: dict with 'profile' list of {'hght_m', 'temp_c'} dicts.
+
+    Returns:
+        N in s^-1 (typical range 0.005 to 0.02), or None if insufficient data.
+    """
+    profile = sounding.get("profile", [])
+    if not profile:
+        return None
+
+    # Filter to 1500-3500m range
+    layer = [p for p in profile
+             if p.get("hght_m") is not None and p.get("temp_c") is not None
+             and 1500 <= p["hght_m"] <= 3500]
+    if len(layer) < 2:
+        return None
+
+    # Sort by height
+    layer.sort(key=lambda p: p["hght_m"])
+
+    g = 9.81  # m/s^2
+
+    # Compute potential temperature for each level
+    # theta ~ T_K + 0.0098 * z (dry adiabatic approximation)
+    thetas = []
+    heights = []
+    for p in layer:
+        t_k = p["temp_c"] + 273.15
+        theta = t_k + 0.0098 * p["hght_m"]
+        thetas.append(theta)
+        heights.append(p["hght_m"])
+
+    # Compute mean theta and delta_theta/delta_z across the layer
+    theta_mean = sum(thetas) / len(thetas)
+    delta_theta = thetas[-1] - thetas[0]
+    delta_z = heights[-1] - heights[0]
+
+    if delta_z <= 0 or theta_mean <= 0:
+        return None
+
+    n_squared = (g / theta_mean) * (delta_theta / delta_z)
+
+    if n_squared <= 0:
+        # Unstable or neutral — N is not real-valued
+        return None
+
+    return math.sqrt(n_squared)
+
+
+def compute_froude_number(wind_mps: float, N: float,
+                          barrier_height_m: float = 2100) -> float:
+    """Compute Froude number for orographic flow regime classification.
+
+    Fr = U / (N * h) where:
+    - U = upstream wind speed (m/s)
+    - N = Brunt-Vaisala frequency (s^-1)
+    - h = barrier height (m), default 2100m for Sierra Nevada crest
+
+    Fr < 0.5: strongly blocked flow (precip enhancement greatly reduced)
+    0.5 <= Fr < 1.0: partially blocked (reduced enhancement)
+    Fr >= 1.0: unblocked flow (full orographic enhancement)
+
+    Returns:
+        Fr (dimensionless). Returns float('inf') if N or h is zero/invalid.
+    """
+    if N is None or N <= 0 or barrier_height_m <= 0:
+        return float('inf')  # Assume unblocked if we can't compute
+    if wind_mps <= 0:
+        return 0.0
+    return wind_mps / (N * barrier_height_m)
+
+
 def orographic_multiplier(elev_ft: float, wind_mph: float, wind_dir: float,
-                          cape_jkg: float = 0) -> float:
+                          cape_jkg: float = 0,
+                          froude_number: float | None = None) -> float:
     """Orographic precipitation enhancement factor.
 
     Combines:
-    - Aspect alignment (ideal: WSW at 247.5° for Sierra Nevada)
+    - Aspect alignment (ideal: WSW at 247.5deg for Sierra Nevada)
     - Elevation factor (higher = more orographic lift)
     - Wind speed factor (stronger flow = more forced ascent)
     - CAPE coupling (convective instability enhances orographic precip)
       Reference: Kirshbaum & Smith (2008) — CAPE-terrain interaction
+    - Froude number blocked-flow correction (new):
+      Fr < 0.5: reduce multiplier by 60% (strongly blocked)
+      0.5 <= Fr < 1.0: linear reduction from 60% to 0%
+      Fr >= 1.0: no change (unblocked flow)
     """
     ideal = 247.5
     diff = abs(wind_dir - ideal)
@@ -166,7 +252,22 @@ def orographic_multiplier(elev_ft: float, wind_mph: float, wind_dir: float,
     cape = cape_jkg or 0
     c = 1.0 + min(0.4, cape / 500.0) if cape > 50 else 1.0
 
-    return d * e * w * c
+    base = d * e * w * c
+
+    # Froude number blocked-flow correction
+    if froude_number is not None:
+        if froude_number < 0.5:
+            # Strongly blocked: reduce by 60%
+            base *= 0.4
+        elif froude_number < 1.0:
+            # Partially blocked: linear reduction from 60% to 0%
+            # At Fr=0.5 -> 0.4 factor, at Fr=1.0 -> 1.0 factor
+            fraction = (froude_number - 0.5) / 0.5  # 0 at Fr=0.5, 1 at Fr=1.0
+            factor = 0.4 + fraction * 0.6  # 0.4 to 1.0
+            base *= factor
+        # Fr >= 1.0: no change (unblocked)
+
+    return base
 
 
 def compute_lapse_rate(snotel: dict, synoptic: dict | None = None,
@@ -1304,6 +1405,19 @@ def fetch_sounding(station: str = "REV") -> dict:
             if h_high > h_low:
                 lapse_rate = round(-(t_high - t_low) / ((h_high - h_low) / 1000), 2)
 
+        # Full profile in the 1500-3500m range (typically 20-40 points)
+        # Includes temp_c and dwpt_c (dewpoint) for frontend charting
+        tahoe_profile = []
+        for p in profile:
+            if 1500 <= p["hght_m"] <= 3500:
+                tahoe_profile.append({
+                    "hght_m": p["hght_m"],
+                    "hght_ft": p["hght_ft"],
+                    "temp_c": p["temp_c"],
+                    "dwpt_c": p.get("dewpoint_c"),
+                    "dp_depression": p.get("dp_depression"),
+                })
+
         return {
             "station": station,
             "time": sounding_time.isoformat(),
@@ -1311,7 +1425,7 @@ def fetch_sounding(station: str = "REV") -> dict:
             "freezing_level_ft": round(freezing_level_m * 3.28084) if freezing_level_m else None,
             "snow_level_ft": round(snow_level_m * 3.28084) if snow_level_m else None,
             "lapse_rate_c_km": lapse_rate,
-            "profile_summary": [p for p in profile if 1500 <= p["hght_m"] <= 3500][::3],  # every 3rd level
+            "profile": tahoe_profile,  # ALL levels in 1500-3500m for charting + Froude
         }
     except Exception as e:
         return {"error": str(e)}
@@ -1599,6 +1713,107 @@ def fetch_forecast_discussion() -> str:
     except Exception as e:
         logger.warning("fetch_forecast_discussion failed: %s", e)
         return ""
+
+
+def parse_afd_highlights(afd_text: str) -> dict:
+    """Extract meteorologist-relevant highlights from NWS Area Forecast Discussion.
+
+    Parses the AFD text for:
+    - Snow level mentions (elevation values)
+    - Snowfall/precipitation amount mentions
+    - Confidence language (low/high confidence, uncertain, spread, agreement)
+    - Model references (GFS, ECMWF, NAM, HRRR, etc.)
+    - Timing references (day-of-week patterns)
+
+    Returns dict with structured highlights for display/alerting.
+    """
+    if not afd_text or not isinstance(afd_text, str):
+        return {
+            "snow_levels": [],
+            "amounts": [],
+            "confidence": None,
+            "models_mentioned": [],
+            "timing_refs": [],
+        }
+
+    text = afd_text
+
+    # Snow level mentions: "snow level 6500", "snow levels near 7000",
+    # "snow levels start near 8000", etc.
+    snow_level_pattern = re.compile(
+        r'snow\s*levels?\s*\D{0,20}(\d{4,5})', re.IGNORECASE
+    )
+    snow_levels = [int(m.group(1)) for m in snow_level_pattern.finditer(text)]
+
+    # Amount mentions: "6-12 inches", "2 feet", "4 in", "10-15 inches"
+    amount_pattern = re.compile(
+        r'(\d+)\s*(-\s*\d+)?\s*(inch(?:es)?|in\b|feet|foot|ft\b)',
+        re.IGNORECASE
+    )
+    amounts = []
+    for m in amount_pattern.finditer(text):
+        amount_str = m.group(0).strip()
+        # Normalize whitespace
+        amount_str = re.sub(r'\s+', ' ', amount_str)
+        if amount_str not in amounts:
+            amounts.append(amount_str)
+
+    # Confidence language
+    confidence_patterns = [
+        (r'low\s+confidence', "low confidence"),
+        (r'high\s+confidence', "high confidence"),
+        (r'moderate\s+confidence', "moderate confidence"),
+        (r'uncertain(?:ty)?', "uncertain"),
+        (r'significant\s+spread', "significant spread"),
+        (r'good\s+agreement', "good agreement"),
+        (r'poor\s+agreement', "poor agreement"),
+        (r'large\s+spread', "large spread"),
+        (r'tight\s+spread', "tight spread"),
+        (r'model\s+spread', "model spread"),
+        (r'low\s+predictability', "low predictability"),
+        (r'high\s+predictability', "high predictability"),
+    ]
+    confidence = None
+    for pattern, label in confidence_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            confidence = label
+            break  # Take the first match (most prominent)
+
+    # Model references
+    model_names = ["GFS", "ECMWF", "Euro", "NAM", "HRRR", "NBM",
+                   "Canadian", "CMC", "ICON", "UKMET", "SREF", "NAEFS",
+                   "WRF"]
+    models_mentioned = []
+    for model in model_names:
+        # Use word boundary to avoid false positives
+        if re.search(r'\b' + re.escape(model) + r'\b', text, re.IGNORECASE):
+            # Normalize "Euro" to "ECMWF"
+            canonical = "ECMWF" if model.upper() == "EURO" else model.upper()
+            if canonical not in models_mentioned:
+                models_mentioned.append(canonical)
+
+    # Timing references: day-of-week patterns
+    day_pattern = re.compile(
+        r'\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'
+        r'|Mon|Tue|Wed|Thu|Fri|Sat|Sun'
+        r'|tonight|tomorrow|this\s+(?:morning|afternoon|evening)'
+        r'|(?:late|early)\s+(?:tonight|tomorrow|this\s+week|next\s+week)'
+        r'|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:day)?\s+(?:night|morning|afternoon|evening))\b',
+        re.IGNORECASE
+    )
+    timing_refs = []
+    for m in day_pattern.finditer(text):
+        ref = m.group(0).strip()
+        if ref not in timing_refs:
+            timing_refs.append(ref)
+
+    return {
+        "snow_levels": snow_levels,
+        "amounts": amounts,
+        "confidence": confidence,
+        "models_mentioned": models_mentioned,
+        "timing_refs": timing_refs,
+    }
 
 
 def fetch_hrrr(lat: float, lon: float) -> dict:
@@ -1989,7 +2204,8 @@ def fetch_webcam_conditions() -> list[dict]:
 # Multi-Model Processing
 # ---------------------------------------------------------------------------
 
-def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None = None) -> dict:
+def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None = None,
+                     froude_number: float | None = None) -> dict:
     """
     Parse Open-Meteo multi-model response into structured per-model,
     per-hour forecasts with elevation-adjusted snow physics applied.
@@ -2043,7 +2259,8 @@ def parse_open_meteo(om: dict, elev_ft: int, observed_lapse_rate: float | None =
             # Compute SLR-adjusted snowfall at target elevation
             ca = cape_data[i] if i < len(cape_data) and cape_data[i] is not None else 0
             slr = compute_slr(tc, wind_mph=ws * 0.621371, rh_pct=hm) if tc is not None else 10
-            oro = orographic_multiplier(elev_ft, ws * 0.621371, wd, cape_jkg=ca)
+            oro = orographic_multiplier(elev_ft, ws * 0.621371, wd, cape_jkg=ca,
+                                       froude_number=froude_number)
             adj_precip_in = (pr / 25.4) * oro  # mm -> inches, orographic adjusted
             pt = precip_type(tc, pr > 0.1, rh_pct=hm) if tc is not None else "None"
 
@@ -3298,6 +3515,17 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
     observed_lapse_rate = compute_lapse_rate(snotel, synoptic=synoptic,
                                              sounding=sounding)
 
+    # Compute Froude number from sounding profile + upstream wind
+    froude_number = None
+    if sounding and "error" not in sounding and sounding.get("profile"):
+        N = compute_brunt_vaisala(sounding)
+        if N is not None:
+            # Use upstream wind speed — prefer obs, fall back to sounding-level wind
+            upstream_wind_mph = (obs or {}).get("wind_mph", 0) or 0
+            upstream_wind_mps = upstream_wind_mph * 0.44704  # mph -> m/s
+            if upstream_wind_mps > 0:
+                froude_number = compute_froude_number(upstream_wind_mps, N)
+
     # Base conditions from observation or NWS hourly
     base_temp_f = None
     base_wind_mph = 0.0
@@ -3353,7 +3581,9 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         zones = {}
         for zk in ("base", "mid", "peak"):
             loc = resort[zk]
-            parsed = parse_open_meteo(resort_om, loc["elev_ft"], observed_lapse_rate=observed_lapse_rate)
+            parsed = parse_open_meteo(resort_om, loc["elev_ft"],
+                                     observed_lapse_rate=observed_lapse_rate,
+                                     froude_number=froude_number)
             zones[zk] = {
                 "label": loc["label"],
                 "elev_ft": loc["elev_ft"],
@@ -3607,9 +3837,11 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         if not afd_snippet:
             afd_snippet = afd_text[:1500].strip()
 
-    # Include lapse rate info in current conditions
+    # Include lapse rate and Froude number in current conditions
     if observed_lapse_rate is not None:
         current["observed_lapse_rate_c_km"] = observed_lapse_rate
+    if froude_number is not None:
+        current["froude_number"] = round(froude_number, 3)
 
     # Extract sunrise/sunset from Open-Meteo daily data
     solar = {}
@@ -3645,6 +3877,12 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
                 pass
             break
 
+    # Parse AFD highlights for structured display
+    afd_highlights = parse_afd_highlights(afd_text) if afd_text else {
+        "snow_levels": [], "amounts": [], "confidence": None,
+        "models_mentioned": [], "timing_refs": [],
+    }
+
     result = {
         "generated": now.isoformat(),
         "current_conditions": current,
@@ -3655,6 +3893,8 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "season_stats": season_stats,
         "avalanche": avy,
         "forecaster_discussion": afd_snippet or "Not available",
+        "afd_highlights": afd_highlights,
+        "froude_number": round(froude_number, 3) if froude_number is not None else None,
         "multi_model_spread_peak": best_peak or [],
         "model_weights": model_weights or {},
         "bias_corrections": bias_corrections,
