@@ -1300,6 +1300,189 @@ table.data-table tr:hover td { background: var(--card-hover); }
 
 /* -- AQI/UV accessible badges -- */
 .env-badge[role="status"] { position: relative; }
+
+/* =============================================
+   MOBILE POLISH (iPhone 393px target viewport)
+   ============================================= */
+
+/* 1. Tighter container padding on small screens */
+@media (max-width: 500px) {
+  .container {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-top: 14px;
+  }
+}
+
+/* 2. Hero cards: tighter 2x2 on mobile */
+@media (max-width: 500px) {
+  .hero-row { gap: 8px; margin-bottom: 16px; }
+  .hero-card {
+    padding: 14px 10px 12px;
+  }
+  .hero-card .hero-value { font-size: 30px; letter-spacing: -0.5px; }
+  .hero-card .hero-label { font-size: 10px; letter-spacing: 0.8px; margin-bottom: 3px; }
+  .hero-card .hero-sub { font-size: 10px; margin-top: 3px; }
+}
+
+/* 3. Decision banner: compact on mobile */
+@media (max-width: 500px) {
+  .decision-banner {
+    padding: 14px 12px;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-direction: row;
+    text-align: left;
+  }
+  .decision-score {
+    width: 64px; height: 64px;
+    font-size: 28px;
+    border-radius: 12px;
+  }
+  .score-max { font-size: 9px; }
+  .decision-label { font-size: 15px; }
+  .decision-best { font-size: 12px; margin-top: 2px; }
+  .decision-reasoning { font-size: 12px; margin-top: 4px; line-height: 1.4; }
+  /* Factor pills: single scrollable row, no wrap */
+  .decision-factors {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 4px;
+    margin-top: 8px;
+    padding-bottom: 2px;
+    /* Fade hint for scroll */
+    -webkit-mask-image: linear-gradient(to right, black 85%, transparent);
+    mask-image: linear-gradient(to right, black 85%, transparent);
+  }
+  .decision-factors::-webkit-scrollbar { display: none; }
+  .decision-factor {
+    white-space: nowrap;
+    padding: 3px 8px;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+}
+
+/* 4. Comparison grid: horizontal scroll on mobile instead of vertical stack */
+@media (max-width: 600px) {
+  .compare-grid {
+    grid-template-columns: none;
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 10px;
+    padding-bottom: 4px;
+    /* Scroll fade hint */
+    -webkit-mask-image: linear-gradient(to right, black 88%, transparent);
+    mask-image: linear-gradient(to right, black 88%, transparent);
+  }
+  .compare-grid::-webkit-scrollbar { display: none; }
+  .compare-col {
+    min-width: 260px;
+    flex-shrink: 0;
+    padding: 14px 12px;
+  }
+  .compare-col .resort-name { font-size: 14px; margin-bottom: 8px; }
+  .compare-row { font-size: 12px; padding: 3px 0; }
+}
+
+/* 5. Section headers: tighter vertical spacing on mobile */
+@media (max-width: 500px) {
+  .section { margin-bottom: 8px; }
+  .section-header { padding: 12px 14px; font-size: 13px; }
+  .section-body { padding: 12px 14px; }
+  .section-preview { font-size: 11px; }
+}
+
+/* 6. Tighter fonts and spacing on mobile for narrative, summary, chain banners */
+@media (max-width: 500px) {
+  .summary-banner { padding: 12px; margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
+  .narrative-block { padding: 10px 12px; margin-bottom: 12px; font-size: 12px; line-height: 1.6; }
+  .narrative-block .narrative-title { font-size: 10px; letter-spacing: 1px; margin-bottom: 4px; }
+  .chains-compact { margin-bottom: 8px; }
+  .storm-banner { padding: 10px 12px; margin-bottom: 6px; }
+  .storm-banner .storm-total { font-size: 17px; }
+  .avy-banner { padding: 10px 12px; gap: 10px; margin-bottom: 12px; }
+  .aqi-uv-row { gap: 8px; margin-bottom: 12px; }
+  .env-badge { padding: 6px 12px; font-size: 12px; }
+  .env-badge .env-val { font-size: 16px; }
+  .env-badge .env-label { font-size: 10px; }
+}
+
+/* 7. Resort tabs: tighter on mobile */
+@media (max-width: 500px) {
+  .resort-tabs { gap: 6px; margin-bottom: 12px; }
+  .resort-tab { padding: 8px 14px; font-size: 13px; min-height: 40px; }
+}
+
+/* 8. Map: tighter margin */
+@media (max-width: 500px) {
+  .map-container { height: 240px; }
+  #map-section { margin-bottom: 12px; }
+}
+
+/* 9. Snowfall cards tighter */
+@media (max-width: 500px) {
+  .snowfall-row { gap: 6px; margin-bottom: 12px; }
+}
+
+/* 10. Rank badges tighter */
+@media (max-width: 500px) {
+  .flex-wrap-gap { gap: 8px 12px; margin-bottom: 10px; font-size: 12px; }
+  .rank-row { font-size: 11px; }
+}
+
+/* 11. Charts: shorter on small screens to reduce scroll */
+@media (max-width: 420px) {
+  .chart-container { height: 180px; }
+  .chart-container--tall { height: 200px; }
+  .chart-container--extra { height: 220px; }
+}
+
+/* 12. Footer: tighter on mobile */
+@media (max-width: 500px) {
+  .footer { margin-top: 24px; padding: 20px 12px; font-size: 10px; line-height: 1.5; }
+}
+
+/* 13. Sounding row tighter */
+@media (max-width: 500px) {
+  .sounding-row { font-size: 11px; gap: 8px; }
+}
+
+/* 14. Skeleton loading: match 2x2 hero on mobile */
+@media (max-width: 500px) {
+  .skel-hero-row { gap: 8px; margin-bottom: 16px; }
+  .skel-hero { height: 85px; }
+  .skel-banner { height: 65px; margin-bottom: 14px; }
+}
+
+/* 15. Accumulation bars tighter on mobile */
+@media (max-width: 500px) {
+  .accum-bar-row { grid-template-columns: 42px 1fr 32px 44px; gap: 4px; }
+}
+
+/* 16. Zone cards tighter on mobile */
+@media (max-width: 500px) {
+  .zone-card { padding: 12px 10px; }
+  .zone-card .zone-name { font-size: 14px; }
+  .zone-card .zone-elev { font-size: 11px; }
+  .zone-hero .zh-item .zh-val { font-size: 22px; }
+  .zone-hero .zh-item .zh-label { font-size: 10px; }
+  .zone-details { font-size: 11px; gap: 4px 12px; }
+}
+
+/* 17. Panel label tighter */
+@media (max-width: 500px) {
+  .panel-label { font-size: 10px; letter-spacing: 1.2px; margin-bottom: 8px; }
+}
+
+/* 18. Bottom nav: ensure it doesn't overlap by verifying clearance */
+@media (max-width: 768px) {
+  .container { padding-bottom: max(76px, calc(70px + env(safe-area-inset-bottom, 8px))) !important; }
+}
 </style>
 </head>
 <body>
