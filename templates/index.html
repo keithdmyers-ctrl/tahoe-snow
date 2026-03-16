@@ -1822,6 +1822,15 @@ table.data-table tr:hover td { background: var(--card-hover); }
     </div>
   </div>
 
+  <div class="section" id="sounding-section" style="display:none">
+    <button class="section-header" aria-expanded="false">
+      <span>Atmospheric Profile (Reno Sounding) <span class="section-preview" id="preview-sounding"></span></span> <span class="toggle">&#9662;</span>
+    </button>
+    <div class="section-body collapsed">
+      <div class="chart-container chart-container--extra"><canvas id="chart-sounding-profile"></canvas></div>
+    </div>
+  </div>
+
   <div class="section">
     <button class="section-header" aria-expanded="false">
       <span>Snowpack History &amp; Season Stats <span class="section-preview" id="preview-history"></span></span> <span class="toggle">&#9662;</span>
@@ -1857,6 +1866,8 @@ table.data-table tr:hover td { background: var(--card-hover); }
     <div class="section-body collapsed" id="model-comparison-body">
       <div class="scroll-wrap" id="model-comp-table-wrap"></div>
       <div class="chart-container chart-container--tall mt-4"><canvas id="chart-model-comparison"></canvas></div>
+      <div class="panel-label mt-3">Ensemble Uncertainty (7-Day Snow)</div>
+      <div class="chart-container chart-container--extra"><canvas id="chart-ensemble-plume"></canvas></div>
       <div id="data-sources-panel" class="mt-4"></div>
     </div>
   </div>
@@ -2130,6 +2141,7 @@ function render() {
   renderHistory();
   renderAFD();
   renderModelComparison();
+  renderSoundingProfile();
   renderStormHistory();
   renderMap();
   renderPreviews();
@@ -2952,7 +2964,9 @@ function buildHourlyChart(rn) {
             afterBody: function(ctx) {
               const i = ctx[0].dataIndex;
               const h = timeline[i];
-              return `Feels: ${f(h.feels_like_f, '\u00B0F')}\nGust: ${f(h.wind_gust_mph, ' mph')}\nSLR (Snow-Liquid Ratio): ${h.slr}:1 ${h.snow_quality}`;
+              let extra = `Feels: ${f(h.feels_like_f, '\u00B0F')}\nGust: ${f(h.wind_gust_mph, ' mph')}\nSLR (Snow-Liquid Ratio): ${h.slr}:1 ${h.snow_quality}`;
+              if (h.freezing_level_ft != null) extra += `\nFreeze Level: ${h.freezing_level_ft.toLocaleString()} ft`;
+              return extra;
             }
           }
         },
@@ -2965,6 +2979,66 @@ function buildHourlyChart(rn) {
       },
     },
   });
+
+  // Add freeze level overlay if data available
+  const hasFreezeData = timeline.some(h => h.freezing_level_ft != null);
+  if (hasFreezeData) {
+    const chart = charts[`hourly-${rn}`];
+    // Add elevation axis and freeze level dataset
+    chart.options.scales.elev = {
+      position: 'right',
+      min: 5000,
+      max: 12000,
+      ticks: { color: '#7ec8e366', font: { size: 10 }, callback: function(v) { return v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v; } },
+      grid: { display: false },
+      title: { display: true, text: 'Elev (ft)', color: '#7ec8e366', font: { size: 10 } },
+    };
+    chart.data.datasets.push({
+      label: 'Freeze Lvl (ft)',
+      data: timeline.map(h => h.freezing_level_ft || null),
+      borderColor: '#7ec8e366',
+      backgroundColor: 'transparent',
+      type: 'line',
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 1.5,
+      borderDash: [6, 4],
+      yAxisID: 'elev',
+      order: 0,
+    });
+    // Add reference lines for key elevations as constant datasets
+    var peakElev = DATA.resorts[rn]?.zones?.peak?.elev_ft;
+    var baseElev = DATA.resorts[rn]?.zones?.base?.elev_ft;
+    if (peakElev) {
+      chart.data.datasets.push({
+        label: 'Peak (' + peakElev.toLocaleString() + ' ft)',
+        data: timeline.map(function() { return peakElev; }),
+        borderColor: '#4a9eff22',
+        backgroundColor: 'transparent',
+        type: 'line',
+        pointRadius: 0,
+        borderWidth: 1,
+        borderDash: [2, 6],
+        yAxisID: 'elev',
+        order: 0,
+      });
+    }
+    if (baseElev) {
+      chart.data.datasets.push({
+        label: 'Base (' + baseElev.toLocaleString() + ' ft)',
+        data: timeline.map(function() { return baseElev; }),
+        borderColor: '#2ed57322',
+        backgroundColor: 'transparent',
+        type: 'line',
+        pointRadius: 0,
+        borderWidth: 1,
+        borderDash: [2, 6],
+        yAxisID: 'elev',
+        order: 0,
+      });
+    }
+    chart.update();
+  }
 }
 
 function buildModelChart(rn) {
@@ -3790,6 +3864,7 @@ function renderModelComparison() {
 
   document.getElementById('data-sources-panel').innerHTML = sourcesHtml;
   buildModelComparisonChart(spread, modelNames, modelTotals, nwsSnow24, blended);
+  buildEnsemblePlume();
 }
 
 function buildModelComparisonChart(spread, modelNames, modelTotals, nwsSnow24, blended) {
@@ -4159,6 +4234,358 @@ function buildPopChart(popCal) {
     },
   });
 }
+// -- Ensemble Plume Diagram --
+function buildEnsemblePlume() {
+  const ens = DATA.ensemble;
+  if (!ens || !ens.models) return;
+  const canvas = document.getElementById('chart-ensemble-plume');
+  if (!canvas) return;
+  destroyChart('ensemble-plume');
+
+  // Collect data from all available ensemble models
+  var modelKeys = Object.keys(ens.models).filter(function(k) {
+    return Array.isArray(ens.models[k]) && ens.models[k].length > 0;
+  });
+  if (modelKeys.length === 0) return;
+
+  // Use the first available model for the primary plume
+  var primaryKey = modelKeys[0];
+  var daily = ens.models[primaryKey].slice(0, 7);
+
+  var labels = daily.map(function(d) {
+    if (d.date) return formatDateLabel(d.date);
+    return '';
+  });
+  // If no date field, use day indices
+  if (labels.every(function(l) { return l === ''; })) {
+    labels = daily.map(function(_, i) { return 'Day ' + (i + 1); });
+  }
+
+  var p90 = daily.map(function(d) { return d.snow_p90 || 0; });
+  var p75 = daily.map(function(d) { return d.snow_p75 || 0; });
+  var p50 = daily.map(function(d) { return d.snow_p50 || 0; });
+  var p25 = daily.map(function(d) { return d.snow_p25 || 0; });
+  var p10 = daily.map(function(d) { return d.snow_p10 || 0; });
+
+  var datasets = [
+    {
+      label: 'p90 (' + primaryKey + ')',
+      data: p90,
+      borderColor: '#7ec8e333',
+      backgroundColor: 'transparent',
+      fill: false,
+      borderWidth: 1,
+      borderDash: [3, 3],
+      pointRadius: 0,
+      tension: 0.3,
+      order: 2,
+    },
+    {
+      label: 'p75',
+      data: p75,
+      borderColor: '#7ec8e355',
+      backgroundColor: 'transparent',
+      fill: false,
+      borderWidth: 1,
+      pointRadius: 0,
+      tension: 0.3,
+      order: 2,
+    },
+    {
+      label: 'Median (p50)',
+      data: p50,
+      borderColor: '#7ec8e3',
+      backgroundColor: 'transparent',
+      fill: false,
+      borderWidth: 2.5,
+      pointRadius: 4,
+      pointBackgroundColor: '#7ec8e3',
+      tension: 0.3,
+      order: 1,
+    },
+    {
+      label: 'p25',
+      data: p25,
+      borderColor: '#7ec8e355',
+      backgroundColor: 'transparent',
+      fill: false,
+      borderWidth: 1,
+      pointRadius: 0,
+      tension: 0.3,
+      order: 2,
+    },
+    {
+      label: 'p10',
+      data: p10,
+      borderColor: '#7ec8e333',
+      backgroundColor: 'transparent',
+      fill: false,
+      borderWidth: 1,
+      borderDash: [3, 3],
+      pointRadius: 0,
+      tension: 0.3,
+      order: 2,
+    },
+  ];
+
+  // Add a second ensemble model if available
+  if (modelKeys.length > 1) {
+    var secKey = modelKeys[1];
+    var secDaily = ens.models[secKey].slice(0, 7);
+    datasets.push({
+      label: 'Median (' + secKey + ')',
+      data: secDaily.map(function(d) { return d.snow_p50 || 0; }),
+      borderColor: '#2ed573',
+      backgroundColor: 'transparent',
+      fill: false,
+      borderWidth: 2,
+      pointRadius: 3,
+      pointBackgroundColor: '#2ed573',
+      tension: 0.3,
+      borderDash: [6, 3],
+      order: 1,
+    });
+  }
+
+  charts['ensemble-plume'] = new Chart(canvas, {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: CHART_LEGEND,
+        tooltip: {
+          ...CHART_TOOLTIP,
+          callbacks: {
+            label: function(ctx) {
+              return ctx.dataset.label + ': ' + ctx.raw.toFixed(1) + '"';
+            },
+            afterBody: function(ctx) {
+              var i = ctx[0].dataIndex;
+              var d = daily[i];
+              return 'Range: ' + (d.snow_p10 || 0).toFixed(1) + '"-' + (d.snow_p90 || 0).toFixed(1) + '"';
+            }
+          }
+        },
+        // Use filler plugin for shaded regions
+        filler: { propagate: false },
+      },
+      scales: {
+        x: SCALE_X,
+        y: {
+          ...SCALE_SNOW,
+          grid: { color: '#1a263488' },
+          title: { display: true, text: 'Snow (in)', color: '#7ec8e3', font: { size: 11 } },
+        },
+      },
+    },
+  });
+
+  // After initial render, add filled regions using filler
+  // p90-p75 band (outer)
+  var chart = charts['ensemble-plume'];
+  // Override fill settings for shaded bands:
+  // p90 (index 0) fills down to p10 (index 4) — outer band
+  chart.data.datasets[0].fill = { target: 4, above: 'rgba(126,200,227,0.08)', below: 'rgba(126,200,227,0.08)' };
+  // p75 (index 1) fills down to p25 (index 3) — inner band
+  chart.data.datasets[1].fill = { target: 3, above: 'rgba(126,200,227,0.15)', below: 'rgba(126,200,227,0.15)' };
+  chart.update();
+}
+
+// -- Sounding Profile Chart --
+function renderSoundingProfile() {
+  var snd = DATA.sounding;
+  if (!snd || !snd.profile_summary || snd.profile_summary.length < 3) {
+    var section = document.getElementById('sounding-section');
+    if (section) section.style.display = 'none';
+    return;
+  }
+
+  document.getElementById('sounding-section').style.display = '';
+
+  var profile = snd.profile_summary;
+  var canvas = document.getElementById('chart-sounding-profile');
+  if (!canvas) return;
+  destroyChart('sounding-profile');
+
+  // Build two arrays: temperature and dewpoint vs height
+  var tempPoints = [];
+  var dwptPoints = [];
+
+  for (var i = 0; i < profile.length; i++) {
+    var p = profile[i];
+    var hft = p.hght_ft || Math.round(p.hght_m * 3.28084);
+    if (p.temp_c != null) {
+      tempPoints.push({ x: p.temp_c, y: hft });
+    }
+    if (p.dewpoint_c != null) {
+      dwptPoints.push({ x: p.dewpoint_c, y: hft });
+    }
+  }
+
+  // Determine axis ranges
+  var allTemps = tempPoints.map(function(p) { return p.x; }).concat(dwptPoints.map(function(p) { return p.x; }));
+  var minTemp = Math.floor(Math.min.apply(null, allTemps) - 2);
+  var maxTemp = Math.ceil(Math.max.apply(null, allTemps) + 2);
+  var allHeights = tempPoints.map(function(p) { return p.y; }).concat(dwptPoints.map(function(p) { return p.y; }));
+  var minH = Math.floor(Math.min.apply(null, allHeights) / 500) * 500;
+  var maxH = Math.ceil(Math.max.apply(null, allHeights) / 500) * 500;
+
+  var datasets = [
+    {
+      label: 'Temperature (\u00B0C)',
+      data: tempPoints,
+      borderColor: '#ff8c42',
+      backgroundColor: 'transparent',
+      showLine: true,
+      borderWidth: 2.5,
+      pointRadius: 3,
+      pointBackgroundColor: '#ff8c42',
+      tension: 0.2,
+      order: 1,
+    },
+    {
+      label: 'Dewpoint (\u00B0C)',
+      data: dwptPoints,
+      borderColor: '#45aaf2',
+      backgroundColor: 'transparent',
+      showLine: true,
+      borderWidth: 2,
+      pointRadius: 2,
+      pointBackgroundColor: '#45aaf2',
+      tension: 0.2,
+      order: 1,
+    },
+  ];
+
+  // Freezing level line (0 degrees C)
+  if (minTemp <= 0 && maxTemp >= 0) {
+    datasets.push({
+      label: 'Freezing (0\u00B0C)',
+      data: [{ x: 0, y: minH }, { x: 0, y: maxH }],
+      borderColor: '#7ec8e344',
+      backgroundColor: 'transparent',
+      showLine: true,
+      borderWidth: 1,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      order: 2,
+    });
+  }
+
+  // Freezing level horizontal marker
+  if (snd.freezing_level_ft) {
+    datasets.push({
+      label: 'Freeze Level (' + snd.freezing_level_ft.toLocaleString() + ' ft)',
+      data: [{ x: minTemp, y: snd.freezing_level_ft }, { x: maxTemp, y: snd.freezing_level_ft }],
+      borderColor: '#7ec8e355',
+      backgroundColor: 'transparent',
+      showLine: true,
+      borderWidth: 1.5,
+      borderDash: [8, 4],
+      pointRadius: 0,
+      order: 2,
+    });
+  }
+
+  // Snow level horizontal marker
+  if (snd.snow_level_ft) {
+    datasets.push({
+      label: 'Snow Level (' + snd.snow_level_ft.toLocaleString() + ' ft)',
+      data: [{ x: minTemp, y: snd.snow_level_ft }, { x: maxTemp, y: snd.snow_level_ft }],
+      borderColor: '#a55eea55',
+      backgroundColor: 'transparent',
+      showLine: true,
+      borderWidth: 1.5,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      order: 2,
+    });
+  }
+
+  // Highlight saturated layers (where T-Td < 3 degrees) as shaded boxes
+  // We add these as filled scatter datasets spanning the saturated region
+  var saturatedBands = [];
+  for (var j = 0; j < profile.length; j++) {
+    var pp = profile[j];
+    if (pp.dp_depression != null && pp.dp_depression < 3 && pp.temp_c != null && pp.dewpoint_c != null) {
+      var hh = pp.hght_ft || Math.round(pp.hght_m * 3.28084);
+      saturatedBands.push({ x: pp.temp_c, y: hh });
+    }
+  }
+  if (saturatedBands.length > 1) {
+    var satMinH = Math.min.apply(null, saturatedBands.map(function(b) { return b.y; }));
+    var satMaxH = Math.max.apply(null, saturatedBands.map(function(b) { return b.y; }));
+    // Add a light blue background rectangle as two-point filled line
+    datasets.push({
+      label: 'Saturated Layer',
+      data: [
+        { x: minTemp, y: satMinH }, { x: maxTemp, y: satMinH },
+        { x: maxTemp, y: satMaxH }, { x: minTemp, y: satMaxH },
+        { x: minTemp, y: satMinH },
+      ],
+      borderColor: 'transparent',
+      backgroundColor: 'rgba(69,170,242,0.08)',
+      showLine: true,
+      fill: true,
+      borderWidth: 0,
+      pointRadius: 0,
+      order: 3,
+    });
+  }
+
+  charts['sounding-profile'] = new Chart(canvas, {
+    type: 'scatter',
+    data: { datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false },
+      plugins: {
+        legend: CHART_LEGEND,
+        tooltip: {
+          ...CHART_TOOLTIP,
+          callbacks: {
+            label: function(ctx) {
+              var pt = ctx.raw;
+              return ctx.dataset.label + ': ' + pt.x.toFixed(1) + '\u00B0C at ' + pt.y.toLocaleString() + ' ft';
+            }
+          }
+        },
+      },
+      scales: {
+        x: {
+          ...SCALE_X,
+          type: 'linear',
+          min: minTemp,
+          max: maxTemp,
+          title: { display: true, text: 'Temperature (\u00B0C)', color: '#99aabb', font: { size: 11 } },
+          ticks: { color: '#99aabb', callback: function(v) { return v + '\u00B0'; } },
+        },
+        y: {
+          min: minH,
+          max: maxH,
+          ticks: { color: '#99aabb', callback: function(v) { return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v; } },
+          grid: { color: '#1a263488' },
+          title: { display: true, text: 'Elevation (ft)', color: '#99aabb', font: { size: 11 } },
+        },
+      },
+    },
+  });
+
+  // Preview text
+  var previewEl = document.getElementById('preview-sounding');
+  if (previewEl) {
+    var parts = [];
+    if (snd.freezing_level_ft) parts.push('Freeze: ' + snd.freezing_level_ft.toLocaleString() + ' ft');
+    if (snd.snow_level_ft) parts.push('Snow: ' + snd.snow_level_ft.toLocaleString() + ' ft');
+    if (snd.lapse_rate_c_km != null) parts.push('Lapse: ' + snd.lapse_rate_c_km.toFixed(1) + '\u00B0C/km');
+    previewEl.textContent = parts.length > 0 ? '\u2014 ' + parts.join(', ') : '';
+  }
+}
+
 // -- Init --
 loadData();
 setInterval(() => loadData(), 900000);
@@ -4218,6 +4645,8 @@ document.addEventListener('click', function(e) {
           });
           if (body.querySelector('#chart-snotel-history') && !charts['snotel-history']) renderHistory();
           if (body.querySelector('#chart-model-comparison') && !charts['model-comparison']) renderModelComparison();
+          if (body.querySelector('#chart-ensemble-plume') && !charts['ensemble-plume']) buildEnsemblePlume();
+          if (body.querySelector('#chart-sounding-profile') && !charts['sounding-profile']) renderSoundingProfile();
         }
       });
     }
