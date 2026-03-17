@@ -81,7 +81,7 @@ RESORT_REGISTRY: dict[str, ResortConfig] = {
                        aspect_deg=45, slope_angle_deg=30),
         ],
         liftie_slug="heavenly",
-        snotel_stations=["473", "518"],  # Fallen Leaf, Hagan's Meadow
+        snotel_stations=["473", "518", "724"],  # Fallen Leaf, Hagan's Meadow, Rubicon #2
         nearest_sounding="REV",
         chain_route="US-50",
         webcam_urls=[
@@ -215,7 +215,7 @@ RESORT_REGISTRY: dict[str, ResortConfig] = {
         enabled=False,
     ),
 
-    "Mt. Rose": ResortConfig(  # Activate by setting enabled=True
+    "Mt. Rose": ResortConfig(
         name="Mt. Rose",
         region="tahoe_north",
         zones=[
@@ -231,7 +231,7 @@ RESORT_REGISTRY: dict[str, ResortConfig] = {
         nearest_sounding="REV",
         chain_route="SR-431",
         aspect="NW",
-        enabled=False,
+        enabled=True,
     ),
 }
 

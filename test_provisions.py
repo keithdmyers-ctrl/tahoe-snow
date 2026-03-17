@@ -688,21 +688,21 @@ class TestResortRegistry(TestCase):
         self.assertEqual(peak.elevation_ft, 9800)
 
     def test_active_resorts_count(self):
-        """Should have exactly 5 enabled resorts (3 original + Palisades + Sugar Bowl)."""
+        """Should have exactly 6 enabled resorts (3 original + Palisades + Sugar Bowl + Mt. Rose)."""
         active = get_active_resorts()
-        self.assertEqual(len(active), 5)
+        self.assertEqual(len(active), 6)
         self.assertIn("Heavenly", active)
         self.assertIn("Northstar", active)
         self.assertIn("Kirkwood", active)
         self.assertIn("Palisades Tahoe", active)
         self.assertIn("Sugar Bowl", active)
+        self.assertIn("Mt. Rose", active)
 
     def test_disabled_resorts_not_active(self):
         """Disabled resorts should not appear in active list."""
         active = get_active_resorts()
         self.assertNotIn("Sierra-at-Tahoe", active)
         self.assertNotIn("Boreal", active)
-        self.assertNotIn("Mt. Rose", active)
 
     def test_total_registry_count(self):
         """Should have 8 total resorts (5 active + 3 stubbed)."""

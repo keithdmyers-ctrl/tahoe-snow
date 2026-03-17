@@ -234,6 +234,47 @@ def main():
             })
             mark_alerted(state, key)
 
+    # --- ML Powder Alert (from ML decision engine) ---
+    try:
+        from ml_corrections import apply_ml_corrections
+        # ML corrections add ml_powder_alert to the analysis
+        if "ml_powder_alert" not in analysis:
+            analysis = apply_ml_corrections(analysis)
+
+        pa = analysis.get("ml_powder_alert", {})
+        pa_level = pa.get("level", 0)
+        pa_msg = pa.get("message", "")
+
+        if pa_level >= 4:  # STRONG or SEND IT
+            key = "ml_powder_alert"
+            if not check_cooldown(state, key, cooldown):
+                label = pa.get("label", "POWDER")
+                best = pa.get("best_resort", "Tahoe")
+                alerts.append({
+                    "type": f"ML Powder Alert: {label}",
+                    "message": pa_msg,
+                })
+                mark_alerted(state, key)
+    except Exception as e:
+        log(f"ML powder alert check failed (non-fatal): {e}")
+
+    # --- ML Wind Hold Warning ---
+    try:
+        for resort_name in config.get("resorts", {}):
+            resort_data = analysis.get("resorts", {}).get(resort_name, {})
+            peak = resort_data.get("zones", {}).get("peak", {})
+            wind_hold = peak.get("ml_wind_hold", {})
+            if wind_hold.get("probability", 0) >= 0.7:
+                key = f"{resort_name}_wind_hold"
+                if not check_cooldown(state, key, cooldown):
+                    alerts.append({
+                        "type": f"Wind Hold Alert: {resort_name}",
+                        "message": f"{resort_name}: {wind_hold.get('detail', 'Upper mountain wind hold likely')}",
+                    })
+                    mark_alerted(state, key)
+    except Exception as e:
+        log(f"Wind hold check failed (non-fatal): {e}")
+
     # Send alerts
     if alerts:
         for alert in alerts:

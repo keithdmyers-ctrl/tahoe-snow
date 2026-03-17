@@ -3907,6 +3907,21 @@ def analyze_all(obs: dict, nws: dict, om: dict, snotel: dict,
         "solar": solar,
     }
 
+    # --- ML Forecast Corrections ---
+    try:
+        from ml_corrections import apply_ml_corrections
+        result = apply_ml_corrections(result)
+    except Exception as e:
+        logger.debug("ML corrections not applied: %s", e)
+        result["ml_status"] = {"active": False, "reason": str(e)}
+
+    # --- Outdoor Activity Conditions ---
+    try:
+        from outdoor_conditions import compute_all_outdoor_conditions
+        result["outdoor"] = compute_all_outdoor_conditions(result)
+    except Exception as e:
+        logger.debug("Outdoor conditions not computed: %s", e)
+
     # Rankings
     ranked_snow = sorted(comparison.items(), key=lambda x: x[1]["peak_24h_snow_in"], reverse=True)
     ranked_depth = sorted(comparison.items(), key=lambda x: x[1]["snowpack_depth_in"], reverse=True)

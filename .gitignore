@@ -15,3 +15,9 @@ sensor_data.json
 .snow_verification.json
 .ml_models/
 alerts.log
+
+# ML training data and models (too large for git; regenerate with scripts)
+data/historical/*.parquet
+data/historical/*.csv
+data/models/
+data/reports/

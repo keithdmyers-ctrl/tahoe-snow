@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data_pipeline import fetch_tahoe_analysis, fetch_oakland_data
 from tahoe_snow import log_storm_event
 from forecast_verification import log_daily_verification, get_verification_summary
+from outdoor_conditions import compute_activity_decisions
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +196,8 @@ def api_verification():
         summary = get_verification_summary()
         return jsonify(summary)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error("Verification summary failed: %s", e)
+        return jsonify({"error": "Forecast verification data is temporarily unavailable."}), 500
 
 
 @app.route("/api/decision")
@@ -209,6 +211,24 @@ def api_decision():
         "storm_narrative": data.get("storm_narrative", ""),
         "storm_history": data.get("storm_history", []),
     })
+
+
+@app.route("/api/activities")
+def api_activities():
+    """Return activity decision cards for the outdoor dashboard.
+
+    Each card has: activity, icon, signal (go/caution/no-go), score,
+    headline, metrics, timing, detail. Sorted by score descending.
+    """
+    data = get_analysis()
+    if data.get("error"):
+        return jsonify({"error": data["error"]}), 503
+    try:
+        cards = compute_activity_decisions(data)
+        return jsonify({"activities": cards, "generated": data.get("generated", "")})
+    except Exception as e:
+        logger.error("Activity decisions failed: %s", e)
+        return jsonify({"error": "Activity recommendations are temporarily unavailable. Please try again."}), 500
 
 
 @app.route('/sw.js')

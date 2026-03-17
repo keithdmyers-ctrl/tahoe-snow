@@ -1337,11 +1337,14 @@ table.data-table tr:hover td { background: var(--card-hover); }
   -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
 @media (max-width: 768px) {
-  .bottom-nav { display: flex; justify-content: space-around; }
+  .bottom-nav { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; justify-content: flex-start; }
+  .bottom-nav::-webkit-scrollbar { display: none; }
+  .bottom-nav-item { flex: 0 0 auto; min-width: 60px; }
   .container { padding-bottom: 70px !important; }
 }
 @media (display-mode: standalone) {
-  .bottom-nav { display: flex; justify-content: space-around; }
+  .bottom-nav { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .bottom-nav::-webkit-scrollbar { display: none; }
   .container { padding-bottom: 70px !important; }
 }
 .bottom-nav-item {
@@ -1746,6 +1749,169 @@ table.data-table tr:hover td { background: var(--card-hover); }
 @media (max-width: 768px) {
   .container { padding-bottom: max(76px, calc(70px + env(safe-area-inset-bottom, 8px))) !important; }
 }
+
+/* 19. Activity Cards Dashboard */
+.activity-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+@media (min-width: 600px) {
+  .activity-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 1000px) {
+  .activity-grid { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+.activity-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: var(--sp-4);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border-left: 4px solid var(--border);
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+}
+@media (hover: hover) {
+  .activity-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+}
+.activity-card:active { transform: scale(0.98); }
+.activity-card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.activity-card[data-signal="go"] { border-left-color: var(--safe); }
+.activity-card[data-signal="caution"] { border-left-color: var(--moderate); }
+.activity-card[data-signal="no-go"] { border-left-color: var(--danger); }
+
+.activity-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.activity-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
+.activity-name { font-size: 16px; font-weight: 600; flex: 1; }
+.activity-signal {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+.activity-signal[data-signal="go"] { background: var(--safe-bg-strong); color: var(--safe); }
+.activity-signal[data-signal="caution"] { background: var(--moderate-bg-strong); color: var(--moderate); }
+.activity-signal[data-signal="no-go"] { background: var(--danger-bg-strong); color: var(--danger); }
+
+/* C5: Expand chevron -- larger and accent-colored for discoverability */
+.activity-chevron {
+  font-size: 16px;
+  color: var(--accent);
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+  margin-left: var(--sp-1);
+  opacity: 0.7;
+}
+.activity-card.expanded .activity-chevron { transform: rotate(180deg); }
+
+/* P3: Off-season badge */
+.activity-off-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.activity-headline {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-3);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.activity-metrics {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.activity-metric {
+  display: flex;
+  flex-direction: column;
+  min-width: 60px;
+}
+/* R1: bumped from 10px to 11px for readability */
+.activity-metric-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; }
+.activity-metric-value { font-size: 14px; font-weight: 600; }
+.activity-metric-value[data-status="good"] { color: var(--safe); }
+.activity-metric-value[data-status="warning"] { color: var(--moderate); }
+.activity-metric-value[data-status="danger"] { color: var(--danger); }
+
+.activity-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+/* C2: use large max-height instead of fixed cap to avoid clipping long content */
+.activity-card.expanded .activity-detail {
+  max-height: 2000px;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  margin-top: var(--sp-3);
+}
+.activity-timing {
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: var(--sp-2);
+}
+.activity-timing::before { content: "\23F0 "; }
+.activity-warnings {
+  font-size: 12px;
+  color: var(--moderate);
+}
+.activity-warnings li { margin-bottom: 2px; list-style: none; }
+.activity-warnings li::before { content: "\26A0 "; }
+
+/* C1: section title with top margin for visual separation from preceding sections */
+.activity-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: var(--sp-6);
+  margin-bottom: var(--sp-3);
+}
+
+/* P3: off-season opacity raised from 0.5 to 0.6 */
+.activity-off-season {
+  opacity: 0.6;
+}
+
+/* P4: loading skeleton */
+.activity-skel {
+  height: 120px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--card) 25%, var(--card-hover) 50%, var(--card) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* P5: empty/error state */
+.activity-empty {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: var(--sp-6) var(--sp-4);
+  background: var(--card);
+  border-radius: var(--radius);
+}
 </style>
 </head>
 <body>
@@ -1791,6 +1957,7 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div class="aqi-uv-row" id="aqi-uv-row"></div>
   <div id="alerts-section"></div>
   <div id="narrative-section"></div>
+  <div id="activities-section"></div>
   <div id="oakland-section"></div>
 
   <div id="map-section" class="section mb-4">
@@ -2075,7 +2242,17 @@ async function refreshData() {
   btn.classList.remove('refresh-error', 'refresh-success');
   btn.textContent = '';
   try {
-    await fetch('/api/refresh');
+    const refreshResp = await fetch('/api/refresh');
+    if (refreshResp.status === 429) {
+      // P3: show throttle countdown instead of generic error
+      const body = await refreshResp.json();
+      const retryAfter = body.retry_after || 60;
+      btn.classList.remove('loading');
+      btn.textContent = `Wait ${retryAfter}s`;
+      btn.classList.add('refresh-error');
+      setTimeout(() => { btn.textContent = 'Refresh'; btn.classList.remove('refresh-error'); }, retryAfter * 1000);
+      return;
+    }
     const r = await fetch('/api/data');
     DATA = await r.json();
     render();
@@ -2128,6 +2305,7 @@ function render() {
   renderHeader();
   renderAlerts();
   renderNarrative();
+  renderActivities();
   renderOakland();
   renderStorm();
   renderCurrent();
@@ -3579,6 +3757,98 @@ function renderNarrative() {
     </div>`;
 }
 
+// -- Activities Dashboard --
+function renderActivities() {
+  const el = document.getElementById('activities-section');
+  if (!el) return;
+
+  // Show loading skeleton while fetching (P4)
+  el.innerHTML = '<div class="activity-section-title">Activities</div>' +
+    '<div class="activity-grid">' +
+    '<div class="activity-skel"></div>'.repeat(3) +
+    '</div>';
+
+  fetch('/api/activities')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error || !data.activities || data.activities.length === 0) {
+        el.innerHTML = '<div class="activity-section-title">Activities</div>' +
+          '<div class="activity-empty">Outdoor activity recommendations are temporarily unavailable. Try refreshing the page.</div>';
+        return;
+      }
+      const cards = data.activities;
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const isSummer = month >= 5 && month <= 10;
+
+      let html = '<div class="activity-section-title">Activities</div>';
+      html += '<div class="activity-grid">';
+
+      cards.forEach(card => {
+        const offSeason = (isSummer && card.season === 'winter') ||
+                          (!isSummer && card.season === 'summer');
+        const offClass = offSeason ? ' activity-off-season' : '';
+        const offBadge = offSeason ? '<span class="activity-off-badge">Off season</span>' : '';
+
+        const metricsHtml = (card.metrics || []).map(m => {
+          const statusAttr = m.status ? ` data-status="${esc(m.status)}"` : '';
+          return `<div class="activity-metric">
+            <span class="activity-metric-label">${esc(m.label)}</span>
+            <span class="activity-metric-value"${statusAttr}>${esc(String(m.value))}</span>
+          </div>`;
+        }).join('');
+
+        const timingHtml = (card.timing || []).map(t =>
+          `<div class="activity-timing">${esc(t)}</div>`
+        ).join('');
+
+        const warningsHtml = (card.warnings || []).length > 0
+          ? `<ul class="activity-warnings">${card.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`
+          : '';
+
+        // C3: esc() the icon; C4: role, tabindex, aria-expanded; C5: no inline onclick
+        html += `<div class="activity-card${offClass}" data-signal="${esc(card.signal)}" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(card.activity)} - ${esc(card.signal)}">
+          <div class="activity-card-header">
+            <span class="activity-icon" aria-hidden="true">${esc(card.icon)}</span>
+            <span class="activity-name">${esc(card.activity)}</span>
+            ${offBadge}
+            <span class="activity-signal" data-signal="${esc(card.signal)}">${esc(card.signal.toUpperCase())}</span>
+            <span class="activity-chevron" aria-hidden="true">&#9662;</span>
+          </div>
+          <div class="activity-headline">${esc(card.headline)}</div>
+          <div class="activity-metrics">${metricsHtml}</div>
+          <div class="activity-detail" role="region" aria-label="${esc(card.activity)} details">
+            ${timingHtml}
+            ${warningsHtml}
+          </div>
+        </div>`;
+      });
+
+      html += '</div>';
+      el.innerHTML = html;
+    })
+    .catch(() => {
+      el.innerHTML = '<div class="activity-section-title">Activities</div>' +
+        '<div class="activity-empty">Could not load outdoor activity recommendations. Check your connection and try refreshing.</div>';
+    });
+}
+
+// C5: Delegated event handler for activity card expand/collapse (no inline onclick)
+document.addEventListener('click', function(e) {
+  const card = e.target.closest('.activity-card');
+  if (!card) return;
+  const isExpanded = card.classList.toggle('expanded');
+  card.setAttribute('aria-expanded', String(isExpanded));
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const card = e.target.closest('.activity-card');
+  if (!card) return;
+  e.preventDefault();
+  const isExpanded = card.classList.toggle('expanded');
+  card.setAttribute('aria-expanded', String(isExpanded));
+});
+
 // -- Oakland Local Weather --
 function renderOakland() {
   const oak = DATA.oakland;
@@ -4783,6 +5053,7 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
   // Map each bottom-nav section key to the DOM element it should observe
   const sectionMap = {
     top: document.getElementById('decision-section'),
+    activities: document.getElementById('activities-section'),
     oakland: document.getElementById('oakland-section'),
     resort: document.getElementById('resort-tabs'),
     snotel: document.getElementById('snotel-body'),
@@ -4849,6 +5120,10 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
   <button class="bottom-nav-item active" data-section="top" data-scroll-target="top">
     <span class="bottom-nav-icon">&#9729;</span>
     <span>Decision</span>
+  </button>
+  <button class="bottom-nav-item" data-section="activities" data-scroll-target="activities-section">
+    <span class="bottom-nav-icon">&#127956;</span>
+    <span>Activities</span>
   </button>
   <button class="bottom-nav-item" data-section="oakland" data-scroll-target="oakland-section">
     <span class="bottom-nav-icon">&#9748;</span>
