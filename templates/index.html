@@ -62,6 +62,74 @@
   --accent-bg-strong: rgba(74, 158, 255, 0.25);
 }
 
+/* -- Light mode (system preference or manual toggle) -- */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --card-hover: #f0f4f8;
+    --border: #e2e8f0;
+    --text: #1a2634;
+    --text-dim: #64748b;
+    --accent: #2563eb;
+    --accent-dark: #1d4ed8;
+    --snow: #0891b2;
+    --cold: #3b82f6;
+    --warm: #ea580c;
+    --danger: #dc2626;
+    --safe: #16a34a;
+    --moderate: #d97706;
+    --mix: #7c3aed;
+    --rain: #2563eb;
+    --card-inset: rgba(0, 0, 0, 0.03);
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6);
+    --shadow-glow: inset 0 1px 0 rgba(255,255,255,0.6);
+    --snow-bg: rgba(8, 145, 178, 0.08);
+    --snow-bg-strong: rgba(8, 145, 178, 0.18);
+    --safe-bg: rgba(22, 163, 74, 0.08);
+    --safe-bg-strong: rgba(22, 163, 74, 0.18);
+    --danger-bg: rgba(220, 38, 38, 0.08);
+    --danger-bg-strong: rgba(220, 38, 38, 0.18);
+    --moderate-bg: rgba(217, 119, 6, 0.08);
+    --moderate-bg-strong: rgba(217, 119, 6, 0.18);
+    --accent-bg: rgba(37, 99, 235, 0.08);
+    --accent-bg-strong: rgba(37, 99, 235, 0.18);
+  }
+}
+[data-theme="light"] {
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --card-hover: #f0f4f8;
+  --border: #e2e8f0;
+  --text: #1a2634;
+  --text-dim: #64748b;
+  --accent: #2563eb;
+  --accent-dark: #1d4ed8;
+  --snow: #0891b2;
+  --cold: #3b82f6;
+  --warm: #ea580c;
+  --danger: #dc2626;
+  --safe: #16a34a;
+  --moderate: #d97706;
+  --mix: #7c3aed;
+  --rain: #2563eb;
+  --card-inset: rgba(0, 0, 0, 0.03);
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6);
+  --shadow-glow: inset 0 1px 0 rgba(255,255,255,0.6);
+  --snow-bg: rgba(8, 145, 178, 0.08);
+  --snow-bg-strong: rgba(8, 145, 178, 0.18);
+  --safe-bg: rgba(22, 163, 74, 0.08);
+  --safe-bg-strong: rgba(22, 163, 74, 0.18);
+  --danger-bg: rgba(220, 38, 38, 0.08);
+  --danger-bg-strong: rgba(220, 38, 38, 0.18);
+  --moderate-bg: rgba(217, 119, 6, 0.08);
+  --moderate-bg-strong: rgba(217, 119, 6, 0.18);
+  --accent-bg: rgba(37, 99, 235, 0.08);
+  --accent-bg-strong: rgba(37, 99, 235, 0.18);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 
@@ -1560,6 +1628,253 @@ table.data-table tr:hover td { background: var(--card-hover); }
 .stat-card:active { transform: scale(0.97); }
 
 /* =============================================
+   LIGHT MODE OVERRIDES
+   ============================================= */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .header,
+  [data-theme="light"] .header {
+    background: rgba(255, 255, 255, 0.82);
+    border-bottom-color: rgba(0,0,0,0.08);
+  }
+}
+[data-theme="light"] .header {
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom-color: rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .bottom-nav,
+  :root:not([data-theme="dark"]) .sidebar-nav {
+    background: rgba(255, 255, 255, 0.94);
+    border-color: rgba(0,0,0,0.08);
+  }
+}
+[data-theme="light"] .bottom-nav,
+[data-theme="light"] .sidebar-nav {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .hero-card {
+    background: linear-gradient(135deg, #ffffff, #f0f4ff);
+    border-color: rgba(0,0,0,0.06);
+  }
+  :root:not([data-theme="dark"]) .refresh-btn {
+    background: rgba(0,0,0,0.05);
+    border-color: rgba(0,0,0,0.12);
+    color: var(--text);
+  }
+  :root:not([data-theme="dark"]) .refresh-btn:hover {
+    background: rgba(0,0,0,0.1);
+  }
+  :root:not([data-theme="dark"]) #tahoe-map .leaflet-tile-pane {
+    filter: none;
+  }
+  :root:not([data-theme="dark"]) .leaflet-popup-content-wrapper,
+  :root:not([data-theme="dark"]) .leaflet-popup-tip {
+    background: #fff;
+    color: #1a2634;
+  }
+  :root:not([data-theme="dark"]) .precip-badge.snow { background: rgba(8,145,178,0.12); }
+  :root:not([data-theme="dark"]) .precip-badge.rain { background: rgba(37,99,235,0.12); }
+  :root:not([data-theme="dark"]) .precip-badge.mix { background: rgba(124,58,237,0.12); }
+  :root:not([data-theme="dark"]) .precip-badge.none { background: rgba(100,116,139,0.08); }
+  :root:not([data-theme="dark"]) .map-layer-btn {
+    border-color: rgba(0,0,0,0.15);
+    color: var(--text-dim);
+  }
+  :root:not([data-theme="dark"]) .map-layer-btn:hover:not(.active) {
+    background: rgba(0,0,0,0.04);
+  }
+  :root:not([data-theme="dark"]) .abr-bar { background: rgba(0,0,0,0.04); }
+}
+[data-theme="light"] .hero-card {
+  background: linear-gradient(135deg, #ffffff, #f0f4ff);
+  border-color: rgba(0,0,0,0.06);
+}
+[data-theme="light"] .refresh-btn {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.12);
+  color: var(--text);
+}
+[data-theme="light"] .refresh-btn:hover { background: rgba(0,0,0,0.1); }
+[data-theme="light"] #tahoe-map .leaflet-tile-pane { filter: none; }
+[data-theme="light"] .leaflet-popup-content-wrapper,
+[data-theme="light"] .leaflet-popup-tip { background: #fff; color: #1a2634; }
+[data-theme="light"] .precip-badge.snow { background: rgba(8,145,178,0.12); }
+[data-theme="light"] .precip-badge.rain { background: rgba(37,99,235,0.12); }
+[data-theme="light"] .precip-badge.mix { background: rgba(124,58,237,0.12); }
+[data-theme="light"] .precip-badge.none { background: rgba(100,116,139,0.08); }
+[data-theme="light"] .map-layer-btn {
+  border-color: rgba(0,0,0,0.15);
+  color: var(--text-dim);
+}
+[data-theme="light"] .map-layer-btn:hover:not(.active) { background: rgba(0,0,0,0.04); }
+[data-theme="light"] .abr-bar { background: rgba(0,0,0,0.04); }
+
+/* Theme toggle button */
+.theme-toggle {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-dim);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.theme-toggle:hover { background: rgba(255,255,255,0.15); color: var(--text); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-toggle svg { width: 18px; height: 18px; fill: currentColor; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .theme-toggle {
+    background: rgba(0,0,0,0.05);
+    border-color: rgba(0,0,0,0.12);
+  }
+  :root:not([data-theme="dark"]) .theme-toggle:hover { background: rgba(0,0,0,0.1); }
+}
+[data-theme="light"] .theme-toggle {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.12);
+}
+[data-theme="light"] .theme-toggle:hover { background: rgba(0,0,0,0.1); }
+
+/* =============================================
+   DESKTOP SIDEBAR NAV (1200px+)
+   ============================================= */
+.sidebar-nav {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 200px;
+  background: rgba(10, 20, 32, 0.94);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  z-index: 101;
+  padding-top: 80px;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  transition: color 0.2s ease, background 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+.sidebar-nav-item:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.sidebar-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-sm); }
+.sidebar-nav-item.active {
+  color: var(--accent);
+  background: var(--accent-bg);
+  font-weight: 600;
+}
+.sidebar-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.sidebar-nav-icon { width: 22px; height: 22px; flex-shrink: 0; fill: currentColor; }
+.sidebar-nav-label { white-space: nowrap; }
+
+@media (min-width: 1200px) {
+  .sidebar-nav { display: flex; }
+  .bottom-nav { display: none !important; }
+  .header { padding-left: calc(200px + 24px); }
+  .container { margin-left: 200px; padding-bottom: 20px !important; }
+  .activities-page { margin-left: 200px; }
+}
+@media (min-width: 1400px) {
+  .header {
+    padding-left: calc(200px + max(24px, (100% - 200px - 1200px) / 2));
+    padding-right: calc(max(24px, (100% - 200px - 1200px) / 2));
+  }
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .sidebar-nav {
+    background: rgba(255, 255, 255, 0.94);
+    border-right-color: rgba(0,0,0,0.08);
+  }
+  :root:not([data-theme="dark"]) .sidebar-nav-item:hover { background: rgba(0,0,0,0.04); }
+  :root:not([data-theme="dark"]) .sidebar-nav-item.active { background: var(--accent-bg); }
+}
+[data-theme="light"] .sidebar-nav {
+  background: rgba(255, 255, 255, 0.94);
+  border-right-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .sidebar-nav-item:hover { background: rgba(0,0,0,0.04); }
+[data-theme="light"] .sidebar-nav-item.active { background: var(--accent-bg); }
+
+/* =============================================
+   TABLET LANDSCAPE (768-1024px)
+   ============================================= */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .container { padding: 24px 20px; }
+  .hero-row { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .map-container { height: 380px; }
+  .activity-grid { grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+  .resort-tabs { flex-wrap: wrap; gap: 6px; }
+  .resort-pill { font-size: 12px; padding: 6px 12px; }
+  .chart-container { height: 240px; }
+  .chart-container--tall { height: 280px; }
+  .chart-container--extra { height: 300px; }
+}
+
+/* =============================================
+   ACTIVITY SCORE BADGE
+   ============================================= */
+.activity-score-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.activity-score-badge[data-signal="go"] {
+  background: var(--safe-bg-strong);
+  color: var(--safe);
+}
+.activity-score-badge[data-signal="caution"] {
+  background: var(--moderate-bg-strong);
+  color: var(--moderate);
+}
+.activity-score-badge[data-signal="no-go"] {
+  background: var(--danger-bg-strong);
+  color: var(--danger);
+}
+
+/* =============================================
    MOBILE POLISH (iPhone 14 Pro 393px viewport)
    ============================================= */
 
@@ -1814,7 +2129,8 @@ table.data-table tr:hover td { background: var(--card-hover); }
   gap: var(--sp-3);
   margin-bottom: var(--sp-2);
 }
-.activity-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
+.activity-icon { width: 28px; height: 28px; flex-shrink: 0; color: var(--text-dim); display: flex; align-items: center; justify-content: center; }
+.activity-icon svg { width: 24px; height: 24px; }
 .activity-name { font-size: 16px; font-weight: 600; flex: 1; }
 .activity-signal {
   font-size: 11px;
@@ -2121,6 +2437,10 @@ table.data-table tr:hover td { background: var(--card-hover); }
       <div class="time" id="header-time"></div>
       <div class="header-solar" id="header-solar"></div>
     </div>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode" title="Toggle theme">
+      <svg id="theme-icon-sun" viewBox="0 0 24 24" style="display:none"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1zm0 18a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1zm9-9a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zM4 12a1 1 0 0 1-1 1H2a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1zm15.1-6.5a1 1 0 0 1 0 1.4l-.7.7a1 1 0 1 1-1.4-1.4l.7-.7a1 1 0 0 1 1.4 0zM6.3 17.3a1 1 0 0 1 0 1.4l-.7.7a1 1 0 1 1-1.4-1.4l.7-.7a1 1 0 0 1 1.4 0zm12.4 2.1a1 1 0 0 1-1.4 0l-.7-.7a1 1 0 1 1 1.4-1.4l.7.7a1 1 0 0 1 0 1.4zM7 5.6a1 1 0 0 1-1.4 0l-.7-.7A1 1 0 1 1 6.3 3.5l.7.7A1 1 0 0 1 7 5.6z"/></svg>
+      <svg id="theme-icon-moon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.4A5.4 5.4 0 0 1 14.4 3.1 9 9 0 0 0 12 3zm0 16a7 7 0 0 1-4.5-12.3A7.4 7.4 0 0 0 15.3 14.5 7 7 0 0 1 12 19z"/></svg>
+    </button>
     <button class="refresh-btn" id="refresh-btn">Refresh</button>
   </div>
 </div>
@@ -3950,6 +4270,28 @@ function renderNarrative() {
 // Cached activity data for page switching
 let _activityCards = null;
 
+// SVG icon map for activity cards (24x24 viewBox, monochrome)
+const ACTIVITY_SVG_ICONS = {
+  'Downhill Skiing': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 1.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 4.5L2 8l1.5 1.3L6 6.8l3.3 3.4L7 12.5v5.5h2V14l2.3-2.5 2.7 6 5 2.5.9-1.8-3.5-1.8-3-7.2-2-2.3 1.6-1.5c.6-.5.9-1.3.6-2.1l-1-2.5C12.3 5 11.5 4.5 10.7 4.5H5z"/></svg>',
+  'Backcountry Skiing': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 1.5c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 4.5L2 8l1.5 1.3L6 6.8l3.3 3.4L7 12.5v5.5h2V14l2.3-2.5 2.7 6 5 2.5.9-1.8-3.5-1.8-3-7.2-2-2.3 1.6-1.5c.6-.5.9-1.3.6-2.1l-1-2.5C12.3 5 11.5 4.5 10.7 4.5H5zM2 20l3-1.5 3 1.5 3-1.5 3 1.5 3-1.5 3 1.5v2l-3-1.5-3 1.5-3-1.5-3 1.5-3-1.5L2 22v-2z"/></svg>',
+  'Hiking': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.3 3.3L7 22h2.1l1.8-7 2.1 2v5h2v-6.7l-2.1-2 .6-3A7.6 7.6 0 0 0 19 13v-2a5.6 5.6 0 0 1-4.3-2.3l-1-1.6c-.4-.6-1-1.1-1.8-1.1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.2-.8z"/></svg>',
+  'Mountain Biking': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM5 12a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm14-5.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm-7.2-8l1.7-1.7 1 1C15.7 10 17.3 11 19 11v-2c-1 0-2-.5-2.8-1.2l-1.7-1.4c-.3-.3-.7-.4-1-.4-.4 0-.7.1-1 .4l-2.8 2.8c-.3.3-.4.7-.4 1s.1.7.4 1L12 13v5h2v-6.3l-2.2-2.2z"/></svg>',
+  'Rock Climbing': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-1-6l-2 4h6l-2-4 1-2-1-2H11l-1 2 1 2zm1-7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>',
+  'Fishing': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3c-.7 0-1.4.3-1.9.8L14.2 7H8.5C7.1 7 6 8.1 6 9.5V10H3v2h3v.5c0 .6.2 1.1.5 1.6l-2 6.4 1.9.6L8.2 15c.4.2.8.3 1.3.3H14c1.4 0 2.5-1.1 2.5-2.5V10l3.3-3.3c.5-.5.8-1.2.8-1.9 0-1-.8-1.8-1.6-1.8zM14.5 12.8c0 .3-.2.5-.5.5H9.5c-.3 0-.5-.2-.5-.5V9.5c0-.3.2-.5.5-.5h5c.3 0 .5.2.5.5v3.3z"/></svg>',
+  'Kayaking': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12c0 1-3.6 3-9 3s-9-2-9-3 3.6-3 9-3 9 2 9 3zm-9-1.5c-4 0-7 1.2-7 1.5s3 1.5 7 1.5 7-1.2 7-1.5-3-1.5-7-1.5zM12 6c.8 0 1.5-.7 1.5-1.5S12.8 3 12 3s-1.5.7-1.5 1.5S11.2 6 12 6zm5 2l-2 2h-2V8h-2v2H9L7 8H5l3 4v4l-3 4h2l2-2h2v2h2v-2h2l2 2h2l-3-4v-4l3-4h-2z"/></svg>',
+  'Road Cycling': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM5 12a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm14-5.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm-7.2-8l1.7-1.7 1 1C15.7 10 17.3 11 19 11v-2c-1 0-2-.5-2.8-1.2l-1.7-1.4c-.3-.3-.7-.4-1-.4-.4 0-.7.1-1 .4l-2.8 2.8c-.3.3-.4.7-.4 1s.1.7.4 1L12 13v5h2v-6.3l-2.2-2.2z"/></svg>',
+  'Camping': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L2 20h20L12 3zm0 3.5L18.5 18h-13L12 6.5zM11 13h2v2h-2v-2zm0-4h2v3h-2V9z"/></svg>',
+  'Photography': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 10.8a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4zM9 2L7.2 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.2L15 2H9zm3 15c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5z"/></svg>',
+  'Snowshoeing': '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.3 3.3L7 22h2.1l1.8-7 2.1 2v5h2v-6.7l-2.1-2 .6-3A7.6 7.6 0 0 0 19 13v-2a5.6 5.6 0 0 1-4.3-2.3l-1-1.6c-.4-.6-1-1.1-1.8-1.1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.2-.8zM3 19c0 1.7 2.7 3 6 3s6-1.3 6-3c0-.3-.1-.6-.3-.8l-1.4.8c.1.2-.6.8-2 1.2V18H10v2.2c-1.6-.4-2.5-1-2.5-1.2 0-.1.1-.3.3-.5l-1.5-.8c-.2.2-.3.5-.3.8v.5z"/></svg>',
+};
+
+// Get SVG icon for activity, falling back to a generic outdoor icon
+function getActivitySvg(activityName) {
+  if (ACTIVITY_SVG_ICONS[activityName]) return ACTIVITY_SVG_ICONS[activityName];
+  // Generic fallback: compass icon
+  return '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm-5.3-3.3l5.8-2.5 2.5-5.8-5.8 2.5-2.5 5.8zM12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>';
+}
+
 function buildActivityCardHtml(card, isSummer) {
   const offSeason = (isSummer && card.season === 'winter') ||
                     (!isSummer && card.season === 'summer');
@@ -3972,10 +4314,15 @@ function buildActivityCardHtml(card, isSummer) {
     ? `<ul class="activity-warnings">${card.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`
     : '';
 
+  const iconSvg = getActivitySvg(card.activity);
+  const scoreVal = card.score != null ? Math.round(card.score) : '';
+  const scoreBadge = scoreVal !== '' ? `<span class="activity-score-badge" data-signal="${esc(card.signal)}" aria-label="Score ${scoreVal} out of 10">${scoreVal}</span>` : '';
+
   return `<div class="activity-card${offClass}" data-signal="${esc(card.signal)}" data-season="${esc(card.season || 'year-round')}" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(card.activity)} - ${esc(card.signal)}">
     <div class="activity-card-header">
-      <span class="activity-icon" aria-hidden="true">${esc(card.icon)}</span>
+      <span class="activity-icon" aria-hidden="true">${iconSvg}</span>
       <span class="activity-name">${esc(card.activity)}</span>
+      ${scoreBadge}
       ${offBadge}
       <span class="activity-signal" data-signal="${esc(card.signal)}">${esc(card.signal.toUpperCase())}</span>
       <span class="activity-chevron" aria-hidden="true">&#9662;</span>
@@ -4128,8 +4475,8 @@ function switchToPage(page) {
     _currentPage = 'dashboard';
   }
 
-  // Update bottom nav active state
-  document.querySelectorAll('.bottom-nav-item').forEach(item => {
+  // Update bottom nav and sidebar nav active state
+  document.querySelectorAll('.bottom-nav-item, .sidebar-nav-item').forEach(item => {
     if (page === 'activities') {
       item.classList.toggle('active', item.dataset.section === 'activities');
     } else {
@@ -5267,13 +5614,13 @@ document.addEventListener('click', function(e) {
     return;
   }
 
-  // Bottom nav: page-switch (Activities) or scroll-to-section
-  const navPageItem = e.target.closest('.bottom-nav-item[data-page]');
+  // Bottom nav + Sidebar nav: page-switch (Activities) or scroll-to-section
+  const navPageItem = e.target.closest('.bottom-nav-item[data-page], .sidebar-nav-item[data-page]');
   if (navPageItem) {
     switchToPage(navPageItem.dataset.page);
     return;
   }
-  const navItem = e.target.closest('.bottom-nav-item[data-scroll-target]');
+  const navItem = e.target.closest('.bottom-nav-item[data-scroll-target], .sidebar-nav-item[data-scroll-target]');
   if (navItem) {
     // If on Activities page, switch back to dashboard first
     if (_currentPage !== 'dashboard') {
@@ -5312,6 +5659,74 @@ if ('serviceWorker' in navigator) {
     })
     .catch(err => console.log('SW registration failed:', err));
 }
+
+// --- Theme toggle ---
+(function initThemeToggle() {
+  const toggle = document.getElementById('theme-toggle');
+  const sunIcon = document.getElementById('theme-icon-sun');
+  const moonIcon = document.getElementById('theme-icon-moon');
+  if (!toggle) return;
+
+  // Determine initial theme: check localStorage, then system preference
+  const stored = localStorage.getItem('tahoe-theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      document.querySelector('meta[name="theme-color"]').content = '#f5f7fa';
+      sunIcon.style.display = 'none';
+      moonIcon.style.display = 'block';
+    } else if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.querySelector('meta[name="theme-color"]').content = '#0a1420';
+      sunIcon.style.display = 'block';
+      moonIcon.style.display = 'none';
+    } else {
+      // 'auto' — remove data-theme, let media queries handle it
+      document.documentElement.removeAttribute('data-theme');
+      if (prefersDark) {
+        document.querySelector('meta[name="theme-color"]').content = '#0a1420';
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+      } else {
+        document.querySelector('meta[name="theme-color"]').content = '#f5f7fa';
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+      }
+    }
+  }
+
+  // Apply stored preference or auto
+  if (stored === 'light' || stored === 'dark') {
+    applyTheme(stored);
+  } else {
+    applyTheme('auto');
+  }
+
+  // Cycle: auto -> light -> dark -> auto (simplified: toggle between light and dark)
+  toggle.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    let next;
+    if (current === 'light') {
+      next = 'dark';
+    } else if (current === 'dark') {
+      next = 'light';
+    } else {
+      // Auto mode: toggle to the opposite of system preference
+      next = prefersDark ? 'light' : 'dark';
+    }
+    localStorage.setItem('tahoe-theme', next);
+    applyTheme(next);
+  });
+
+  // Listen for system theme changes (only matters in auto mode)
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem('tahoe-theme')) {
+      applyTheme('auto');
+    }
+  });
+})();
 
 // --- PWA: Bottom nav scroll-to-section ---
 function scrollToSection(id) {
@@ -5383,7 +5798,7 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
   let _navClickTimer = null;
 
   // Debounce: when user clicks a nav item, suppress observer updates briefly
-  document.querySelectorAll('.bottom-nav-item').forEach(item => {
+  document.querySelectorAll('.bottom-nav-item, .sidebar-nav-item').forEach(item => {
     item.addEventListener('click', () => {
       _navUserClicked = true;
       clearTimeout(_navClickTimer);
@@ -5395,7 +5810,7 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
     if (_navUserClicked) return;
     // Don't update nav highlight if user is on the Activities page
     if (_currentPage !== 'dashboard') return;
-    document.querySelectorAll('.bottom-nav-item').forEach(item => {
+    document.querySelectorAll('.bottom-nav-item, .sidebar-nav-item').forEach(item => {
       item.classList.toggle('active', item.dataset.section === sectionKey);
     });
   }
@@ -5436,6 +5851,25 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
   }, { passive: true });
 })();
 </script>
+
+<nav class="sidebar-nav" id="sidebar-nav" role="navigation" aria-label="Main navigation">
+  <button class="sidebar-nav-item active" data-section="top" data-scroll-target="top">
+    <svg class="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h1v7c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-7h1a1 1 0 0 0 .7-1.7l-9-9a1 1 0 0 0-1.4 0l-9 9A1 1 0 0 0 3 13zm7 7v-5h4v5h-4zm2-15.6L19 11H5l7-6.6z"/></svg>
+    <span class="sidebar-nav-label">Dashboard</span>
+  </button>
+  <button class="sidebar-nav-item" data-section="activities" data-page="activities">
+    <svg class="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.3 3.3L7 22h2.1l1.8-7 2.1 2v5h2v-6.7l-2.1-2 .6-3A7.6 7.6 0 0 0 19 13v-2a5.6 5.6 0 0 1-4.3-2.3l-1-1.6c-.4-.6-1-1.1-1.8-1.1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.2-.8z"/></svg>
+    <span class="sidebar-nav-label">Activities</span>
+  </button>
+  <button class="sidebar-nav-item" data-section="resort" data-scroll-target="resort-tabs">
+    <svg class="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 1.5l-2.6 5.3L18 12l-5 6h9l-3.5-7 3.5-7h-3l-1.5 3-2-5.5zM9.5 7L1 21h17L9.5 7zm0 4.4L13.7 19H5.3L9.5 11.4z"/></svg>
+    <span class="sidebar-nav-label">Resorts</span>
+  </button>
+  <button class="sidebar-nav-item" data-section="analysis" data-scroll-target="snotel-body">
+    <svg class="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"/></svg>
+    <span class="sidebar-nav-label">Analysis</span>
+  </button>
+</nav>
 
 <nav class="bottom-nav" id="bottom-nav" role="navigation" aria-label="Quick navigation">
   <button class="bottom-nav-item active" data-section="top" data-scroll-target="top">
