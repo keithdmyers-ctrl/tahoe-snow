@@ -1912,6 +1912,132 @@ table.data-table tr:hover td { background: var(--card-hover); }
   background: var(--card);
   border-radius: var(--radius);
 }
+
+/* -- Inline "View all activities" link (dashboard) -- */
+.activity-view-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.activity-view-all:hover { background: var(--card-hover); border-color: var(--accent); }
+.activity-view-all:active { transform: scale(0.98); }
+.activity-view-all::after { content: "\2192"; font-size: 16px; }
+
+/* -- Full-screen Activities page -- */
+.activities-page {
+  display: none;
+  padding: var(--sp-4);
+  padding-top: var(--sp-3);
+  padding-bottom: max(76px, calc(70px + env(safe-area-inset-bottom, 8px)));
+  min-height: 100vh;
+  background: var(--bg);
+}
+.activities-page.active { display: block; }
+
+.activities-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-4);
+}
+.activities-page-title {
+  font-size: 22px;
+  font-weight: 700;
+}
+.activities-page-subtitle {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* Season filter pills */
+.activity-filters {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.activity-filters::-webkit-scrollbar { display: none; }
+
+.activity-filter-pill {
+  flex: 0 0 auto;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+.activity-filter-pill:hover { border-color: var(--accent); color: var(--text); }
+.activity-filter-pill:active { transform: scale(0.96); }
+.activity-filter-pill.active {
+  background: var(--accent-bg-strong);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Card count badge in filter pills */
+.activity-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 9px;
+  background: var(--border);
+  color: var(--text-dim);
+}
+.activity-filter-pill.active .activity-filter-count {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* Hide off-filter cards with animation */
+.activity-card.filter-hidden {
+  display: none;
+}
+
+/* Back-to-dashboard link at bottom of activities page */
+.activities-page-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-6);
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.activities-page-back:hover { color: var(--accent); }
+.activities-page-back::before { content: "\2190"; font-size: 16px; }
 </style>
 </head>
 <body>
@@ -2175,6 +2301,22 @@ table.data-table tr:hover td { background: var(--card-hover); }
     <div>14+ data sources &middot; 5 resorts &middot; 4 NWP models &middot; Real snow physics</div>
     <div>Open source &middot; No API keys required &middot; Runs on a Raspberry Pi</div>
   </div>
+</div>
+
+<!-- Full-screen Activities page (hidden by default, activated via bottom nav) -->
+<div class="activities-page" id="activities-page">
+  <div class="activities-page-header">
+    <div>
+      <div class="activities-page-title">Outdoor Activities</div>
+      <div class="activities-page-subtitle" id="activities-page-subtitle">Conditions-based recommendations</div>
+    </div>
+  </div>
+  <div class="activity-filters" id="activity-filters" role="tablist" aria-label="Filter activities by season"></div>
+  <div id="activities-page-content">
+    <div class="activity-empty" id="activities-page-empty">Loading activity recommendations...</div>
+    <div class="activity-grid" id="activities-page-grid"></div>
+  </div>
+  <button class="activities-page-back" id="activities-back-btn" aria-label="Return to weather dashboard">Back to Dashboard</button>
 </div>
 
 <script>
@@ -3758,11 +3900,53 @@ function renderNarrative() {
 }
 
 // -- Activities Dashboard --
+// Cached activity data for page switching
+let _activityCards = null;
+
+function buildActivityCardHtml(card, isSummer) {
+  const offSeason = (isSummer && card.season === 'winter') ||
+                    (!isSummer && card.season === 'summer');
+  const offClass = offSeason ? ' activity-off-season' : '';
+  const offBadge = offSeason ? '<span class="activity-off-badge">Off season</span>' : '';
+
+  const metricsHtml = (card.metrics || []).map(m => {
+    const statusAttr = m.status ? ` data-status="${esc(m.status)}"` : '';
+    return `<div class="activity-metric">
+      <span class="activity-metric-label">${esc(m.label)}</span>
+      <span class="activity-metric-value"${statusAttr}>${esc(String(m.value))}</span>
+    </div>`;
+  }).join('');
+
+  const timingHtml = (card.timing || []).map(t =>
+    `<div class="activity-timing">${esc(t)}</div>`
+  ).join('');
+
+  const warningsHtml = (card.warnings || []).length > 0
+    ? `<ul class="activity-warnings">${card.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`
+    : '';
+
+  return `<div class="activity-card${offClass}" data-signal="${esc(card.signal)}" data-season="${esc(card.season || 'year-round')}" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(card.activity)} - ${esc(card.signal)}">
+    <div class="activity-card-header">
+      <span class="activity-icon" aria-hidden="true">${esc(card.icon)}</span>
+      <span class="activity-name">${esc(card.activity)}</span>
+      ${offBadge}
+      <span class="activity-signal" data-signal="${esc(card.signal)}">${esc(card.signal.toUpperCase())}</span>
+      <span class="activity-chevron" aria-hidden="true">&#9662;</span>
+    </div>
+    <div class="activity-headline">${esc(card.headline)}</div>
+    <div class="activity-metrics">${metricsHtml}</div>
+    <div class="activity-detail" role="region" aria-label="${esc(card.activity)} details">
+      ${timingHtml}
+      ${warningsHtml}
+    </div>
+  </div>`;
+}
+
 function renderActivities() {
   const el = document.getElementById('activities-section');
   if (!el) return;
 
-  // Show loading skeleton while fetching (P4)
+  // Show loading skeleton while fetching
   el.innerHTML = '<div class="activity-section-title">Activities</div>' +
     '<div class="activity-grid">' +
     '<div class="activity-skel"></div>'.repeat(3) +
@@ -3777,55 +3961,33 @@ function renderActivities() {
         return;
       }
       const cards = data.activities;
+      _activityCards = cards; // Cache for the full Activities page
       const now = new Date();
       const month = now.getMonth() + 1;
       const isSummer = month >= 5 && month <= 10;
 
+      // --- Inline section: top 3 in-season cards only ---
+      const inSeason = cards.filter(c => {
+        if (isSummer && c.season === 'winter') return false;
+        if (!isSummer && c.season === 'summer') return false;
+        return true;
+      });
+      const topCards = inSeason.slice(0, 3);
+
       let html = '<div class="activity-section-title">Activities</div>';
       html += '<div class="activity-grid">';
-
-      cards.forEach(card => {
-        const offSeason = (isSummer && card.season === 'winter') ||
-                          (!isSummer && card.season === 'summer');
-        const offClass = offSeason ? ' activity-off-season' : '';
-        const offBadge = offSeason ? '<span class="activity-off-badge">Off season</span>' : '';
-
-        const metricsHtml = (card.metrics || []).map(m => {
-          const statusAttr = m.status ? ` data-status="${esc(m.status)}"` : '';
-          return `<div class="activity-metric">
-            <span class="activity-metric-label">${esc(m.label)}</span>
-            <span class="activity-metric-value"${statusAttr}>${esc(String(m.value))}</span>
-          </div>`;
-        }).join('');
-
-        const timingHtml = (card.timing || []).map(t =>
-          `<div class="activity-timing">${esc(t)}</div>`
-        ).join('');
-
-        const warningsHtml = (card.warnings || []).length > 0
-          ? `<ul class="activity-warnings">${card.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`
-          : '';
-
-        // C3: esc() the icon; C4: role, tabindex, aria-expanded; C5: no inline onclick
-        html += `<div class="activity-card${offClass}" data-signal="${esc(card.signal)}" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(card.activity)} - ${esc(card.signal)}">
-          <div class="activity-card-header">
-            <span class="activity-icon" aria-hidden="true">${esc(card.icon)}</span>
-            <span class="activity-name">${esc(card.activity)}</span>
-            ${offBadge}
-            <span class="activity-signal" data-signal="${esc(card.signal)}">${esc(card.signal.toUpperCase())}</span>
-            <span class="activity-chevron" aria-hidden="true">&#9662;</span>
-          </div>
-          <div class="activity-headline">${esc(card.headline)}</div>
-          <div class="activity-metrics">${metricsHtml}</div>
-          <div class="activity-detail" role="region" aria-label="${esc(card.activity)} details">
-            ${timingHtml}
-            ${warningsHtml}
-          </div>
-        </div>`;
-      });
-
+      topCards.forEach(card => { html += buildActivityCardHtml(card, isSummer); });
       html += '</div>';
+
+      // "View all activities" link (only if there are more than 3)
+      if (cards.length > 3) {
+        const remaining = cards.length - topCards.length;
+        html += `<button class="activity-view-all" id="activity-view-all-btn" aria-label="View all ${cards.length} outdoor activities">View all ${cards.length} activities</button>`;
+      }
       el.innerHTML = html;
+
+      // --- Populate full Activities page ---
+      renderActivitiesPage(cards, isSummer);
     })
     .catch(() => {
       el.innerHTML = '<div class="activity-section-title">Activities</div>' +
@@ -3833,10 +3995,90 @@ function renderActivities() {
     });
 }
 
+function renderActivitiesPage(cards, isSummer) {
+  const grid = document.getElementById('activities-page-grid');
+  const filtersEl = document.getElementById('activity-filters');
+  const subtitleEl = document.getElementById('activities-page-subtitle');
+  const emptyEl = document.getElementById('activities-page-empty');
+  if (!grid || !filtersEl) return;
+
+  // Hide the loading/empty state
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  // Count cards per season
+  const counts = { all: cards.length, winter: 0, summer: 0, 'year-round': 0 };
+  cards.forEach(c => { if (counts[c.season] !== undefined) counts[c.season]++; });
+
+  // Determine default filter based on current season
+  const bestFilter = isSummer ? 'summer' : 'winter';
+
+  // Build filter pills
+  const filters = [
+    { key: 'all', label: 'All', count: counts.all },
+    { key: 'best', label: isSummer ? 'Best Now' : 'Best Now', count: cards.filter(c => {
+      if (isSummer && c.season === 'winter') return false;
+      if (!isSummer && c.season === 'summer') return false;
+      return true;
+    }).length },
+    { key: 'winter', label: 'Winter', count: counts.winter },
+    { key: 'summer', label: 'Summer', count: counts.summer },
+    { key: 'year-round', label: 'Year-Round', count: counts['year-round'] },
+  ];
+
+  filtersEl.innerHTML = filters.map(f =>
+    `<button class="activity-filter-pill${f.key === 'best' ? ' active' : ''}" data-filter="${f.key}" role="tab" aria-selected="${f.key === 'best'}" aria-controls="activities-page-grid">${f.label}<span class="activity-filter-count">${f.count}</span></button>`
+  ).join('');
+
+  // Build all cards
+  let gridHtml = '';
+  cards.forEach(card => { gridHtml += buildActivityCardHtml(card, isSummer); });
+  grid.innerHTML = gridHtml;
+
+  // Apply initial filter ("Best Now" = in-season only)
+  applyActivityFilter('best', isSummer);
+
+  // Update subtitle with generated time
+  if (subtitleEl) {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    subtitleEl.textContent = `Updated ${timeStr} \u2014 based on current conditions`;
+  }
+}
+
+function applyActivityFilter(filterKey, isSummer) {
+  const grid = document.getElementById('activities-page-grid');
+  if (!grid) return;
+
+  const allCards = grid.querySelectorAll('.activity-card');
+  allCards.forEach(card => {
+    const season = card.dataset.season;
+    let show = true;
+
+    if (filterKey === 'best') {
+      // Hide off-season cards
+      if (isSummer && season === 'winter') show = false;
+      if (!isSummer && season === 'summer') show = false;
+    } else if (filterKey !== 'all') {
+      show = (season === filterKey);
+    }
+
+    card.classList.toggle('filter-hidden', !show);
+  });
+
+  // Update active pill
+  document.querySelectorAll('.activity-filter-pill').forEach(pill => {
+    const isActive = pill.dataset.filter === filterKey;
+    pill.classList.toggle('active', isActive);
+    pill.setAttribute('aria-selected', String(isActive));
+  });
+}
+
 // C5: Delegated event handler for activity card expand/collapse (no inline onclick)
 document.addEventListener('click', function(e) {
   const card = e.target.closest('.activity-card');
   if (!card) return;
+  // Don't toggle if clicking inside the detail region links
+  if (e.target.closest('a')) return;
   const isExpanded = card.classList.toggle('expanded');
   card.setAttribute('aria-expanded', String(isExpanded));
 });
@@ -3847,6 +4089,60 @@ document.addEventListener('keydown', function(e) {
   e.preventDefault();
   const isExpanded = card.classList.toggle('expanded');
   card.setAttribute('aria-expanded', String(isExpanded));
+});
+
+// --- Page switching: Dashboard <-> Activities page ---
+let _currentPage = 'dashboard'; // 'dashboard' or 'activities'
+let _savedScrollY = 0;
+
+function switchToPage(page) {
+  const app = document.getElementById('app');
+  const activitiesPage = document.getElementById('activities-page');
+  const header = document.querySelector('.header');
+  if (!app || !activitiesPage) return;
+
+  if (page === 'activities') {
+    _savedScrollY = window.scrollY;
+    app.style.display = 'none';
+    activitiesPage.classList.add('active');
+    window.scrollTo(0, 0);
+    _currentPage = 'activities';
+  } else {
+    activitiesPage.classList.remove('active');
+    app.style.display = 'block';
+    window.scrollTo(0, _savedScrollY);
+    _currentPage = 'dashboard';
+  }
+
+  // Update bottom nav active state
+  document.querySelectorAll('.bottom-nav-item').forEach(item => {
+    if (page === 'activities') {
+      item.classList.toggle('active', item.dataset.section === 'activities');
+    } else {
+      item.classList.toggle('active', item.dataset.section === 'top');
+    }
+  });
+}
+
+// "View all activities" button (in inline section)
+document.addEventListener('click', function(e) {
+  if (e.target.closest('#activity-view-all-btn')) {
+    switchToPage('activities');
+    return;
+  }
+  // "Back to Dashboard" button (in Activities page)
+  if (e.target.closest('#activities-back-btn')) {
+    switchToPage('dashboard');
+    return;
+  }
+  // Activity filter pills
+  const pill = e.target.closest('.activity-filter-pill');
+  if (pill) {
+    const now = new Date();
+    const isSummer = (now.getMonth() + 1) >= 5 && (now.getMonth() + 1) <= 10;
+    applyActivityFilter(pill.dataset.filter, isSummer);
+    return;
+  }
 });
 
 // -- Oakland Local Weather --
@@ -4957,10 +5253,22 @@ document.addEventListener('click', function(e) {
     return;
   }
 
-  // Bottom nav scroll-to-section
+  // Bottom nav: page-switch (Activities) or scroll-to-section
+  const navPageItem = e.target.closest('.bottom-nav-item[data-page]');
+  if (navPageItem) {
+    switchToPage(navPageItem.dataset.page);
+    return;
+  }
   const navItem = e.target.closest('.bottom-nav-item[data-scroll-target]');
   if (navItem) {
-    scrollToSection(navItem.dataset.scrollTarget);
+    // If on Activities page, switch back to dashboard first
+    if (_currentPage !== 'dashboard') {
+      switchToPage('dashboard');
+      // Small delay to allow DOM to settle before scrolling
+      requestAnimationFrame(() => scrollToSection(navItem.dataset.scrollTarget));
+    } else {
+      scrollToSection(navItem.dataset.scrollTarget);
+    }
     return;
   }
 
@@ -5051,14 +5359,12 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
 // --- Bottom nav: IntersectionObserver for scroll-aware active state ---
 (function initNavObserver() {
   // Map each bottom-nav section key to the DOM element it should observe
+  // (only sections with corresponding bottom-nav items)
   const sectionMap = {
     top: document.getElementById('decision-section'),
-    activities: document.getElementById('activities-section'),
     oakland: document.getElementById('oakland-section'),
     resort: document.getElementById('resort-tabs'),
-    snotel: document.getElementById('snotel-body'),
-    'model-comparison': document.getElementById('model-comparison-body'),
-    verify: document.getElementById('verify-body'),
+    analysis: document.getElementById('snotel-body'),
   };
   let _navUserClicked = false;
   let _navClickTimer = null;
@@ -5074,6 +5380,8 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
 
   function updateActiveNav(sectionKey) {
     if (_navUserClicked) return;
+    // Don't update nav highlight if user is on the Activities page
+    if (_currentPage !== 'dashboard') return;
     document.querySelectorAll('.bottom-nav-item').forEach(item => {
       item.classList.toggle('active', item.dataset.section === sectionKey);
     });
@@ -5119,9 +5427,9 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
 <nav class="bottom-nav" id="bottom-nav" role="navigation" aria-label="Quick navigation">
   <button class="bottom-nav-item active" data-section="top" data-scroll-target="top">
     <span class="bottom-nav-icon">&#9729;</span>
-    <span>Decision</span>
+    <span>Dashboard</span>
   </button>
-  <button class="bottom-nav-item" data-section="activities" data-scroll-target="activities-section">
+  <button class="bottom-nav-item" data-section="activities" data-page="activities">
     <span class="bottom-nav-icon">&#127956;</span>
     <span>Activities</span>
   </button>
@@ -5133,17 +5441,9 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
     <span class="bottom-nav-icon">&#9968;</span>
     <span>Resorts</span>
   </button>
-  <button class="bottom-nav-item" data-section="snotel" data-scroll-target="snotel-body">
+  <button class="bottom-nav-item" data-section="analysis" data-scroll-target="snotel-body">
     <span class="bottom-nav-icon">&#10052;</span>
-    <span>Snowpack</span>
-  </button>
-  <button class="bottom-nav-item" data-section="model-comparison" data-scroll-target="model-comparison-body">
-    <span class="bottom-nav-icon bottom-nav-icon--emoji">&#128202;</span>
-    <span>Models</span>
-  </button>
-  <button class="bottom-nav-item" data-section="verify" data-scroll-target="verify-body">
-    <span class="bottom-nav-icon">&#9881;</span>
-    <span>Verify</span>
+    <span>Analysis</span>
   </button>
 </nav>
 
