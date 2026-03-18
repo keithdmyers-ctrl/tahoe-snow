@@ -2083,7 +2083,6 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div class="aqi-uv-row" id="aqi-uv-row"></div>
   <div id="alerts-section"></div>
   <div id="narrative-section"></div>
-  <div id="oakland-section"></div>
 
   <div id="map-section" class="section mb-4">
     <div class="map-layer-toggles" id="map-layer-toggles">
@@ -2447,7 +2446,6 @@ function render() {
   renderAlerts();
   renderNarrative();
   renderActivities();
-  renderOakland();
   renderStorm();
   renderCurrent();
   renderAvalanche();
@@ -5328,7 +5326,6 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
   // (only sections with corresponding bottom-nav items)
   const sectionMap = {
     top: document.getElementById('decision-section'),
-    oakland: document.getElementById('oakland-section'),
     resort: document.getElementById('resort-tabs'),
     analysis: document.getElementById('snotel-body'),
   };
@@ -5398,10 +5395,6 @@ if (window.matchMedia('(display-mode: standalone)').matches || navigator.standal
   <button class="bottom-nav-item" data-section="activities" data-page="activities">
     <span class="bottom-nav-icon">&#127956;</span>
     <span>Activities</span>
-  </button>
-  <button class="bottom-nav-item" data-section="oakland" data-scroll-target="oakland-section">
-    <span class="bottom-nav-icon">&#9748;</span>
-    <span>Oakland</span>
   </button>
   <button class="bottom-nav-item" data-section="resort" data-scroll-target="resort-tabs">
     <span class="bottom-nav-icon">&#9968;</span>
