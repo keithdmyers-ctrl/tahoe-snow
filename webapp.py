@@ -23,7 +23,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data_pipeline import fetch_tahoe_analysis, fetch_oakland_data
 from tahoe_snow import log_storm_event
 from forecast_verification import log_daily_verification, get_verification_summary
-from outdoor_conditions import compute_activity_decisions
+try:
+    from outdoor_conditions import compute_activity_decisions
+except ImportError:
+    compute_activity_decisions = None
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +223,8 @@ def api_activities():
     Each card has: activity, icon, signal (go/caution/no-go), score,
     headline, metrics, timing, detail. Sorted by score descending.
     """
+    if compute_activity_decisions is None:
+        return jsonify({"error": "Activity engine not available"}), 503
     data = get_analysis()
     if data.get("error"):
         return jsonify({"error": data["error"]}), 503

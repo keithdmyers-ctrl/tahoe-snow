@@ -5,10 +5,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY tahoe_snow.py webapp.py pressure_forecast.py forecast_verification.py ./
-COPY data_pipeline.py resort_configs.py ./
+# Copy all Python source files
+COPY *.py ./
 COPY templates/ templates/
 COPY static/ static/
+COPY docs/ docs/
 
 EXPOSE 7860
 
