@@ -2083,7 +2083,6 @@ table.data-table tr:hover td { background: var(--card-hover); }
   <div class="aqi-uv-row" id="aqi-uv-row"></div>
   <div id="alerts-section"></div>
   <div id="narrative-section"></div>
-  <div id="activities-section"></div>
   <div id="oakland-section"></div>
 
   <div id="map-section" class="section mb-4">
@@ -3943,55 +3942,22 @@ function buildActivityCardHtml(card, isSummer) {
 }
 
 function renderActivities() {
-  const el = document.getElementById('activities-section');
-  if (!el) return;
-
-  // Show loading skeleton while fetching
-  el.innerHTML = '<div class="activity-section-title">Activities</div>' +
-    '<div class="activity-grid">' +
-    '<div class="activity-skel"></div>'.repeat(3) +
-    '</div>';
-
+  // Activities live entirely on their own page (accessed via bottom nav).
+  // No inline section on the main dashboard.
   fetch('/api/activities')
     .then(r => r.json())
     .then(data => {
       if (data.error || !data.activities || data.activities.length === 0) {
-        el.innerHTML = '<div class="activity-section-title">Activities</div>' +
-          '<div class="activity-empty">Outdoor activity recommendations are temporarily unavailable. Try refreshing the page.</div>';
         return;
       }
       const cards = data.activities;
-      _activityCards = cards; // Cache for the full Activities page
+      _activityCards = cards;
       const now = new Date();
       const month = now.getMonth() + 1;
       const isSummer = month >= 5 && month <= 10;
-
-      // --- Inline section: top 3 in-season cards only ---
-      const inSeason = cards.filter(c => {
-        if (isSummer && c.season === 'winter') return false;
-        if (!isSummer && c.season === 'summer') return false;
-        return true;
-      });
-      const topCards = inSeason.slice(0, 3);
-
-      let html = '<div class="activity-section-title">Activities</div>';
-      html += '<div class="activity-grid">';
-      topCards.forEach(card => { html += buildActivityCardHtml(card, isSummer); });
-      html += '</div>';
-
-      // "View all activities" link (only if there are more than 3)
-      if (cards.length > 3) {
-        const remaining = cards.length - topCards.length;
-        html += `<button class="activity-view-all" id="activity-view-all-btn" aria-label="View all ${cards.length} outdoor activities">View all ${cards.length} activities</button>`;
-      }
-      el.innerHTML = html;
-
-      // --- Populate full Activities page ---
       renderActivitiesPage(cards, isSummer);
     })
     .catch(() => {
-      el.innerHTML = '<div class="activity-section-title">Activities</div>' +
-        '<div class="activity-empty">Could not load outdoor activity recommendations. Check your connection and try refreshing.</div>';
     });
 }
 
