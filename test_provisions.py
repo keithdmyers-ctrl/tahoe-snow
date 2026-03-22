@@ -239,14 +239,15 @@ class TestSnowCorrectionModel(TestCase):
         self.assertEqual(model.predict([0, 0, 0, 0, 0]), 1.0)
 
     def test_train_insufficient_data(self):
-        """Training with < 10 samples should log warning but not crash."""
+        """Training with < 10 samples should not crash and model remains usable."""
         import numpy as np
         model = SnowCorrectionModel("base", 48)
         features = np.random.randn(5, 3)
         targets = np.random.randn(5)
         model.train(features, targets)
-        # Model should still not be fully trained
-        # (insufficient data in this branch still sets _trained for fallback)
+        # Model should be callable even with limited data (fallback mode)
+        result = model.predict([0, 0, 0])
+        self.assertIsInstance(result, (int, float))
 
     def test_save_load_roundtrip(self):
         """Should save and load model state."""

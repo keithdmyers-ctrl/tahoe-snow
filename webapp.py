@@ -149,8 +149,8 @@ def get_analysis(force: bool = False) -> dict:
             log_daily_verification(oakland["home_obs"], oakland["home_fc"], analysis)
             # Expose Oakland data for the web UI
             analysis["oakland"] = _build_oakland_summary(oakland)
-        except Exception:
-            pass  # verification is best-effort, never break main flow
+        except Exception as e:
+            logger.debug("Oakland/verification fetch failed: %s", e)
 
         # Storm archive: log when storm ends (transition from active to inactive)
         storm = analysis.get("storm")
@@ -288,7 +288,10 @@ if __name__ == "__main__":
     if "--port" in sys.argv:
         idx = sys.argv.index("--port")
         if idx + 1 < len(sys.argv):
-            port = int(sys.argv[idx + 1])
+            try:
+                port = int(sys.argv[idx + 1])
+            except ValueError:
+                print(f"Invalid port: {sys.argv[idx + 1]}, using default 5000")
 
     # Pre-fetch data in background so first page load is fast
     threading.Thread(target=get_analysis, daemon=True).start()

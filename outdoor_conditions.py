@@ -284,8 +284,10 @@ def fetch_stream_conditions() -> dict:
             water_temp_c = None
 
             for ts in ts_list:
-                param = ts.get("variable", {}).get("variableCode", [{}])[0].get("value", "")
-                values = ts.get("values", [{}])[0].get("value", [])
+                var_codes = ts.get("variable", {}).get("variableCode", [{}])
+                param = var_codes[0].get("value", "") if var_codes else ""
+                val_groups = ts.get("values", [{}])
+                values = val_groups[0].get("value", []) if val_groups else []
                 if values:
                     latest = values[-1].get("value")
                     if param == "00060" and latest:
@@ -1011,7 +1013,7 @@ def compute_activity_decisions(analysis: dict) -> list:
         "icon": "🧗",
         "signal": climb_signal,
         "score": climb_score,
-        "headline": climb_warnings[0],
+        "headline": climb_warnings[0] if climb_warnings else "Good climbing conditions",
         "metrics": [
             {"label": "Temp", "value": f"{temp_f:.0f}°F" if temp_f else "—",
              "status": "good" if temp_f and 45 <= temp_f <= 80 else "warning"},

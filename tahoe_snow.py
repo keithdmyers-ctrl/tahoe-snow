@@ -651,7 +651,9 @@ def fetch_nws_observations(lat: float, lon: float) -> dict:
             return {}
         stations = requests.get(obs_url, headers=headers, timeout=10).json().get("features", [])
         for station in stations[:3]:
-            sid = station["properties"]["stationIdentifier"]
+            sid = station.get("properties", {}).get("stationIdentifier")
+            if not sid:
+                continue
             obs = requests.get(f"https://api.weather.gov/stations/{sid}/observations/latest",
                                headers=headers, timeout=10)
             if obs.status_code == 200:
@@ -4317,7 +4319,8 @@ def format_report(a: dict, compact: bool = False) -> str:
                 trend = "    "
                 for date, val in depths:
                     d = date.split("-")
-                    trend += f"{d[1]}/{d[2]}:{val}\"  "
+                    if len(d) >= 3:
+                        trend += f"{d[1]}/{d[2]}:{val}\"  "
                 L.append(trend)
 
             # Season stats

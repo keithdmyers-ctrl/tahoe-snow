@@ -166,7 +166,10 @@ def _extract_live_features(analysis: dict, zone_data: dict) -> dict:
         features["rain_fraction"] = 0.0 if temp < 30 else min(1.0, (temp - 30) / 6)
     else:
         features["rain_fraction"] = np.nan
-    features["snow_fraction"] = 1.0 - features.get("rain_fraction", 0.5)
+    rain_frac = features.get("rain_fraction", 0.5)
+    if isinstance(rain_frac, float) and np.isnan(rain_frac):
+        rain_frac = 0.5
+    features["snow_fraction"] = 1.0 - rain_frac
     snowfall = features.get("snowfall_sum", 0) or 0
     features["snowfall_adjusted_cm"] = snowfall * features.get("snow_fraction", 1.0)
 
@@ -466,7 +469,8 @@ def _log_shadow_prediction(resort: str, zone: str, predictions: dict):
         existing = []
         if os.path.exists(SHADOW_LOG):
             with open(SHADOW_LOG) as f:
-                existing = json.load(f)
+                loaded = json.load(f)
+                existing = loaded if isinstance(loaded, list) else []
 
         existing.append(entry)
 
@@ -546,7 +550,7 @@ def _rank_resorts(resorts: dict) -> list:
 
         # Quality score (0-10)
         quality = peak.get("ml_snow_quality", {})
-        quality_score = (quality.get("rating", 3) / 5) * 10
+        quality_score = (quality.get("rating", 0) / 5) * 10
 
         # Wind score (0-10, inverted: less wind = higher)
         wind_hold = peak.get("ml_wind_hold", {})
@@ -1397,6 +1401,7 @@ def apply_ml_corrections(analysis: dict) -> dict:
                     logger.warning("ML depth prediction failed for %s/%s: %s",
                                    resort_name, zone_key, e)
                     zone_data["ml_corrected"] = False
+                    zone_data["ml_depth_prediction_in"] = None
 
             # --- New snow probability ---
             snow_model_key = f"new_snow_{band}"
@@ -1413,8 +1418,9 @@ def apply_ml_corrections(analysis: dict) -> dict:
                     prob = float(entry["model"].predict_proba(feature_array)[0, 1])
                     predictions["ml_new_snow_prob"] = round(prob, 3)
                     zone_data["ml_new_snow_prob"] = round(prob, 3)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("ML snow probability failed for %s/%s: %s",
+                                 resort_name, zone_key, e)
 
             # --- Skier 1: Snow quality ---
             slr = features.get("slr", 10)
@@ -1463,8 +1469,8 @@ def apply_ml_corrections(analysis: dict) -> dict:
         try:
             from outdoor_conditions import compute_all_outdoor_conditions
             analysis["outdoor"] = compute_all_outdoor_conditions(analysis)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Outdoor conditions fallback failed: %s", e)
     # Build the ml_outdoor summary from the outdoor data
     analysis["ml_outdoor"] = _build_ml_outdoor_from_outdoor(analysis)
 

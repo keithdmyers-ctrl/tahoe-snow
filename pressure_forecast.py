@@ -345,7 +345,7 @@ def _parse_open_meteo_precip(om: dict) -> list[float]:
     min_len = min(len(p) for p in model_precips)
     averaged = []
     for i in range(min_len):
-        vals = [p[i] for p in model_precips if p[i] is not None]
+        vals = [p[i] for p in model_precips if i < len(p) and p[i] is not None]
         averaged.append(sum(vals) / len(vals) if vals else 0)
     return averaged
 
